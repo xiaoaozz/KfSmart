@@ -1,61 +1,52 @@
 <script setup lang="ts">
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { nextTick } from 'vue';
+import { nextTick, ref, computed } from 'vue';
 import { VueMarkdownIt } from 'vue-markdown-shiki';
 import { formatDate } from '@/utils/common';
+import MessageBubble from '@/components/modern/MessageBubble.vue';
+
 defineOptions({ name: 'ChatMessage' });
 
 const props = defineProps<{
-  msg: Api.Chat.Message,
-  sessionId?: string
+  msg: Api.Chat.Message;
+  sessionId?: string;
 }>();
 
 const authStore = useAuthStore();
 
-function handleCopy(content: string) {
-  navigator.clipboard.writeText(content);
-  window.$message?.success('已复制');
-}
-
-const chatStore = useChatStore();
-
 // 存储文件名和对应的事件处理
-const sourceFiles = ref<Array<{fileName: string, id: string, referenceNumber: number, fileMd5?: string}>>([]);
+const sourceFiles = ref<Array<{ fileName: string; id: string; referenceNumber: number; fileMd5?: string }>>([]);
 
 // 处理来源文件链接的函数
 function processSourceLinks(text: string): string {
-  // 重置来源文件列表，避免重复
   sourceFiles.value = [];
 
-  // 新格式：匹配 (来源#数字: 文件名 | MD5:xxx) 的正则表达式，兼容全角括号
-  // 格式示例：(来源#1: test.txt | MD5:abc123) 或 (来源#1: test.txt|MD5:abc123)
+  // 新格式：匹配 (来源#数字: 文件名 | MD5:xxx)
   const newSourcePattern = /([\(（])来源#(\d+):\s*([^|\n\r（）]+?)\s*\|\s*MD5:\s*([a-fA-F0-9]+)([\)）])/g;
 
-  // 先处理新格式（包含MD5）
-  let processedText = text.replace(newSourcePattern, (_match, leftParen, sourceNum, fileName, fileMd5, rightParen) => {
-    const linkClass = 'source-file-link';
-    const trimmedFileName = fileName.trim();
-    const trimmedMd5 = fileMd5.trim();
-    const fileId = `source-file-${sourceFiles.value.length}`;
-    const referenceNumber = parseInt(sourceNum, 10);
+  let processedText = text.replace(
+    newSourcePattern,
+    (_match, leftParen, sourceNum, fileName, fileMd5, rightParen) => {
+      const linkClass = 'source-file-link';
+      const trimmedFileName = fileName.trim();
+      const trimmedMd5 = fileMd5.trim();
+      const fileId = `source-file-${sourceFiles.value.length}`;
+      const referenceNumber = parseInt(sourceNum, 10);
 
-    // 存储文件信息（包含文件名和MD5）
-    sourceFiles.value.push({
-      fileName: trimmedFileName,
-      id: fileId,
-      referenceNumber,
-      fileMd5: trimmedMd5
-    });
+      sourceFiles.value.push({
+        fileName: trimmedFileName,
+        id: fileId,
+        referenceNumber,
+        fileMd5: trimmedMd5
+      });
 
-    const lp = leftParen === '(' ? '(' : '（';
-    const rp = rightParen === ')' ? ')' : '）';
+      const lp = leftParen === '(' ? '(' : '（';
+      const rp = rightParen === ')' ? ')' : '）';
 
-    // 显示格式：来源#1: test.txt | MD5:abc...
-    return `${lp}来源#${sourceNum}: <span class="${linkClass}" data-file-id="${fileId}">${trimmedFileName} | MD5:${trimmedMd5.substring(0, 8)}...</span>${rp}`;
-  });
+      return `${lp}来源#${sourceNum}: <span class="${linkClass}" data-file-id="${fileId}">${trimmedFileName} | MD5:${trimmedMd5.substring(0, 8)}...</span>${rp}`;
+    }
+  );
 
-  // 旧格式：匹配 (来源#数字: 文件名) 的正则表达式，兼容全角括号和无括号格式
-  // 用于向后兼容旧的引用格式
+  // 旧格式：匹配 (来源#数字: 文件名)
   const oldSourcePattern = /([\(（])来源#(\d+):\s*([^\n\r（）]+?)([\)）])/g;
 
   processedText = processedText.replace(oldSourcePattern, (_match, leftParen, sourceNum, fileName, rightParen) => {
@@ -64,7 +55,6 @@ function processSourceLinks(text: string): string {
     const fileId = `source-file-${sourceFiles.value.length}`;
     const referenceNumber = parseInt(sourceNum, 10);
 
-    // 存储文件信息（旧格式，没有MD5）
     sourceFiles.value.push({
       fileName: trimmedFileName,
       id: fileId,
@@ -81,10 +71,8 @@ function processSourceLinks(text: string): string {
 }
 
 const content = computed(() => {
-  chatStore.scrollToBottom?.();
   const rawContent = props.msg.content ?? '';
 
-  // 只对助手消息处理来源链接
   if (props.msg.role === 'assistant') {
     return processSourceLinks(rawContent);
   }
@@ -96,7 +84,6 @@ const content = computed(() => {
 function handleContentClick(event: MouseEvent) {
   const target = event.target as HTMLElement;
 
-  // 检查点击的是否是文件链接
   if (target.classList.contains('source-file-link')) {
     const fileId = target.getAttribute('data-file-id');
     if (fileId) {
@@ -113,9 +100,8 @@ function handleContentClick(event: MouseEvent) {
 }
 
 // 处理来源文件点击事件
-async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumber: number, fileMd5?: string }) {
+async function handleSourceFileClick(fileInfo: { fileName: string; referenceNumber: number; fileMd5?: string }) {
   const { fileName, referenceNumber, fileMd5: extractedMd5 } = fileInfo;
-  console.log('点击了来源文件:', fileName, '引用编号:', referenceNumber, '提取的MD5:', extractedMd5, '会话ID:', props.sessionId);
 
   try {
     window.$message?.loading(`正在获取文件下载链接: ${fileName}`, {
@@ -125,15 +111,10 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
 
     let targetMd5 = null;
 
-    // 方案1：优先使用从引用中直接提取的MD5
     if (extractedMd5) {
-      console.log('使用从引用中提取的MD5:', extractedMd5);
       targetMd5 = extractedMd5;
-    }
-    // 方案2：如果没有提取到MD5，则通过后端API查询
-    else if (props.sessionId) {
+    } else if (props.sessionId) {
       try {
-        console.log('步骤1: 通过API查询引用MD5', { sessionId: props.sessionId, referenceNumber });
         const { error: md5Error, data: md5Data } = await request<Api.Document.ReferenceMd5Response>({
           url: 'documents/reference-md5',
           params: {
@@ -143,8 +124,6 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
           baseURL: '/proxy-api'
         });
 
-        console.log('引用MD5查询结果:', { error: md5Error, data: md5Data });
-
         if (!md5Error && md5Data?.fileMd5) {
           targetMd5 = md5Data.fileMd5;
         }
@@ -153,9 +132,7 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
       }
     }
 
-    // 如果获取到了MD5，使用MD5精确下载
     if (targetMd5) {
-      console.log('步骤2: 使用MD5下载文件', targetMd5);
       const { error: downloadError, data: downloadData } = await request<Api.Document.DownloadResponse>({
         url: 'documents/download-by-md5',
         params: {
@@ -164,8 +141,6 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
         },
         baseURL: '/proxy-api'
       });
-
-      console.log('文件下载结果:', { error: downloadError, data: downloadData });
 
       window.$message?.destroyAll();
 
@@ -176,12 +151,10 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
       }
     }
 
-    // 降级方案：使用文件名下载（向后兼容）
-    console.log('降级方案: 使用文件名下载', fileName);
     const { error, data } = await request<Api.Document.DownloadResponse>({
       url: 'documents/download',
       params: {
-        fileName: fileName,
+        fileName,
         token: authStore.token
       },
       baseURL: '/proxy-api'
@@ -206,61 +179,219 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
     window.$message?.error(`文件下载失败: ${fileName}`);
   }
 }
+
+function handleCopy(text: string) {
+  navigator.clipboard.writeText(text);
+  window.$message?.success('已复制到剪贴板');
+}
+
+function handleRetry() {
+  window.$message?.info('重试功能开发中...');
+}
+
+// 格式化时间戳
+const timestamp = computed(() => {
+  return props.msg.timestamp ? formatDate(props.msg.timestamp) : '';
+});
+
+// 用户头像URL
+const userAvatarUrl = computed(() => {
+  return authStore.userInfo.avatar || '';
+});
 </script>
 
 <template>
-  <div class="mb-8 flex-col gap-2">
-    <div v-if="msg.role === 'user'" class="flex items-center gap-4">
-      <NAvatar class="bg-success">
-        <SvgIcon icon="ph:user-circle" class="text-icon-large color-white" />
-      </NAvatar>
-      <div class="flex-col gap-1">
-        <NText class="text-4 font-bold">{{ authStore.userInfo.username }}</NText>
-        <NText class="text-3 color-gray-500">{{ formatDate(msg.timestamp) }}</NText>
+  <div class="chat-message-wrapper group">
+    <MessageBubble
+      :role="msg.role"
+      :content="content"
+      :status="msg.status"
+      :timestamp="timestamp"
+      :show-avatar="true"
+      :avatar-url="userAvatarUrl"
+      :copyable="true"
+      @copy="handleCopy"
+      @retry="handleRetry"
+    >
+      <!-- 自定义内容渲染 (Markdown) -->
+      <div
+        v-if="msg.role === 'assistant' && msg.status !== 'loading' && msg.status !== 'error'"
+        class="message-content"
+        @click="handleContentClick"
+      >
+        <VueMarkdownIt :content="content" />
       </div>
-    </div>
-    <div v-else class="flex items-center gap-4">
-      <NAvatar class="bg-primary">
-        <SystemLogo class="text-6 text-white" />
-      </NAvatar>
-      <div class="flex-col gap-1">
-        <NText class="text-4 font-bold">派聪明</NText>
-        <NText class="text-3 color-gray-500">{{ formatDate(msg.timestamp) }}</NText>
+      
+      <!-- 用户消息直接显示文本 -->
+      <div v-else-if="msg.role === 'user'" class="message-content whitespace-pre-wrap">
+        {{ content }}
       </div>
-    </div>
-    <NText v-if="msg.status === 'pending'">
-      <icon-eos-icons:three-dots-loading class="ml-12 mt-2 text-8" />
-    </NText>
-    <NText v-else-if="msg.status === 'error'" class="ml-12 mt-2 italic">服务器繁忙，请稍后再试</NText>
-    <div v-else-if="msg.role === 'assistant'" class="mt-2 pl-12" @click="handleContentClick">
-      <VueMarkdownIt :content="content" />
-    </div>
-    <NText v-else-if="msg.role === 'user'" class="ml-12 mt-2 text-4">{{ content }}</NText>
-    <NDivider class="ml-12 w-[calc(100%-3rem)] mb-0! mt-2!" />
-    <div class="ml-12 flex gap-4">
-      <NButton quaternary @click="handleCopy(msg.content)">
-        <template #icon>
-          <icon-mynaui:copy />
-        </template>
-      </NButton>
-    </div>
+    </MessageBubble>
   </div>
 </template>
 
 <style scoped lang="scss">
-:deep(.source-file-link) {
-  color: #1890ff;
-  cursor: pointer;
-  text-decoration: underline;
-  transition: color 0.2s;
+.chat-message-wrapper {
+  position: relative;
+  
+  /* 文件链接样式 */
+  :deep(.source-file-link) {
+    color: #667eea;
+    text-decoration: underline;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background-color: rgba(102, 126, 234, 0.1);
 
-  &:hover {
-    color: #40a9ff;
-    text-decoration: none;
+    &:hover {
+      color: #5568d3;
+      background-color: rgba(102, 126, 234, 0.2);
+      text-decoration: none;
+    }
   }
 
-  &:active {
-    color: #096dd9;
+  /* Markdown 内容样式 */
+  :deep(.message-content) {
+    /* 代码块样式 */
+    pre {
+      background-color: rgba(0, 0, 0, 0.05);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 8px 0;
+      overflow-x: auto;
+
+      code {
+        background-color: transparent;
+        padding: 0;
+        border-radius: 0;
+      }
+    }
+
+    /* 行内代码样式 */
+    code {
+      background-color: rgba(0, 0, 0, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+
+    /* 链接样式 */
+    a {
+      color: #667eea;
+      text-decoration: none;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #5568d3;
+        text-decoration: underline;
+      }
+    }
+
+    /* 引用块样式 */
+    blockquote {
+      border-left: 4px solid #667eea;
+      padding-left: 16px;
+      margin: 12px 0;
+      color: #666;
+      font-style: italic;
+    }
+
+    /* 表格样式 */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+
+      th,
+      td {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        padding: 8px 12px;
+        text-align: left;
+      }
+
+      th {
+        background-color: rgba(102, 126, 234, 0.1);
+        font-weight: 600;
+      }
+
+      tr:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+    }
+
+    /* 列表样式 */
+    ul,
+    ol {
+      padding-left: 24px;
+      margin: 8px 0;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    /* 标题样式 */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin: 16px 0 8px;
+      font-weight: 600;
+    }
+
+    /* 段落间距 */
+    p {
+      margin: 8px 0;
+      line-height: 1.6;
+    }
+  }
+
+  /* 暗色模式适配 */
+  .dark & {
+    :deep(.source-file-link) {
+      color: #8b9eff;
+      background-color: rgba(102, 126, 234, 0.15);
+
+      &:hover {
+        color: #a8b5ff;
+        background-color: rgba(102, 126, 234, 0.25);
+      }
+    }
+
+    :deep(.message-content) {
+      pre {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+
+      code {
+        background-color: rgba(255, 255, 255, 0.08);
+      }
+
+      blockquote {
+        border-left-color: #8b9eff;
+        color: #aaa;
+      }
+
+      table {
+        th,
+        td {
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+          background-color: rgba(102, 126, 234, 0.15);
+        }
+
+        tr:hover {
+          background-color: rgba(255, 255, 255, 0.02);
+        }
+      }
+    }
   }
 }
 </style>
