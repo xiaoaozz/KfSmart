@@ -1,1 +1,62 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20.121 7.121c-.566-.567-1.32-.879-2.121-.879s-1.555.312-2.121.879c-.233.233-.546.362-.879.362s-.646-.129-.879-.362C12.755 5.755 10.936 5.003 9 5.003s-3.755.752-5.121 2.118C3.312 7.688 3 8.441 3 9.242s.312 1.555.879 2.121c.566.567 1.32.879 2.121.879V17c0 1.654 1.346 3 3 3s3-1.346 3-3c0 1.654 1.346 3 3 3s3-1.346 3-3v-4.166a7.2 7.2 0 0 0 2.12-1.47c.568-.567.88-1.321.88-2.122s-.312-1.554-.879-2.121m-1.414 2.828A5.2 5.2 0 0 1 16 11.386V17a1 1 0 1 1-2 0v-5.614a5.2 5.2 0 0 1-2.707-1.437A3.2 3.2 0 0 0 10 9.174V17a1 1 0 1 1-2 0V9.173a3.2 3.2 0 0 0-1.293.776a.997.997 0 0 1-1.414 0a1 1 0 0 1 0-1.414C6.314 7.514 7.657 7.003 9 7.003s2.685.511 3.707 1.532A3.24 3.24 0 0 0 15 9.483c.831 0 1.661-.316 2.293-.948a.997.997 0 0 1 1.414 0a1 1 0 0 1 0 1.414"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 250 950 620">
+  <defs>
+    <linearGradient id="gradK" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#22D3EE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="gradF" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#C084FC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- K 字母左侧竖线 (青色-蓝色渐变) -->
+  <path d="M 190,280 L 290,280 L 290,800 L 190,800 Z" 
+        fill="url(#gradK)"/>
+  
+  <!-- K 字母右上斜线 -->
+  <path d="M 290,450 L 420,280 L 520,330 L 360,530 Z" 
+        fill="url(#gradK)"/>
+  
+  <!-- K 字母右下斜线 -->
+  <path d="M 320,530 L 480,800 L 380,850 L 240,580 Z" 
+        fill="url(#gradK)"/>
+  
+  <!-- K 左侧流线 -->
+  <path d="M 145,320 Q 135,325 125,335 L 115,350" 
+        stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 155,400 Q 145,408 135,420 L 125,435" 
+        stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 165,480 Q 155,490 145,505 L 135,525" 
+        stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- K 左侧节点 -->
+  <circle cx="105" cy="365" r="18" fill="#22D3EE"/>
+  <circle cx="115" cy="450" r="15" fill="#22D3EE"/>
+  <circle cx="125" cy="540" r="22" fill="#06B6D4"/>
+  
+  <!-- K 右下角流线和节点 -->
+  <path d="M 430,820 Q 440,830 450,845 L 460,860" 
+        stroke="#3B82F6" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <circle cx="475" cy="875" r="16" fill="#3B82F6"/>
+  
+  <!-- F 字母 (紫色渐变) -->
+  <path d="M 565,280 L 945,280 L 945,380 L 665,380 L 665,520 L 885,520 L 885,620 L 665,620 L 665,800 L 565,800 Z" 
+        fill="url(#gradF)"/>
+  
+  <!-- F 右上方流线 -->
+  <path d="M 950,295 Q 965,292 975,285" 
+        stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 958,320 Q 975,315 988,308" 
+        stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 965,345 Q 983,338 998,328" 
+        stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M 970,370 Q 990,361 1008,348" 
+        stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
+  
+  <!-- F 右上方节点 -->
+  <circle cx="870" cy="295" r="20" fill="#C084FC"/>
+  <circle cx="905" cy="325" r="16" fill="#C084FC"/>
+  <circle cx="935" cy="360" r="22" fill="#A78BFA"/>
+  <circle cx="960" cy="395" r="18" fill="#A78BFA"/>
+</svg>

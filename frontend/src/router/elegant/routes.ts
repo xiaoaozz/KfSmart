@@ -99,6 +99,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'mcp-tools',
+    path: '/mcp-tools',
+    component: 'layout.base$view.mcp-tools',
+    meta: {
+      title: 'mcp-tools',
+      i18nKey: 'route.mcp-tools'
+    }
+  },
+  {
     name: 'org-tag',
     path: '/org-tag',
     component: 'layout.base$view.org-tag',
@@ -119,6 +128,15 @@ export const generatedRoutes: GeneratedRoute[] = [
       i18nKey: 'route.personal-center',
       icon: 'solar:people-nearby-line-duotone',
       order: 6
+    }
+  },
+  {
+    name: 'system-settings',
+    path: '/system-settings',
+    component: 'layout.base$view.system-settings',
+    meta: {
+      title: 'system-settings',
+      i18nKey: 'route.system-settings'
     }
   },
   {

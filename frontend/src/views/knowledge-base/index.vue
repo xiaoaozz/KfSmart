@@ -16,6 +16,23 @@ const previewVisible = ref(false);
 const previewFileName = ref('');
 const previewFileMd5 = ref('');
 
+// 筛选器状态
+const selectedKnowledgeBase = ref('企业制度库');
+const selectedCategory = ref('全部');
+const selectedStatus = ref('全部类型');
+const selectedTimeRange = ref('全部时间');
+
+// 知识库列表
+const knowledgeBases = ref([
+  { id: '1', name: '企业制度库', icon: 'carbon:enterprise', fileCount: 126, chunkCount: 98765, status: '正常' },
+  { id: '2', name: '产品知识库', icon: 'carbon:product', fileCount: 89, chunkCount: 76432, status: '正常' },
+  { id: '3', name: '研发文档库', icon: 'carbon:code', fileCount: 156, chunkCount: 132540, status: '正常' },
+  { id: '4', name: '运维手册库', icon: 'carbon:tool-kit', fileCount: 74, chunkCount: 54312, status: '正常' },
+  { id: '5', name: '销售资料库', icon: 'carbon:chart-line', fileCount: 62, chunkCount: 41208, status: '正常' }
+]);
+
+const activeKnowledgeBase = ref('1');
+
 function apiFn() {
   return fakePaginationRequest<Api.KnowledgeBase.List>({ url: '/documents/uploads' });
 }
@@ -326,34 +343,345 @@ async function onBeforeUpload(
 </script>
 
 <template>
-  <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <NCard title="文件列表" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
-      <template #header-extra>
-        <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" @add="handleUpload" @refresh="getList">
-          <template #prefix>
-            <NButton size="small" ghost type="primary" @click="handleSearch">
+  <div class="knowledge-base-page flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <!-- 页面标题和操作栏 -->
+    <div class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 py-6">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">知识库管理</h1>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            集中管理企业文档与检索资源，支持高效的文档导入、解析、回忆化与检索服务。
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <NButton type="primary" size="large" @click="handleUpload">
+            <template #icon>
+              <icon-carbon:add class="text-lg" />
+            </template>
+            新建知识库
+          </NButton>
+          <NButton type="primary" size="large" ghost @click="handleUpload">
+            <template #icon>
+              <icon-carbon:cloud-upload class="text-lg" />
+            </template>
+            上传文档
+          </NButton>
+          <NButton size="large" tertiary @click="handleUpload">
+            <template #icon>
+              <icon-carbon:download class="text-lg" />
+            </template>
+            批量导入
+          </NButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- 主体内容 -->
+    <div class="flex-1 flex overflow-hidden">
+      <!-- 左侧：知识库列表 -->
+      <div class="w-280px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+        <!-- 知识库列表标题 -->
+        <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold text-gray-900 dark:text-white">知识库列表</h2>
+            <NButton text circle size="tiny">
               <template #icon>
-                <icon-ic-round-search class="text-icon" />
+                <icon-carbon:add class="text-lg" />
               </template>
-              检索知识库
             </NButton>
-          </template>
-        </TableHeaderOperation>
-      </template>
-      <NDataTable
-        striped
-        :columns="columns"
-        :data="tasks"
-        size="small"
-        :flex-height="!appStore.isMobile"
-        :scroll-x="962"
-        :loading="loading"
-        remote
-        :row-key="row => row.id"
-        :pagination="false"
-        class="sm:h-full"
-      />
-    </NCard>
+          </div>
+          <!-- 搜索框 -->
+          <NInput placeholder="搜索知识库" size="small">
+            <template #prefix>
+              <icon-carbon:search class="text-gray-400" />
+            </template>
+          </NInput>
+        </div>
+
+        <!-- 知识库卡片列表 -->
+        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+          <div
+            v-for="kb in knowledgeBases"
+            :key="kb.id"
+            :class="[
+              'knowledge-base-card p-4 rounded-xl cursor-pointer transition-all',
+              activeKnowledgeBase === kb.id
+                ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500'
+                : 'bg-gray-50 dark:bg-gray-700/50 border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+            ]"
+            @click="activeKnowledgeBase = kb.id"
+          >
+            <div class="flex items-start gap-3 mb-3">
+              <div :class="[
+                'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                activeKnowledgeBase === kb.id ? 'bg-blue-100 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-600'
+              ]">
+                <component
+                  :is="`icon-${kb.icon}`"
+                  :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']"
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 :class="[
+                  'text-sm font-medium mb-1',
+                  activeKnowledgeBase === kb.id ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'
+                ]">
+                  {{ kb.name }}
+                </h3>
+                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{{ kb.fileCount }} 文档</span>
+                  <span>·</span>
+                  <span>{{ kb.chunkCount.toLocaleString() }} Chunk</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <NTag :type="kb.status === '正常' ? 'success' : 'warning'" size="small">{{ kb.status }}</NTag>
+              <NButton text size="tiny">
+                <template #icon>
+                  <icon-carbon:overflow-menu-horizontal />
+                </template>
+              </NButton>
+            </div>
+          </div>
+        </div>
+
+        <!-- 底部统计 -->
+        <div class="flex-shrink-0 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <div class="flex justify-between">
+              <span>知识库数量</span>
+              <span class="font-medium">5 个</span>
+            </div>
+            <div class="flex justify-between">
+              <span>文档总数</span>
+              <span class="font-medium">507 个</span>
+            </div>
+            <div class="flex justify-between">
+              <span>Chunk 数量</span>
+              <span class="font-medium">403,257 个</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：文件列表和筛选器 -->
+      <div class="flex-1 flex flex-col bg-white dark:bg-gray-800">
+        <!-- 筛选器 -->
+        <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-4">
+            <!-- 文件类型筛选 -->
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">文件类型</span>
+              <NSelect
+                v-model:value="selectedCategory"
+                :options="[
+                  { label: '全部类型', value: '全部' },
+                  { label: 'PDF', value: 'PDF' },
+                  { label: 'DOCX', value: 'DOCX' },
+                  { label: 'MD', value: 'MD' },
+                  { label: 'XLSX', value: 'XLSX' }
+                ]"
+                size="small"
+                class="w-140px"
+              />
+            </div>
+
+            <!-- 所属者筛选 -->
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">所属者</span>
+              <NSelect
+                v-model:value="selectedCategory"
+                :options="[
+                  { label: '全部', value: '全部' },
+                  { label: 'HR', value: 'HR' },
+                  { label: '产品', value: '产品' },
+                  { label: '研发', value: '研发' }
+                ]"
+                size="small"
+                class="w-140px"
+              />
+            </div>
+
+            <!-- 检索筛选 -->
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">检索</span>
+              <NSelect
+                v-model:value="selectedStatus"
+                :options="[
+                  { label: '全部检索', value: '全部类型' }
+                ]"
+                size="small"
+                class="w-140px"
+              />
+            </div>
+
+            <!-- 更新时间筛选 -->
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">更新时间</span>
+              <NSelect
+                v-model:value="selectedTimeRange"
+                :options="[
+                  { label: '全部时间', value: '全部时间' },
+                  { label: '近7天', value: '近7天' },
+                  { label: '近30天', value: '近30天' }
+                ]"
+                size="small"
+                class="w-140px"
+              />
+            </div>
+
+            <div class="flex-1"></div>
+
+            <!-- 刷新按钮 -->
+            <NButton circle size="small" tertiary @click="getList">
+              <template #icon>
+                <icon-carbon:renew class="text-lg" />
+              </template>
+            </NButton>
+          </div>
+        </div>
+
+        <!-- 文件列表 -->
+        <div class="flex-1 overflow-hidden">
+          <NDataTable
+            striped
+            :columns="columns"
+            :data="tasks"
+            size="small"
+            :flex-height="true"
+            :scroll-x="962"
+            :loading="loading"
+            remote
+            :row-key="row => row.id"
+            :pagination="false"
+            class="h-full"
+          />
+        </div>
+      </div>
+
+      <!-- 右侧面板：知识库概览 -->
+      <div class="w-360px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+        <div class="p-6">
+          <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-6">知识库概览</h2>
+
+          <!-- 统计卡片 -->
+          <div class="space-y-4 mb-6">
+            <div class="stat-card bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-800 flex items-center justify-center">
+                  <icon-carbon:data-base class="text-blue-600 text-xl" />
+                </div>
+                <div class="flex-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">知识库数量</div>
+                  <div class="text-2xl font-bold text-blue-600">5</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-green-600">
+                <icon-carbon:arrow-up class="text-xs" />
+                <span>较昨日 +1</span>
+              </div>
+            </div>
+
+            <div class="stat-card bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-800 flex items-center justify-center">
+                  <icon-carbon:document class="text-green-600 text-xl" />
+                </div>
+                <div class="flex-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">文档总数</div>
+                  <div class="text-2xl font-bold text-green-600">507</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-green-600">
+                <icon-carbon:arrow-up class="text-xs" />
+                <span>较昨日 +12</span>
+              </div>
+            </div>
+
+            <div class="stat-card bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-800 flex items-center justify-center">
+                  <icon-carbon:chart-cluster-bar class="text-purple-600 text-xl" />
+                </div>
+                <div class="flex-1">
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Chunk 数量</div>
+                  <div class="text-2xl font-bold text-purple-600">403,257</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 text-xs text-green-600">
+                <icon-carbon:arrow-up class="text-xs" />
+                <span>较昨日 +523</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 向量索引实时状态 -->
+          <div class="mb-6">
+            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">向量索引实时状态</h3>
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-3">
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-gray-600 dark:text-gray-400">索引健康度</span>
+                <div class="flex items-center gap-2">
+                  <icon-carbon:checkmark-filled class="text-green-500" />
+                  <span class="font-medium text-green-600">健康</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-gray-600 dark:text-gray-400">最近索引</span>
+                <span class="font-medium text-gray-900 dark:text-white">10 分钟前</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 最近入库任务 -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">最近入库任务</h3>
+              <NButton text size="tiny" type="primary">
+                <span class="text-xs">查看全部</span>
+                <template #icon>
+                  <icon-carbon:arrow-right class="text-xs" />
+                </template>
+              </NButton>
+            </div>
+            <div class="space-y-3">
+              <!-- 任务项 -->
+              <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                <div class="flex items-start gap-2 mb-2">
+                  <icon-carbon:document class="text-blue-500 text-sm flex-shrink-0 mt-0.5" />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs font-medium text-gray-900 dark:text-white truncate mb-1">
+                      部署说明.md
+                    </div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">解析中 60%</div>
+                  </div>
+                </div>
+                <NProgress :percentage="60" :show-indicator="false" color="#3b82f6" />
+              </div>
+
+              <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+                <div class="flex items-start gap-2 mb-2">
+                  <icon-carbon:document class="text-green-500 text-sm flex-shrink-0 mt-0.5" />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs font-medium text-gray-900 dark:text-white truncate mb-1">
+                      API 接口规范.pdf
+                    </div>
+                    <div class="text-xs text-green-600">失败 重试中</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 text-xs text-yellow-600">
+                  <icon-carbon:warning class="text-xs" />
+                  <span>根据：解析出错，正在重试</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对话框 -->
     <UploadDialog v-model:visible="uploadVisible" />
     <SearchDialog v-model:visible="searchVisible" />
     
@@ -370,8 +698,56 @@ async function onBeforeUpload(
 </template>
 
 <style scoped lang="scss">
-.file-list-container {
-  transition: width 0.3s ease;
+.knowledge-base-page {
+  .knowledge-base-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  .stat-card {
+    transition: all 0.3s ease;
+    
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+  }
+}
+
+// 滚动条样式
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+
+  &:hover {
+    background: #9ca3af;
+  }
+}
+
+:deep(.dark) {
+  ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+
+    &:hover {
+      background: #6b7280;
+    }
+  }
 }
 
 :deep() {

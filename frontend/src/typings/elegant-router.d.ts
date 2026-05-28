@@ -25,8 +25,10 @@ declare module "@elegant-router/types" {
     "iframe-page": "/iframe-page/:url";
     "knowledge-base": "/knowledge-base";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
+    "mcp-tools": "/mcp-tools";
     "org-tag": "/org-tag";
     "personal-center": "/personal-center";
+    "system-settings": "/system-settings";
     "user": "/user";
   };
 
@@ -67,8 +69,10 @@ declare module "@elegant-router/types" {
     | "iframe-page"
     | "knowledge-base"
     | "login"
+    | "mcp-tools"
     | "org-tag"
     | "personal-center"
+    | "system-settings"
     | "user"
   >;
 
@@ -94,8 +98,10 @@ declare module "@elegant-router/types" {
     | "chat-history"
     | "chat"
     | "knowledge-base"
+    | "mcp-tools"
     | "org-tag"
     | "personal-center"
+    | "system-settings"
     | "user"
   >;
 
