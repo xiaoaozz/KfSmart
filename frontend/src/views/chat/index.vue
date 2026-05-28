@@ -9,7 +9,7 @@ import SearchResults from './modules/search-results.vue';
 <template>
   <div class="chat-page flex flex-col h-full bg-gray-50 dark:bg-gray-900">
     <!-- 顶部统计卡片 -->
-    <div class="p-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div class="px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
       <StatCards />
     </div>
 

@@ -158,11 +158,11 @@ const knowledgeBaseOptions = [
         <span>连接状态：</span>
         <icon-eos-icons:loading v-if="wsStatus === 'CONNECTING'" class="text-yellow-500" />
         <div v-else-if="wsStatus === 'OPEN'" class="flex items-center gap-1 text-green-600">
-          <icon-fluent:plug-connected-checkmark-20-filled />
+          <icon-carbon:checkmark-filled />
           <span>已连接</span>
         </div>
         <div v-else class="flex items-center gap-1 text-red-500">
-          <icon-tabler:plug-connected-x />
+          <icon-carbon:close-filled />
           <span>未连接</span>
         </div>
       </div>

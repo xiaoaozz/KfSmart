@@ -37,9 +37,9 @@ const notificationCount = ref(12);
 </script>
 
 <template>
-  <DarkModeContainer class="h-full flex-y-center bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-6">
+  <DarkModeContainer class="h-full flex-y-center bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-0">
     <!-- 左侧：Logo 和组织切换 -->
-    <div class="flex items-center gap-6 flex-shrink-0">
+    <div class="flex items-center gap-6 flex-shrink-0 px-6">
       <!-- Logo -->
       <div class="flex items-center gap-3">
         <SystemLogo class="text-32px text-primary" />
@@ -73,7 +73,7 @@ const notificationCount = ref(12);
     </div>
 
     <!-- 右侧：操作按钮组 -->
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 px-6">
       <!-- 通知 -->
       <NButton text class="relative p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all">
         <icon-carbon:notification class="text-gray-600 dark:text-gray-400 text-xl" />
