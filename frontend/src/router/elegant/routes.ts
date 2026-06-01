@@ -104,7 +104,9 @@ export const generatedRoutes: GeneratedRoute[] = [
     component: 'layout.base$view.mcp-tools',
     meta: {
       title: 'mcp-tools',
-      i18nKey: 'route.mcp-tools'
+      i18nKey: 'route.mcp-tools',
+      icon: 'solar:settings-minimalistic-line-duotone',
+      order: 3.5
     }
   },
   {
@@ -131,12 +133,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
-    name: 'system-settings',
-    path: '/system-settings',
-    component: 'layout.base$view.system-settings',
+    name: 'system-overview',
+    path: '/system-overview',
+    component: 'layout.base$view.system-overview',
     meta: {
-      title: 'system-settings',
-      i18nKey: 'route.system-settings'
+      title: 'system-overview',
+      i18nKey: 'route.system-overview',
+      icon: 'carbon:dashboard',
+      roles: ['ADMIN'],
+      order: 0
     }
   },
   {

@@ -162,9 +162,11 @@ const local: App.I18n.Schema = {
     404: 'Page Not Found',
     500: 'Server Error',
     'iframe-page': 'Iframe',
+    'system-overview': 'System Overview',
     chat: 'Chat Assistant',
     'chat-history': 'Chat History',
     'knowledge-base': 'Knowledge Base',
+    'mcp-tools': 'MCP Tools',
     'org-tag': 'Organization Tag',
     user: 'User Management',
     'personal-center': 'Personal Center'

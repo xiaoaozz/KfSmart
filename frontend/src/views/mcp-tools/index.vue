@@ -8,7 +8,7 @@ defineOptions({
 // 统计数据
 const stats = ref([
   {
-    icon: 'carbon:tool-kit',
+    icon: 'tool-kit',
     label: '已接入工具数',
     value: '18',
     change: '+2',
@@ -16,7 +16,7 @@ const stats = ref([
     color: 'blue'
   },
   {
-    icon: 'carbon:data-connected',
+    icon: 'data-connected',
     label: '在线服务数',
     value: '14',
     change: '+1',
@@ -24,7 +24,7 @@ const stats = ref([
     color: 'green'
   },
   {
-    icon: 'carbon:chat',
+    icon: 'chat',
     label: '今日调用次数',
     value: '1,248',
     change: '+356',
@@ -32,7 +32,7 @@ const stats = ref([
     color: 'purple'
   },
   {
-    icon: 'carbon:time',
+    icon: 'time',
     label: '平均响应时间',
     value: '842ms',
     change: '-38ms',
@@ -202,7 +202,11 @@ const getColorClasses = (color: string) => {
         >
           <div class="flex items-center gap-3 mb-3">
             <div :class="['w-10 h-10 rounded-lg flex items-center justify-center', getColorClasses(stat.color).bg]">
-              <component :is="`icon-${stat.icon}`" :class="['text-lg', getColorClasses(stat.color).icon]" />
+              <!-- 使用静态图标组件 -->
+              <icon-carbon:tool-kit v-if="stat.icon === 'tool-kit'" :class="['text-lg', getColorClasses(stat.color).icon]" />
+              <icon-carbon:data-connected v-else-if="stat.icon === 'data-connected'" :class="['text-lg', getColorClasses(stat.color).icon]" />
+              <icon-carbon:chat v-else-if="stat.icon === 'chat'" :class="['text-lg', getColorClasses(stat.color).icon]" />
+              <icon-carbon:time v-else-if="stat.icon === 'time'" :class="['text-lg', getColorClasses(stat.color).icon]" />
             </div>
             <div class="flex-1">
               <div class="text-xs text-gray-600 dark:text-gray-400">{{ stat.label }}</div>
@@ -210,7 +214,8 @@ const getColorClasses = (color: string) => {
             </div>
           </div>
           <div class="flex items-center gap-1 text-xs" :class="stat.trend === 'up' ? 'text-green-600' : 'text-cyan-600'">
-            <component :is="stat.trend === 'up' ? 'icon-carbon:arrow-up' : 'icon-carbon:arrow-down'" class="text-xs" />
+            <icon-carbon:arrow-up v-if="stat.trend === 'up'" class="text-xs" />
+            <icon-carbon:arrow-down v-else class="text-xs" />
             <span>较昨日 {{ stat.change }}</span>
           </div>
         </div>
@@ -249,7 +254,13 @@ const getColorClasses = (color: string) => {
             <div class="flex items-start justify-between mb-4">
               <div class="flex items-center gap-3">
                 <div class="w-12 h-12 rounded-xl bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
-                  <component :is="`icon-${tool.icon}`" class="text-2xl" />
+                  <!-- 处理不同类型的图标 -->
+                  <icon-logos:gitlab v-if="tool.icon === 'logos:gitlab'" class="text-2xl" />
+                  <icon-logos:mysql v-else-if="tool.icon === 'logos:mysql'" class="text-2xl" />
+                  <icon-carbon:document v-else-if="tool.icon === 'carbon:document'" class="text-2xl" />
+                  <icon-logos:jira v-else-if="tool.icon === 'logos:jira'" class="text-2xl" />
+                  <icon-carbon:document-tasks v-else-if="tool.icon === 'carbon:document-tasks'" class="text-2xl" />
+                  <icon-carbon:webhook v-else-if="tool.icon === 'carbon:webhook'" class="text-2xl" />
                 </div>
                 <div>
                   <h3 class="text-base font-bold text-gray-900 dark:text-white mb-1">{{ tool.name }}</h3>

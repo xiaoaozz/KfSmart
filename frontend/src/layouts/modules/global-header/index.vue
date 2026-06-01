@@ -38,19 +38,10 @@ const notificationCount = ref(12);
 
 <template>
   <DarkModeContainer class="h-full flex-y-center bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 px-0">
-    <!-- 左侧：Logo 和组织切换 -->
+    <!-- 左侧：组织切换 -->
     <div class="flex items-center gap-6 flex-shrink-0 px-6">
-      <!-- Logo -->
-      <div class="flex items-center gap-3">
-        <SystemLogo class="text-32px text-primary" />
-        <div class="flex flex-col">
-          <span class="text-lg font-bold text-gray-900 dark:text-white">KnowFlow</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">KnowFlow</span>
-        </div>
-      </div>
-
       <!-- 租户/组织切换器 -->
-      <div class="flex items-center gap-2 pl-6 border-l border-gray-200 dark:border-gray-700">
+      <div class="flex items-center gap-2">
         <NDropdown :options="[
           { label: '默认租户', key: 'default' },
           { label: '企业A', key: 'company_a' },

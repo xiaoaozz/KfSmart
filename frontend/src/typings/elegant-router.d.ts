@@ -28,7 +28,7 @@ declare module "@elegant-router/types" {
     "mcp-tools": "/mcp-tools";
     "org-tag": "/org-tag";
     "personal-center": "/personal-center";
-    "system-settings": "/system-settings";
+    "system-overview": "/system-overview";
     "user": "/user";
   };
 
@@ -72,7 +72,7 @@ declare module "@elegant-router/types" {
     | "mcp-tools"
     | "org-tag"
     | "personal-center"
-    | "system-settings"
+    | "system-overview"
     | "user"
   >;
 
@@ -101,7 +101,7 @@ declare module "@elegant-router/types" {
     | "mcp-tools"
     | "org-tag"
     | "personal-center"
-    | "system-settings"
+    | "system-overview"
     | "user"
   >;
 

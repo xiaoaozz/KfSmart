@@ -10,7 +10,7 @@ const isCollapsed = ref(false);
 
 const stats = ref([
   {
-    icon: 'carbon:data-base',
+    icon: 'data-base',
     label: '知识库数量',
     value: '12',
     change: '+2',
@@ -18,7 +18,7 @@ const stats = ref([
     color: 'blue'
   },
   {
-    icon: 'carbon:document',
+    icon: 'document',
     label: '文档总数',
     value: '1,248',
     change: '+36',
@@ -26,7 +26,7 @@ const stats = ref([
     color: 'green'
   },
   {
-    icon: 'carbon:chat',
+    icon: 'chat',
     label: '今日回答',
     value: '356',
     change: '+58',
@@ -34,7 +34,7 @@ const stats = ref([
     color: 'purple'
   },
   {
-    icon: 'carbon:time',
+    icon: 'time',
     label: '平均响应时间',
     value: '1.42s',
     change: '-0.21s',
@@ -103,7 +103,11 @@ const getColorClasses = (color: string) => {
                   'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
                   getColorClasses(stat.color).bg
                 ]">
-                  <component :is="`icon-${stat.icon}`" :class="['text-xl', getColorClasses(stat.color).icon]" />
+                  <!-- 使用静态图标组件 -->
+                  <icon-carbon:data-base v-if="stat.icon === 'data-base'" :class="['text-xl', getColorClasses(stat.color).icon]" />
+                  <icon-carbon:document v-else-if="stat.icon === 'document'" :class="['text-xl', getColorClasses(stat.color).icon]" />
+                  <icon-carbon:chat v-else-if="stat.icon === 'chat'" :class="['text-xl', getColorClasses(stat.color).icon]" />
+                  <icon-carbon:time v-else-if="stat.icon === 'time'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                 </div>
               </div>
               <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ stat.label }}</div>
@@ -114,9 +118,13 @@ const getColorClasses = (color: string) => {
             <span :class="stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-cyan-600 dark:text-cyan-400'">
               较昨日 {{ stat.change }}
             </span>
-            <component 
-              :is="stat.trend === 'up' ? 'icon-carbon:arrow-up' : 'icon-carbon:arrow-down'"
-              :class="['text-xs', stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-cyan-600 dark:text-cyan-400']"
+            <icon-carbon:arrow-up 
+              v-if="stat.trend === 'up'"
+              class="text-xs text-green-600 dark:text-green-400"
+            />
+            <icon-carbon:arrow-down 
+              v-else
+              class="text-xs text-cyan-600 dark:text-cyan-400"
             />
           </div>
         </div>

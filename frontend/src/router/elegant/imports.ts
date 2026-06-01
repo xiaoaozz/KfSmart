@@ -26,6 +26,6 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "mcp-tools": () => import("@/views/mcp-tools/index.vue"),
   "org-tag": () => import("@/views/org-tag/index.vue"),
   "personal-center": () => import("@/views/personal-center/index.vue"),
-  "system-settings": () => import("@/views/system-settings/index.vue"),
+  "system-overview": () => import("@/views/system-overview/index.vue"),
   user: () => import("@/views/user/index.vue"),
 };

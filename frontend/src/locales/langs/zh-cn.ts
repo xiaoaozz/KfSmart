@@ -162,9 +162,11 @@ const local: App.I18n.Schema = {
     404: '页面不存在',
     500: '服务器错误',
     'iframe-page': '外链页面',
+    'system-overview': '系统总览',
     chat: '聊天助手',
     'chat-history': '聊天记录',
     'knowledge-base': '知识库',
+    'mcp-tools': 'MCP工具',
     'org-tag': '组织标签',
     user: '用户管理',
     'personal-center': '个人中心'

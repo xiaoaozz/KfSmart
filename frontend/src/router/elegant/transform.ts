@@ -174,7 +174,7 @@ const routeMap: RouteMap = {
   "mcp-tools": "/mcp-tools",
   "org-tag": "/org-tag",
   "personal-center": "/personal-center",
-  "system-settings": "/system-settings",
+  "system-overview": "/system-overview",
   "user": "/user"
 };
 
