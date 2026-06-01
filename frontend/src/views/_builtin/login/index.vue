@@ -6,6 +6,7 @@ import { loginModuleRecord } from '@/constants/app';
 import { useAppStore } from '@/store/modules/app';
 import { useThemeStore } from '@/store/modules/theme';
 import { $t } from '@/locales';
+import systemLogoUrl from '@/assets/svg-icon/logo.svg';
 import PwdLogin from './modules/pwd-login.vue';
 import CodeLogin from './modules/code-login.vue';
 import Register from './modules/register.vue';
@@ -41,6 +42,7 @@ const bgColor = computed(() => {
   const ratio = themeStore.darkMode ? 0.5 : 0;
   return mixColor('#fff', '#000', ratio);
 });
+
 
 // 左侧功能特性数据
 const features = [
@@ -100,59 +102,11 @@ onMounted(() => {
       <!-- 左侧：产品展示区 -->
       <div class="left-section flex-1 px-8 lg:px-12 py-8 flex flex-col">
         <!-- Logo 和标题 -->
-        <div class="flex items-center gap-3 mb-8">
-          <!-- 内联 KF Logo 确保立即生效 -->
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="80 250 950 620" class="text-40px text-primary" style="width: 40px; height: 40px;">
-            <defs>
-              <linearGradient id="gradK-top" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" style="stop-color:#22D3EE;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
-              </linearGradient>
-              <linearGradient id="gradF-top" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" style="stop-color:#C084FC;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
-              </linearGradient>
-            </defs>
-            
-            <!-- K 字母左侧竖线 -->
-            <path d="M 190,280 L 290,280 L 290,800 L 190,800 Z" fill="url(#gradK-top)"/>
-            
-            <!-- K 字母右上斜线 -->
-            <path d="M 290,450 L 420,280 L 520,330 L 360,530 Z" fill="url(#gradK-top)"/>
-            
-            <!-- K 字母右下斜线 -->
-            <path d="M 320,530 L 480,800 L 380,850 L 240,580 Z" fill="url(#gradK-top)"/>
-            
-            <!-- K 左侧流线 -->
-            <path d="M 145,320 Q 135,325 125,335 L 115,350" stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <path d="M 155,400 Q 145,408 135,420 L 125,435" stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <path d="M 165,480 Q 155,490 145,505 L 135,525" stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-            
-            <!-- K 左侧节点 -->
-            <circle cx="105" cy="365" r="18" fill="#22D3EE"/>
-            <circle cx="115" cy="450" r="15" fill="#22D3EE"/>
-            <circle cx="125" cy="540" r="22" fill="#06B6D4"/>
-            
-            <!-- K 右下角流线和节点 -->
-            <path d="M 430,820 Q 440,830 450,845 L 460,860" stroke="#3B82F6" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <circle cx="475" cy="875" r="16" fill="#3B82F6"/>
-            
-            <!-- F 字母 -->
-            <path d="M 565,280 L 945,280 L 945,380 L 665,380 L 665,520 L 885,520 L 885,620 L 665,620 L 665,800 L 565,800 Z" fill="url(#gradF-top)"/>
-            
-            <!-- F 右上方流线 -->
-            <path d="M 950,295 Q 965,292 975,285" stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <path d="M 958,320 Q 975,315 988,308" stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <path d="M 965,345 Q 983,338 998,328" stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
-            <path d="M 970,370 Q 990,361 1008,348" stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
-            
-            <!-- F 右上方节点 -->
-            <circle cx="870" cy="295" r="20" fill="#C084FC"/>
-            <circle cx="905" cy="325" r="16" fill="#C084FC"/>
-            <circle cx="935" cy="360" r="22" fill="#A78BFA"/>
-            <circle cx="960" cy="395" r="18" fill="#A78BFA"/>
-          </svg>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+        <div class="flex items-center gap-2.5 mb-8">
+          <div class="w-28px h-28px flex items-center justify-center flex-shrink-0">
+            <img :src="systemLogoUrl" alt="KnowFlow logo" class="login-top-logo">
+          </div>
+          <h1 class="text-2xl font-bold leading-none text-gray-900 dark:text-white">
             KnowFlow
           </h1>
         </div>
@@ -216,69 +170,7 @@ onMounted(() => {
               <div class="podium-ring ring-2"></div>
               <div class="podium-ring ring-3"></div>
             </div>
-            <!-- Logo: KF -->
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="80 250 950 620" class="logo-3d" style="width: 200px; height: 200px;">
-              <defs>
-                <linearGradient id="gradK-center" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:#22D3EE;stop-opacity:1" />
-                  <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
-                </linearGradient>
-                <linearGradient id="gradF-center" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" style="stop-color:#C084FC;stop-opacity:1" />
-                  <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
-                </linearGradient>
-              </defs>
-              
-              <!-- K 字母左侧竖线 (青色-蓝色渐变) -->
-              <path d="M 190,280 L 290,280 L 290,800 L 190,800 Z" 
-                    fill="url(#gradK-center)"/>
-              
-              <!-- K 字母右上斜线 -->
-              <path d="M 290,450 L 420,280 L 520,330 L 360,530 Z" 
-                    fill="url(#gradK-center)"/>
-              
-              <!-- K 字母右下斜线 -->
-              <path d="M 320,530 L 480,800 L 380,850 L 240,580 Z" 
-                    fill="url(#gradK-center)"/>
-              
-              <!-- K 左侧流线 -->
-              <path d="M 145,320 Q 135,325 125,335 L 115,350" 
-                    stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <path d="M 155,400 Q 145,408 135,420 L 125,435" 
-                    stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <path d="M 165,480 Q 155,490 145,505 L 135,525" 
-                    stroke="#22D3EE" stroke-width="8" fill="none" stroke-linecap="round"/>
-              
-              <!-- K 左侧节点 -->
-              <circle cx="105" cy="365" r="18" fill="#22D3EE"/>
-              <circle cx="115" cy="450" r="15" fill="#22D3EE"/>
-              <circle cx="125" cy="540" r="22" fill="#06B6D4"/>
-              
-              <!-- K 右下角流线和节点 -->
-              <path d="M 430,820 Q 440,830 450,845 L 460,860" 
-                    stroke="#3B82F6" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <circle cx="475" cy="875" r="16" fill="#3B82F6"/>
-              
-              <!-- F 字母 (紫色渐变) -->
-              <path d="M 565,280 L 945,280 L 945,380 L 665,380 L 665,520 L 885,520 L 885,620 L 665,620 L 665,800 L 565,800 Z" 
-                    fill="url(#gradF-center)"/>
-              
-              <!-- F 右上方流线 -->
-              <path d="M 950,295 Q 965,292 975,285" 
-                    stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <path d="M 958,320 Q 975,315 988,308" 
-                    stroke="#C084FC" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <path d="M 965,345 Q 983,338 998,328" 
-                    stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
-              <path d="M 970,370 Q 990,361 1008,348" 
-                    stroke="#A78BFA" stroke-width="8" fill="none" stroke-linecap="round"/>
-              
-              <!-- F 右上方节点 -->
-              <circle cx="870" cy="295" r="20" fill="#C084FC"/>
-              <circle cx="905" cy="325" r="16" fill="#C084FC"/>
-              <circle cx="935" cy="360" r="22" fill="#A78BFA"/>
-              <circle cx="960" cy="395" r="18" fill="#A78BFA"/>
-            </svg>
+            <img :src="systemLogoUrl" alt="KnowFlow logo" class="logo-3d" />
           </div>
 
           <!-- 顶部中央：企业级搜索 -->
@@ -652,7 +544,14 @@ onMounted(() => {
   }
 }
 
-.logo-3d {
+.login-top-logo {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+:deep(.logo-3d) {
   position: relative;
   z-index: 3;
   opacity: 0.9;

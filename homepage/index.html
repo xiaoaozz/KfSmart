@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>派聪明</title>
     <meta name="description" content="派聪明是一款基于JAVA技术栈的RAG知识库项目" />
-    <link rel="shortcut icon" href="./assets/logo/logo.png" type="image/x-icon" />
+    <link rel="shortcut icon" href="./assets/logo/logo.svg" type="image/svg+xml" />
 
     <meta property="og:title" content="派聪明" />
     <meta property="og:description" content="派聪明是一款基于JAVA技术栈的RAG知识库项目" />
@@ -29,7 +29,7 @@
                     lg:tw-justify-around lg:!tw-backdrop-blur-lg lg:tw-opacity-[0.99] tw-backdrop-blur">
         <a class="tw-flex tw-p-[4px] tw-gap-2 tw-place-items-center" href="#">
             <div class="tw-h-[50px] tw-max-w-[200px]">
-                <img src="./assets/logo/logo.png" alt="logo" class="tw-object-contain tw-h-full tw-w-full" />
+                <img src="./assets/logo/logo.svg" alt="logo" class="tw-object-contain tw-h-full tw-w-full" />
             </div>
             <span class="tw-font-bold tw-whitespace-nowrap">派聪明</span>
         </a>
@@ -127,7 +127,7 @@
                                             dark:tw-bg-[#171717] tw-h-full">
                                 <div
                                     class="tw-h-[30px] tw-w-full tw-max-w-[250px] tw-flex tw-gap-2 tw-place-items-center tw-justify-center">
-                                    <img src="./assets/logo/logo.png" alt="logo"
+                                    <img src="./assets/logo/logo.svg" alt="logo"
                                         class="tw-object-contain tw-opacity-80 tw-h-full" />
                                     <span class="tw-font-bold tw-whitespace-nowrap tw-text-[#646cff]">派聪明</span>
                                 </div>
@@ -174,7 +174,7 @@
                                 <div class="tw-relative tw-w-full tw-flex tw-place-content-center tw-h-full">
                                     <div
                                         class="tw-absolute tw-top-[40%] max-lg:tw-top-[40%] tw-left-1/2 tw--translate-x-1/2  tw-w-[150px] tw-h-[150px]">
-                                        <img src="./assets/logo/logo.png"
+                                        <img src="./assets/logo/logo.svg"
                                             class="tw-w-full tw-h-full tw-object-contain tw-opacity-20"
                                             alt="PaiSmart logo">
                                     </div>
@@ -197,7 +197,8 @@
                                 <form action="" id="prompt-form" onsubmit="return false;"
                                     class="tw-place-content-center tw-mt-auto tw-h-[50px] tw-p-1 tw-place-items-center 
                                                 tw-justify-around tw-flex tw-gap-1 tw-bottom-2 tw-w-full tw-rounded-md tw-bg-[#f3f4f6] dark:tw-bg-[#171717]">
-                                    <input placeholder="给 派聪明 发送消息" type="text"
+                                    <label for="prompt-input" style="position:absolute;left:-9999px;">给 派聪明 发送消息</label>
+                                    <input id="prompt-input" aria-label="给 派聪明 发送消息" placeholder="给 派聪明 发送消息" type="text"
                                         class="tw-p-2 !tw-outline-none tw-bg-transparent tw-border-none tw-w-full tw-placehoder-gray-500
                                                                     dark:tw-placeholder-opacity-60 dark:tw-placeholder-gray-300 tw-max-w-[80%] tw-h-full"
                                         name="prompt">
@@ -1181,7 +1182,7 @@
         <div class="tw-flex max-md:tw-flex-col max-md:tw-gap-6 tw-gap-3 tw-w-full tw-place-content-around">
             <div class="tw-flex tw-h-full tw-w-[250px] tw-flex-col tw-place-items-center tw-gap-6 max-md:tw-w-full">
                 <a href="#" class="tw-w-full tw-place-items-center tw-flex tw-flex-col tw-gap-4">
-                    <img src="./assets/logo/logo.png" alt="logo" srcset="" class="tw-max-w-[120px]" />
+                    <img src="./assets/logo/logo.svg" alt="logo" srcset="" class="tw-max-w-[120px]" />
                     <div class="tw-max-w-[250px] tw-text-center tw-text-3xl tw-h-fit">
                         派聪明
                     </div>
@@ -1227,11 +1228,6 @@
         </div>
     </footer>
 </body>
-
-<script src="/js/gsap.min.js"></script>
-<script src="/js/ScrollTrigger.min.js"></script>
-<script src="/js/typed.min.js"></script>
-<script src="/js/particles.min.js"></script>
 
 <script src="./scripts/particles.js" type="module"></script>
 <script src="./scripts/components.js" type="module"></script>

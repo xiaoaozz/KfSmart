@@ -1,6 +1,6 @@
 
 
-class Dropdown {
+export class Dropdown {
     constructor(selector, onChange) {
         this.dropdown = document.querySelector(selector)
         this.toggleButton = this.dropdown.querySelector('.dropdown-toggle')
@@ -65,8 +65,33 @@ class Dropdown {
     }
 }
 
+export function initPromptPlayground() {
+    const promptWindow = new Prompt('#pixa-playground')
+    const promptForm = document.getElementById('prompt-form')
+    const promptInput = promptForm?.querySelector('input[name="prompt"]')
 
-class Prompt{
+    const submitPrompt = () => {
+        const msg = promptInput?.value?.trim()
+        if (!msg) return
+        promptWindow.addPrompt(msg)
+        promptInput.value = ''
+    }
+
+    promptForm?.addEventListener('submit', (event) => {
+        event.preventDefault()
+        submitPrompt()
+    })
+
+    promptForm?.querySelector('button')?.addEventListener('click', (event) => {
+        event.preventDefault()
+        submitPrompt()
+    })
+
+    return promptWindow
+}
+
+
+export class Prompt{
 
     constructor(target){
         this.playground = document.querySelector(target)
