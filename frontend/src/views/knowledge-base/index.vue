@@ -17,21 +17,30 @@ const previewFileName = ref('');
 const previewFileMd5 = ref('');
 
 // 筛选器状态
-const selectedKnowledgeBase = ref('企业制度库');
+const selectedKnowledgeBase = ref('全部');
 const selectedCategory = ref('全部');
 const selectedStatus = ref('全部类型');
 const selectedTimeRange = ref('全部时间');
 
-// 知识库列表
-const knowledgeBases = ref([
-  { id: '1', name: '企业制度库', icon: 'carbon:enterprise', fileCount: 126, chunkCount: 98765, status: '正常' },
-  { id: '2', name: '产品知识库', icon: 'carbon:product', fileCount: 89, chunkCount: 76432, status: '正常' },
-  { id: '3', name: '研发文档库', icon: 'carbon:code', fileCount: 156, chunkCount: 132540, status: '正常' },
-  { id: '4', name: '运维手册库', icon: 'carbon:tool-kit', fileCount: 74, chunkCount: 54312, status: '正常' },
-  { id: '5', name: '销售资料库', icon: 'carbon:chart-line', fileCount: 62, chunkCount: 41208, status: '正常' }
-]);
+// 知识库列表 - 从后端数据动态构建
+interface KnowledgeBaseItem {
+  id: string;
+  name: string;
+  icon: string;
+  fileCount: number;
+  chunkCount: number;
+  status: string;
+}
 
-const activeKnowledgeBase = ref('1');
+const knowledgeBases = ref<KnowledgeBaseItem[]>([]);
+const activeKnowledgeBase = ref('');
+
+// 右侧面板统计数据
+const panelStats = ref({
+  knowledgeBaseCount: 0,
+  documentCount: 0,
+  chunkCount: 0
+});
 
 function apiFn() {
   return fakePaginationRequest<Api.KnowledgeBase.List>({ url: '/documents/uploads' });
@@ -173,7 +182,59 @@ const store = useKnowledgeBaseStore();
 const { tasks } = storeToRefs(store);
 onMounted(async () => {
   await getList();
+  await refreshKnowledgeBaseStats();
 });
+
+/** 从后端数据刷新左侧知识库列表和右侧面板统计 */
+async function refreshKnowledgeBaseStats() {
+  try {
+    const { error, data } = await request<Api.KnowledgeBase.List[]>({ url: '/documents/uploads' });
+    if (!error && data) {
+      // 按 orgTagName 聚合，构建知识库列表
+      const tagMap = new Map<string, { count: number; size: number }>();
+      
+      data.forEach((file: Api.KnowledgeBase.List) => {
+        const tagName = file.orgTagName || '未分类';
+        const existing = tagMap.get(tagName);
+        if (existing) {
+          existing.count++;
+          existing.size += file.totalSize || 0;
+        } else {
+          tagMap.set(tagName, { count: 1, size: file.totalSize || 0 });
+        }
+      });
+
+      // 图标映射（使用标准 Carbon 图标）
+      const iconPool = [
+        'enterprise', 'product', 'code',
+        'tool-kit', 'chart-line', 'folder',
+        'catalog', 'bookmark'
+      ];
+
+      knowledgeBases.value = Array.from(tagMap.entries()).map(([name, info], index) => ({
+        id: String(index + 1),
+        name,
+        icon: iconPool[index % iconPool.length],
+        fileCount: info.count,
+        chunkCount: Math.floor(info.size / 4096), // 估算 chunk 数
+        status: '正常'
+      }));
+
+      if (knowledgeBases.value.length > 0 && !activeKnowledgeBase.value) {
+        activeKnowledgeBase.value = knowledgeBases.value[0].id;
+      }
+
+      // 更新右侧面板统计
+      panelStats.value = {
+        knowledgeBaseCount: knowledgeBases.value.length,
+        documentCount: data.length,
+        chunkCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.chunkCount, 0)
+      };
+    }
+  } catch (e) {
+    console.error('[知识库] 刷新统计失败:', e);
+  }
+}
 
 /** 异步获取列表函数 该函数主要用于更新或初始化上传任务列表 它首先调用getData函数获取数据，然后根据获取到的数据状态更新任务列表 */
 async function getList() {
@@ -258,6 +319,7 @@ async function handleDelete(fileMd5: string) {
     tasks.value.splice(index, 1);
     window.$message?.success('删除成功');
     await getData();
+    await refreshKnowledgeBaseStats();
   }
 }
 
@@ -416,10 +478,15 @@ async function onBeforeUpload(
                 'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
                 activeKnowledgeBase === kb.id ? 'bg-blue-100 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-600'
               ]">
-                <component
-                  :is="`icon-${kb.icon}`"
-                  :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']"
-                />
+                <icon-carbon:enterprise v-if="kb.icon === 'enterprise'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:product v-else-if="kb.icon === 'product'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:code v-else-if="kb.icon === 'code'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:tool-kit v-else-if="kb.icon === 'tool-kit'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:chart-line v-else-if="kb.icon === 'chart-line'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:folder v-else-if="kb.icon === 'folder'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:catalog v-else-if="kb.icon === 'catalog'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:bookmark v-else-if="kb.icon === 'bookmark'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:folder v-else :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
               </div>
               <div class="flex-1 min-w-0">
                 <h3 :class="[
@@ -451,15 +518,15 @@ async function onBeforeUpload(
           <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
             <div class="flex justify-between">
               <span>知识库数量</span>
-              <span class="font-medium">5 个</span>
+              <span class="font-medium">{{ panelStats.knowledgeBaseCount }} 个</span>
             </div>
             <div class="flex justify-between">
               <span>文档总数</span>
-              <span class="font-medium">507 个</span>
+              <span class="font-medium">{{ panelStats.documentCount }} 个</span>
             </div>
             <div class="flex justify-between">
               <span>Chunk 数量</span>
-              <span class="font-medium">403,257 个</span>
+              <span class="font-medium">{{ panelStats.chunkCount.toLocaleString() }} 个</span>
             </div>
           </div>
         </div>
@@ -574,12 +641,11 @@ async function onBeforeUpload(
                 </div>
                 <div class="flex-1">
                   <div class="text-xs text-gray-600 dark:text-gray-400">知识库数量</div>
-                  <div class="text-2xl font-bold text-blue-600">5</div>
+                  <div class="text-2xl font-bold text-blue-600">{{ panelStats.knowledgeBaseCount }}</div>
                 </div>
               </div>
-              <div class="flex items-center gap-1 text-xs text-green-600">
-                <icon-carbon:arrow-up class="text-xs" />
-                <span>较昨日 +1</span>
+              <div class="flex items-center gap-1 text-xs text-gray-500">
+                <span>按组织标签分类</span>
               </div>
             </div>
 
@@ -590,12 +656,11 @@ async function onBeforeUpload(
                 </div>
                 <div class="flex-1">
                   <div class="text-xs text-gray-600 dark:text-gray-400">文档总数</div>
-                  <div class="text-2xl font-bold text-green-600">507</div>
+                  <div class="text-2xl font-bold text-green-600">{{ panelStats.documentCount }}</div>
                 </div>
               </div>
-              <div class="flex items-center gap-1 text-xs text-green-600">
-                <icon-carbon:arrow-up class="text-xs" />
-                <span>较昨日 +12</span>
+              <div class="flex items-center gap-1 text-xs text-gray-500">
+                <span>当前可访问文档</span>
               </div>
             </div>
 
@@ -606,12 +671,11 @@ async function onBeforeUpload(
                 </div>
                 <div class="flex-1">
                   <div class="text-xs text-gray-600 dark:text-gray-400">Chunk 数量</div>
-                  <div class="text-2xl font-bold text-purple-600">403,257</div>
+                  <div class="text-2xl font-bold text-purple-600">{{ panelStats.chunkCount.toLocaleString() }}</div>
                 </div>
               </div>
-              <div class="flex items-center gap-1 text-xs text-green-600">
-                <icon-carbon:arrow-up class="text-xs" />
-                <span>较昨日 +523</span>
+              <div class="flex items-center gap-1 text-xs text-gray-500">
+                <span>向量化检索分块</span>
               </div>
             </div>
           </div>
@@ -624,12 +688,16 @@ async function onBeforeUpload(
                 <span class="text-gray-600 dark:text-gray-400">索引健康度</span>
                 <div class="flex items-center gap-2">
                   <icon-carbon:checkmark-filled class="text-green-500" />
-                  <span class="font-medium text-green-600">健康</span>
+                  <span class="font-medium text-green-600">{{ tasks.length > 0 ? '正常' : '无数据' }}</span>
                 </div>
               </div>
               <div class="flex items-center justify-between text-xs">
-                <span class="text-gray-600 dark:text-gray-400">最近索引</span>
-                <span class="font-medium text-gray-900 dark:text-white">10 分钟前</span>
+                <span class="text-gray-600 dark:text-gray-400">已索引文档</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{ panelStats.documentCount }} 篇</span>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-gray-600 dark:text-gray-400">Chunk 数量</span>
+                <span class="font-medium text-gray-900 dark:text-white">{{ panelStats.chunkCount.toLocaleString() }} 个</span>
               </div>
             </div>
           </div>
@@ -637,44 +705,48 @@ async function onBeforeUpload(
           <!-- 最近入库任务 -->
           <div>
             <div class="flex items-center justify-between mb-3">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">最近入库任务</h3>
-              <NButton text size="tiny" type="primary">
-                <span class="text-xs">查看全部</span>
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">最近上传文件</h3>
+              <NButton text size="tiny" type="primary" @click="refreshKnowledgeBaseStats">
                 <template #icon>
-                  <icon-carbon:arrow-right class="text-xs" />
+                  <icon-carbon:renew class="text-xs" />
                 </template>
               </NButton>
             </div>
-            <div class="space-y-3">
-              <!-- 任务项 -->
-              <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
+            <div class="space-y-3" v-if="tasks.length > 0">
+              <div
+                v-for="task in tasks.slice(0, 3)"
+                :key="task.fileMd5"
+                class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3"
+              >
                 <div class="flex items-start gap-2 mb-2">
-                  <icon-carbon:document class="text-blue-500 text-sm flex-shrink-0 mt-0.5" />
+                  <icon-carbon:document 
+                    :class="[
+                      'text-sm flex-shrink-0 mt-0.5',
+                      task.status === UploadStatus.Completed ? 'text-green-500' : 'text-blue-500'
+                    ]" 
+                  />
                   <div class="flex-1 min-w-0">
                     <div class="text-xs font-medium text-gray-900 dark:text-white truncate mb-1">
-                      部署说明.md
+                      {{ task.fileName }}
                     </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">解析中 60%</div>
+                    <div :class="[
+                      'text-xs',
+                      task.status === UploadStatus.Completed ? 'text-green-600' : 'text-blue-600'
+                    ]">
+                      {{ task.status === UploadStatus.Completed ? '已完成' : task.status === UploadStatus.Break ? '上传中断' : '处理中' }}
+                    </div>
                   </div>
                 </div>
-                <NProgress :percentage="60" :show-indicator="false" color="#3b82f6" />
+                <NProgress
+                  :percentage="task.status === UploadStatus.Completed ? 100 : (task.progress || 0)"
+                  :show-indicator="false"
+                  :color="task.status === UploadStatus.Completed ? '#10b981' : '#3b82f6'"
+                />
               </div>
-
-              <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                <div class="flex items-start gap-2 mb-2">
-                  <icon-carbon:document class="text-green-500 text-sm flex-shrink-0 mt-0.5" />
-                  <div class="flex-1 min-w-0">
-                    <div class="text-xs font-medium text-gray-900 dark:text-white truncate mb-1">
-                      API 接口规范.pdf
-                    </div>
-                    <div class="text-xs text-green-600">失败 重试中</div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1 text-xs text-yellow-600">
-                  <icon-carbon:warning class="text-xs" />
-                  <span>根据：解析出错，正在重试</span>
-                </div>
-              </div>
+            </div>
+            <div v-else class="text-center py-6 text-gray-400">
+              <icon-carbon:document-blank class="text-3xl mb-2 mx-auto" />
+              <p class="text-xs">暂无上传文件</p>
             </div>
           </div>
         </div>

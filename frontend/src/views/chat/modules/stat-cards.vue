@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { request } from '@/service/request';
+import { fetchGetSystemStats } from '@/service/api/system';
 
 defineOptions({
   name: 'StatCards'
@@ -7,46 +9,112 @@ defineOptions({
 
 // 折叠状态
 const isCollapsed = ref(false);
+const loading = ref(false);
 
-const stats = ref([
+interface StatItem {
+  icon: string;
+  label: string;
+  value: string;
+  change: string;
+  trend: 'up' | 'down';
+  color: string;
+}
+
+const stats = ref<StatItem[]>([
   {
     icon: 'data-base',
-    label: '知识库数量',
-    value: '12',
-    change: '+2',
+    label: '知识库文件',
+    value: '--',
+    change: '--',
     trend: 'up',
     color: 'blue'
   },
   {
     icon: 'document',
-    label: '文档总数',
-    value: '1,248',
-    change: '+36',
+    label: '我的文档',
+    value: '--',
+    change: '--',
     trend: 'up',
     color: 'green'
   },
   {
     icon: 'chat',
-    label: '今日回答',
-    value: '356',
-    change: '+58',
+    label: '会话消息',
+    value: '--',
+    change: '--',
     trend: 'up',
     color: 'purple'
   },
   {
     icon: 'time',
-    label: '平均响应时间',
-    value: '1.42s',
-    change: '-0.21s',
-    trend: 'down',
+    label: '今日上传',
+    value: '--',
+    change: '--',
+    trend: 'up',
     color: 'cyan'
   }
 ]);
+
+function formatNumber(num: number): string {
+  if (num >= 10000) return (num / 10000).toFixed(1) + 'w';
+  return num.toLocaleString();
+}
+
+async function fetchStats() {
+  loading.value = true;
+  try {
+    // 获取系统统计
+    const { error: sErr, data: sData } = await fetchGetSystemStats();
+    if (!sErr && sData) {
+      stats.value[0].value = formatNumber(sData.totalFiles || 0);
+      stats.value[0].change = String(sData.totalFiles || 0);
+    }
+
+    // 获取用户自己的文件列表
+    const { error: fErr, data: files } = await request<any[]>({ url: '/documents/uploads' });
+    if (!fErr && files) {
+      stats.value[1].value = formatNumber(files.length);
+      stats.value[1].change = String(files.length);
+
+      // 今日上传
+      const now = new Date();
+      const todayFiles = files.filter((f: any) => {
+        if (!f.createdAt) return false;
+        return new Date(f.createdAt).toDateString() === now.toDateString();
+      });
+      stats.value[3].value = formatNumber(todayFiles.length);
+      stats.value[3].change = `+${todayFiles.length}`;
+    }
+
+    // 获取会话列表
+    try {
+      const { error: cErr, data: sessions } = await request<any[]>({ url: '/users/conversation/sessions' });
+      if (!cErr && sessions) {
+        const totalMessages = sessions.reduce((sum: number, s: any) => sum + (s.messageCount || 0), 0);
+        stats.value[2].value = formatNumber(totalMessages);
+        stats.value[2].change = String(totalMessages);
+      }
+    } catch {
+      if (sData) {
+        stats.value[2].value = formatNumber(sData.totalConversations || 0);
+        stats.value[2].change = String(sData.totalConversations || 0);
+      }
+    }
+  } catch (e) {
+    console.error('[StatCards] 获取统计数据失败:', e);
+  } finally {
+    loading.value = false;
+  }
+}
 
 // 切换折叠状态
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value;
 };
+
+onMounted(() => {
+  fetchStats();
+});
 
 const getColorClasses = (color: string) => {
   const colorMap: Record<string, { icon: string; bg: string; text: string }> = {
@@ -103,7 +171,6 @@ const getColorClasses = (color: string) => {
                   'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
                   getColorClasses(stat.color).bg
                 ]">
-                  <!-- 使用静态图标组件 -->
                   <icon-carbon:data-base v-if="stat.icon === 'data-base'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                   <icon-carbon:document v-else-if="stat.icon === 'document'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                   <icon-carbon:chat v-else-if="stat.icon === 'chat'" :class="['text-xl', getColorClasses(stat.color).icon]" />
@@ -116,7 +183,7 @@ const getColorClasses = (color: string) => {
           </div>
           <div class="flex items-center gap-1 text-xs">
             <span :class="stat.trend === 'up' ? 'text-green-600 dark:text-green-400' : 'text-cyan-600 dark:text-cyan-400'">
-              较昨日 {{ stat.change }}
+              总计 {{ stat.change }}
             </span>
             <icon-carbon:arrow-up 
               v-if="stat.trend === 'up'"

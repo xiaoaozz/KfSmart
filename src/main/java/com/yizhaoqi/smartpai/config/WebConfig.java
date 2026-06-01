@@ -26,13 +26,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 配置静态资源处理
+        // 配置静态资源处理（仅匹配静态资源路径，不拦截API请求）
         registry.addResourceHandler("/static/**")
                 .addResourceLocations("classpath:/static/");
-        
-        // 添加根路径的静态资源处理
-        registry.addResourceHandler("/**")
-                .addResourceLocations("classpath:/static/", "classpath:/public/", "classpath:/resources/", "classpath:/META-INF/resources/");
+        // 注意：不添加 /** catch-all handler，避免将未匹配的API请求误当静态资源处理
+        // Spring Boot 默认的 ResourceHttpRequestHandler 会自动处理静态资源
     }
 
     @Override

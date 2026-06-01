@@ -4,10 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yizhaoqi.smartpai.exception.CustomException;
+import com.yizhaoqi.smartpai.model.FileUpload;
 import com.yizhaoqi.smartpai.model.OrganizationTag;
 import com.yizhaoqi.smartpai.model.User;
+import com.yizhaoqi.smartpai.repository.FileUploadRepository;
 import com.yizhaoqi.smartpai.repository.OrganizationTagRepository;
 import com.yizhaoqi.smartpai.repository.UserRepository;
+import com.yizhaoqi.smartpai.service.DocumentService;
 import com.yizhaoqi.smartpai.service.UserService;
 import com.yizhaoqi.smartpai.utils.JwtUtils;
 import com.yizhaoqi.smartpai.utils.LogUtils;
@@ -49,6 +52,12 @@ public class AdminController {
 
     @Autowired
     private MinioMigrationUtil migrationUtil;
+
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
+
+    @Autowired
+    private DocumentService documentService;
 
     /**
      * 获取所有用户列表
@@ -152,11 +161,79 @@ public class AdminController {
             status.put("total_documents", 250);
             status.put("total_conversations", 1200);
             
-            return ResponseEntity.ok(Map.of("data", status));
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取系统状态成功", "data", status));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "获取系统状态失败", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "获取系统状态失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取系统统计数据（从数据库实时查询）
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<?> getSystemStats(@RequestHeader("Authorization") String token) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_SYSTEM_STATS");
+        String adminUsername = null;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+            
+            // 从数据库查询真实数据
+            long totalUsers = userRepository.count();
+            long totalFiles = fileUploadRepository.count();
+            long totalDocuments = fileUploadRepository.count(); // 文件即文档
+            long totalConversations = 0L;
+            
+            // 统计对话数（从 Redis 中统计）
+            try {
+                Set<String> conversationKeys = redisTemplate.keys("conversation:*");
+                if (conversationKeys != null) {
+                    totalConversations = conversationKeys.size();
+                }
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "统计对话数失败", e);
+            }
+            
+            // 统计今日新增数据
+            java.time.LocalDateTime todayStart = java.time.LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+            long todayUploads = 0;
+            long todayConversations = 0;
+            
+            try {
+                // 统计今日上传的文件
+                List<FileUpload> recentFiles = fileUploadRepository.findAll();
+                todayUploads = recentFiles.stream()
+                    .filter(f -> f.getCreatedAt() != null && f.getCreatedAt().isAfter(todayStart))
+                    .count();
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "统计今日上传失败", e);
+            }
+            
+            // 统计组织标签数量
+            long totalOrgTags = organizationTagRepository.count();
+            
+            Map<String, Object> stats = new LinkedHashMap<>();
+            stats.put("totalUsers", totalUsers);
+            stats.put("totalFiles", totalFiles);
+            stats.put("totalDocuments", totalDocuments);
+            stats.put("totalConversations", totalConversations);
+            stats.put("totalOrgTags", totalOrgTags);
+            stats.put("todayUploads", todayUploads);
+            stats.put("todayConversations", todayConversations);
+            
+            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATS", adminUsername, 
+                "获取系统统计成功: users=%d, files=%d, conversations=%d, orgTags=%d", 
+                totalUsers, totalFiles, totalConversations, totalOrgTags);
+            monitor.end("获取系统统计成功");
+            
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取系统统计成功", "data", stats));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "获取系统统计失败", e);
+            monitor.end("获取系统统计失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取系统统计失败: " + e.getMessage()));
         }
     }
 
@@ -193,7 +270,7 @@ public class AdminController {
                 )
             );
             
-            return ResponseEntity.ok(Map.of("data", activities));
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取用户活动成功", "data", activities));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_USER_ACTIVITIES", adminUsername, "获取用户活动失败", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
