@@ -45,6 +45,7 @@ function navigateTo(path: string) {
 }
 
 function handleLogout() {
+  window.$message?.success('已退出登录', { duration: 2000 });
   authStore.resetStore();
   toLogin();
 }
