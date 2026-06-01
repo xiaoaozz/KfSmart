@@ -28,11 +28,6 @@ const navMenus = computed(() => [
     icon: 'i-carbon:document-multiple'
   },
   {
-    name: '历史记录',
-    path: '/chat-history',
-    icon: 'i-carbon:time'
-  },
-  {
     name: '用户管理',
     path: '/user',
     icon: 'i-carbon:user-multiple'

@@ -164,7 +164,6 @@ const local: App.I18n.Schema = {
     'iframe-page': '外链页面',
     'system-overview': '系统总览',
     chat: '聊天助手',
-    'chat-history': '聊天记录',
     'knowledge-base': '知识库',
     'mcp-tools': 'MCP工具',
     'org-tag': '组织标签',

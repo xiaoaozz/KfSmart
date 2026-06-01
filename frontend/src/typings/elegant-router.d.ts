@@ -21,7 +21,6 @@ declare module "@elegant-router/types" {
     "404": "/404";
     "500": "/500";
     "chat": "/chat";
-    "chat-history": "/chat-history";
     "iframe-page": "/iframe-page/:url";
     "knowledge-base": "/knowledge-base";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
@@ -65,7 +64,6 @@ declare module "@elegant-router/types" {
     | "404"
     | "500"
     | "chat"
-    | "chat-history"
     | "iframe-page"
     | "knowledge-base"
     | "login"
@@ -95,7 +93,6 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
-    | "chat-history"
     | "chat"
     | "knowledge-base"
     | "mcp-tools"

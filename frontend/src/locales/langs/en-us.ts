@@ -164,7 +164,6 @@ const local: App.I18n.Schema = {
     'iframe-page': 'Iframe',
     'system-overview': 'System Overview',
     chat: 'Chat Assistant',
-    'chat-history': 'Chat History',
     'knowledge-base': 'Knowledge Base',
     'mcp-tools': 'MCP Tools',
     'org-tag': 'Organization Tag',
