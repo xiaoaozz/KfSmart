@@ -8,7 +8,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @Repository
 public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
@@ -20,12 +19,10 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
 
     Optional<FileUpload> findByFileNameAndIsPublicTrue(String fileName);
     
-    long countByFileMd5(String fileMd5);
-    
+
     void deleteByFileMd5(String fileMd5);
     
-    void deleteByFileMd5AndUserId(String fileMd5, String userId);
-    
+
     /**
      * 查询用户自己的文件和公开文件
      */
@@ -44,16 +41,7 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
     @Query("SELECT f FROM FileUpload f WHERE f.userId = :userId OR f.isPublic = true OR (f.orgTag IN :orgTagList AND f.isPublic = false)")
     List<FileUpload> findAccessibleFilesWithTags(@Param("userId") String userId, @Param("orgTagList") List<String> orgTagList);
     
-    /**
-     * 查询用户可访问的所有文件（原始方法，保留向后兼容性）
-     * 
-     * @param userId 用户ID
-     * @param orgTagList 用户所属的组织标签列表（逗号分隔）
-     * @return 用户可访问的文件列表
-     */
-    @Query("SELECT f FROM FileUpload f WHERE f.userId = :userId OR f.isPublic = true OR (f.orgTag IN :orgTagList AND f.isPublic = false)")
-    List<FileUpload> findAccessibleFiles(@Param("userId") String userId, @Param("orgTagList") List<String> orgTagList);
-    
+
     /**
      * 查询用户自己上传的所有文件
      * 
@@ -63,4 +51,10 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
     List<FileUpload> findByUserId(String userId);
 
     List<FileUpload> findByFileMd5In(List<String> md5List);
+
+    /**
+     * 查找指定组织标签的所有文件
+     * 用于删除组织标签时重新分配文档归属
+     */
+    List<FileUpload> findByOrgTag(String orgTag);
 }

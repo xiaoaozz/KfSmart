@@ -1,5 +1,6 @@
 package com.yizhaoqi.smartpai.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -21,12 +22,13 @@ public class OrganizationTag {
     @Column(columnDefinition = "TEXT")
     private String description; // 描述
 
-    @Column(name = "parent_tag", length = 255)
+    @Column(name = "parent_tag")
     private String parentTag; // 父标签ID
 
     @ManyToOne
     @JoinColumn(name = "created_by", nullable = false)
-    private User createdBy; // 创建者ID
+    @JsonIgnoreProperties({"password", "orgTags", "primaryOrg", "createdAt", "updatedAt", "role"})
+    private User createdBy; // 创建者
 
     @CreationTimestamp
     private LocalDateTime createdAt; // 创建时间

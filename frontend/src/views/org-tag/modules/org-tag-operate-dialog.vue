@@ -9,7 +9,6 @@ defineOptions({
 const props = defineProps<{
   operateType: NaiveUI.TableOperateType;
   rowData: Api.OrgTag.Item;
-  data: Api.OrgTag.Item[];
 }>();
 
 const emit = defineEmits<{ submitted: [] }>();
@@ -69,9 +68,13 @@ async function handleSubmit() {
   await validate();
   loading.value = true;
   let res: FlatResponseData;
-  if (props.operateType === 'edit')
-    res = await request({ url: `/admin/org-tags/${model.value.tagId}`, method: 'PUT', data: model.value });
-  else res = await request({ url: '/admin/org-tags', method: 'POST', data: model.value });
+  if (props.operateType === 'edit') {
+    // For edit, tagId is in the URL path, exclude it from body
+    const { tagId, ...updateData } = model.value;
+    res = await request({ url: `/admin/org-tags/${tagId}`, method: 'PUT', data: updateData });
+  } else {
+    res = await request({ url: '/admin/org-tags', method: 'POST', data: model.value });
+  }
   if (!res.error) {
     window.$message?.success('操作成功');
     close();
@@ -106,7 +109,7 @@ watch(visible, () => {
         <NInput v-model:value="model.name" placeholder="请输入标签名称" maxlength="60" />
       </NFormItem>
       <NFormItem label="所属标签" path="parentTag">
-        <OrgTagCascader v-model:value="model.parentTag" :options="data" />
+        <OrgTagCascader v-model:value="model.parentTag" />
       </NFormItem>
       <NFormItem label="标签描述" path="description">
         <NInput

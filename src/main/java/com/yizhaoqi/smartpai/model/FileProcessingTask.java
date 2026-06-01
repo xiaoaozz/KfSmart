@@ -17,16 +17,4 @@ public class FileProcessingTask {
     private String userId;   // 上传用户ID
     private String orgTag;   // 文件所属组织标签
     private boolean isPublic; // 文件是否公开
-    
-    /**
-     * 向后兼容的构造函数
-     */
-    public FileProcessingTask(String fileMd5, String filePath, String fileName) {
-        this.fileMd5 = fileMd5;
-        this.filePath = filePath;
-        this.fileName = fileName;
-        this.userId = null;
-        this.orgTag = "DEFAULT";
-        this.isPublic = false;
-    }
 }

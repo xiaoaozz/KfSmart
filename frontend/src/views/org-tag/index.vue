@@ -101,7 +101,6 @@ async function handleDelete(tagId: string) {
         v-model:visible="dialogVisible"
         :operate-type="operateType"
         :row-data="editingData!"
-        :data="data"
         @submitted="getData"
       />
     </NCard>

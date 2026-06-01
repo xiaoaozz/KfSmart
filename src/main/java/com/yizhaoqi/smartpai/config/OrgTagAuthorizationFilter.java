@@ -7,9 +7,11 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -26,7 +28,6 @@ import java.util.stream.Collectors;
  * 1. 用户私人空间：仅资源创建者可访问
  * 2. 组织资源：组织成员可访问
  * 3. 公开资源：所有用户可访问
- * 
  * 实现说明：
  * 本过滤器主要解决两类请求的授权需求：
  * 1. 基于资源ID的权限验证：对特定资源的访问需验证用户是否有权限
@@ -39,7 +40,7 @@ import java.util.stream.Collectors;
 public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(OrgTagAuthorizationFilter.class);
-    private static final String DEFAULT_ORG_TAG = "DEFAULT"; // 默认组织标签
+    private static final String DEFAULT_ORG_TAG = "default"; // 默认组织标签
     private static final String PRIVATE_TAG_PREFIX = "PRIVATE_"; // 私人组织标签前缀
 
     @Autowired
@@ -49,7 +50,7 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
     private FileUploadRepository fileUploadRepository;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
             throws ServletException, IOException {
         try {
             String path = request.getRequestURI();
@@ -278,14 +279,7 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
         return null;
     }
     
-    /**
-     * 检查资源是否为公开资源
-     */
-    private boolean isPublicResource(String resourceId) {
-        ResourceInfo resourceInfo = getResourceInfo(resourceId);
-        return resourceInfo != null && resourceInfo.isPublic();
-    }
-    
+
     /**
      * 从请求头中提取 JWT Token
      */
@@ -312,27 +306,16 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
     /**
      * 资源信息类，用于封装资源的权限相关信息
      */
+    @Getter
     private static class ResourceInfo {
         private final String owner;
         private final String orgTag;
         private final boolean isPublic;
-        
+
         public ResourceInfo(String owner, String orgTag, boolean isPublic) {
             this.owner = owner;
             this.orgTag = orgTag;
             this.isPublic = isPublic;
-        }
-        
-        public String getOwner() {
-            return owner;
-        }
-        
-        public String getOrgTag() {
-            return orgTag;
-        }
-        
-        public boolean isPublic() {
-            return isPublic;
         }
     }
 } 

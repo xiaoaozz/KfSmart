@@ -14,4 +14,4 @@ export const enableStatusOptions = [
 
 export const chunkSize = 5 * 1024 * 1024;
 
-export const uploadAccept = '.pdf,.doc,.docx,.txt';
+export const uploadAccept = '.pdf,.doc,.docx,.txt,.rtf,.md,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.html,.htm,.xml,.json,.csv,.epub,.pages,.numbers,.keynote';

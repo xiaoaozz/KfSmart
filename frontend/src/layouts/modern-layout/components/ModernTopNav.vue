@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup lang="tsx">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useThemeStore } from '@/store/modules/theme';
@@ -56,6 +56,43 @@ const performanceMetrics = computed(() => ({
   qps: '2.4k',
   successRate: '99.7%'
 }));
+
+// 用户下拉菜单
+const userMenuOptions = [
+  {
+    label: '个人中心',
+    key: 'profile',
+    icon: () => <div class="i-carbon:user" />
+  },
+  {
+    label: '设置',
+    key: 'settings',
+    icon: () => <div class="i-carbon:settings" />
+  },
+  {
+    type: 'divider' as const,
+    key: 'd1'
+  },
+  {
+    label: '退出登录',
+    key: 'logout',
+    icon: () => <div class="i-carbon:logout" />
+  }
+];
+
+function handleUserMenuSelect(key: string) {
+  switch (key) {
+    case 'profile':
+      router.push('/personal-center');
+      break;
+    case 'settings':
+      window.$message?.info('设置功能开发中...');
+      break;
+    case 'logout':
+      handleLogout();
+      break;
+  }
+}
 </script>
 
 <template>
@@ -131,46 +168,7 @@ const performanceMetrics = computed(() => ({
   </header>
 </template>
 
-<script setup lang="ts">
-import { NDropdown } from 'naive-ui';
 
-// 用户下拉菜单
-const userMenuOptions = [
-  {
-    label: '个人中心',
-    key: 'profile',
-    icon: () => <div class="i-carbon:user" />
-  },
-  {
-    label: '设置',
-    key: 'settings',
-    icon: () => <div class="i-carbon:settings" />
-  },
-  {
-    type: 'divider',
-    key: 'd1'
-  },
-  {
-    label: '退出登录',
-    key: 'logout',
-    icon: () => <div class="i-carbon:logout" />
-  }
-];
-
-function handleUserMenuSelect(key: string) {
-  switch (key) {
-    case 'profile':
-      router.push('/personal-center');
-      break;
-    case 'settings':
-      window.$message?.info('设置功能开发中...');
-      break;
-    case 'logout':
-      handleLogout();
-      break;
-  }
-}
-</script>
 
 <style scoped lang="scss">
 .modern-top-nav {
