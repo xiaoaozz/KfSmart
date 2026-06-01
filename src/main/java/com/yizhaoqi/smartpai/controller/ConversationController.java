@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 @RestController
 @RequestMapping("/api/v1/users/conversation")
@@ -205,6 +206,93 @@ public class ConversationController {
         return ResponseEntity.ok().body(response);
     }
     
+    /**
+     * 查询当前用户的会话列表（摘要信息）
+     */
+    @GetMapping("/sessions")
+    public ResponseEntity<?> getSessions(
+            @RequestHeader("Authorization") String token) {
+
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("code", 401, "message", "无效的token"));
+            }
+
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+
+            List<String> possibleUserIds = new ArrayList<>();
+            possibleUserIds.add(user.getId().toString());
+            possibleUserIds.add(username);
+
+            List<Map<String, Object>> sessions = new ArrayList<>();
+
+            for (String uId : possibleUserIds) {
+                String key = "user:" + uId + ":current_conversation";
+                String conversationId = redisTemplate.opsForValue().get(key);
+                if (conversationId != null) {
+                    // 从会话历史中提取摘要信息
+                    String convKey = "conversation:" + conversationId;
+                    String json = redisTemplate.opsForValue().get(convKey);
+
+                    Map<String, Object> session = new LinkedHashMap<>();
+                    session.put("id", conversationId);
+                    session.put("title", "我的会话");
+                    session.put("lastMessage", "");
+                    session.put("time", "");
+                    session.put("messageCount", 0);
+
+                    if (json != null) {
+                        try {
+                            List<Map<String, String>> history = objectMapper.readValue(json,
+                                    new TypeReference<List<Map<String, String>>>() {});
+                            session.put("messageCount", history.size());
+
+                            if (!history.isEmpty()) {
+                                // 使用第一条用户消息作为会话标题
+                                for (Map<String, String> msg : history) {
+                                    if ("user".equals(msg.get("role"))) {
+                                        String content = msg.getOrDefault("content", "");
+                                        session.put("title", content.length() > 30 ? content.substring(0, 30) + "..." : content);
+                                        break;
+                                    }
+                                }
+                                // 使用最后一条消息的内容作为预览
+                                Map<String, String> lastMsg = history.get(history.size() - 1);
+                                String lastContent = lastMsg.getOrDefault("content", "");
+                                session.put("lastMessage", lastContent.length() > 50 ? lastContent.substring(0, 50) + "..." : lastContent);
+                                session.put("lastRole", lastMsg.getOrDefault("role", ""));
+                                // 获取最后一条消息的时间戳
+                                String ts = lastMsg.getOrDefault("timestamp", "");
+                                session.put("time", ts);
+                            }
+                        } catch (JsonProcessingException e) {
+                            // ignore parse error, return basic info
+                        }
+                    }
+                    sessions.add(session);
+                    break; // 找到后停止搜索
+                }
+            }
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "获取会话列表成功");
+            response.put("data", sessions);
+            return ResponseEntity.ok().body(response);
+
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "服务器内部错误: " + e.getMessage()));
+        }
+    }
+
     /**
      * 解析日期时间字符串，支持多种格式
      */

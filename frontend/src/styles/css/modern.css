@@ -1,0 +1,789 @@
+/* ==========================================================================
+   PaiSmart 现代化设计系统 - CSS变量定义
+   基于 LinkAI Agent 平台风格
+   ========================================================================== */
+
+:root {
+  /* ===== 主色调系统 ===== */
+  --color-primary-50: 245, 247, 255;
+  --color-primary-100: 235, 239, 255;
+  --color-primary-200: 212, 220, 255;
+  --color-primary-300: 168, 185, 255;
+  --color-primary-400: 122, 145, 255;
+  --color-primary-500: 102, 126, 234; /* 主紫色 */
+  --color-primary-600: 85, 102, 214;
+  --color-primary-700: 70, 84, 194;
+  --color-primary-800: 58, 69, 160;
+  --color-primary-900: 47, 55, 127;
+
+  --color-secondary-50: 240, 249, 255;
+  --color-secondary-100: 224, 242, 254;
+  --color-secondary-200: 185, 230, 254;
+  --color-secondary-300: 125, 211, 253;
+  --color-secondary-400: 79, 172, 254; /* 浅蓝 */
+  --color-secondary-500: 0, 242, 254;  /* 青色 */
+  --color-secondary-600: 0, 212, 228;
+  --color-secondary-700: 0, 179, 199;
+  --color-secondary-800: 0, 144, 163;
+  --color-secondary-900: 0, 113, 127;
+
+  /* ===== 渐变色定义 ===== */
+  --gradient-primary: linear-gradient(135deg, rgb(102, 126, 234) 0%, rgb(118, 75, 162) 100%);
+  --gradient-primary-soft: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.05) 100%);
+  --gradient-secondary: linear-gradient(90deg, rgb(79, 172, 254) 0%, rgb(0, 242, 254) 100%);
+  --gradient-success: linear-gradient(135deg, #52c41a 0%, #7cb305 100%);
+  --gradient-warning: linear-gradient(135deg, #faad14 0%, #fa8c16 100%);
+  --gradient-error: linear-gradient(135deg, #f5222d 0%, #cf1322 100%);
+  --gradient-info: linear-gradient(135deg, #2080f0 0%, #1890ff 100%);
+  
+  /* 背景渐变 */
+  --gradient-bg-light: linear-gradient(180deg, #f7f9fc 0%, #eef2f7 100%);
+  --gradient-bg-dark: linear-gradient(180deg, #1a202c 0%, #2d3748 100%);
+  --gradient-card: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+  --gradient-card-dark: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+
+  /* ===== 动画时长 ===== */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 350ms;
+  --duration-slower: 500ms;
+
+  /* ===== 缓动函数 ===== */
+  --ease-out-cubic: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ===== 圆角大小 ===== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 32px;
+  --radius-full: 9999px;
+
+  /* ===== 阴影系统 ===== */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.2);
+  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.25);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-card-active: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-glow: 0 0 20px rgba(102, 126, 234, 0.4);
+  --shadow-glow-strong: 0 0 30px rgba(102, 126, 234, 0.6);
+  --shadow-popup: 0 6px 16px -8px rgba(0, 0, 0, 0.08), 0 9px 28px 0 rgba(0, 0, 0, 0.05), 0 12px 48px 16px rgba(0, 0, 0, 0.03);
+
+  /* ===== 间距系统 ===== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+  --spacing-4xl: 96px;
+
+  /* ===== 字体大小 ===== */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 36px;
+  --text-5xl: 48px;
+
+  /* ===== Z-index 层级 ===== */
+  --z-base: 0;
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-fixed: 1200;
+  --z-modal-backdrop: 1300;
+  --z-modal: 1400;
+  --z-popover: 1500;
+  --z-tooltip: 1600;
+  --z-notification: 1700;
+  --z-max: 9999;
+}
+
+/* ==========================================================================
+   通用动画定义
+   ========================================================================== */
+
+/* 淡入淡出 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 滑入动画 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 缩放动画 */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* 旋转动画 */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 弹跳动画 */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 摇摆动画 */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-5px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+/* 波纹动画 */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* 骨架屏加载动画 */
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 渐变移动动画 */
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* ==========================================================================
+   通用工具类
+   ========================================================================== */
+
+/* 卡片样式 */
+.modern-card {
+  background: var(--gradient-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all var(--duration-base) var(--ease-out-cubic);
+}
+
+.modern-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.modern-card-flat {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--duration-base) var(--ease-out-cubic);
+}
+
+/* 毛玻璃效果 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.glass-card-dark {
+  background: rgba(45, 55, 72, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* 渐变文字 */
+.text-gradient-primary {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 按钮基础样式 */
+.btn-modern {
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  transition: all var(--duration-base) var(--ease-smooth);
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+.btn-modern:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.btn-modern:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.btn-secondary {
+  background: var(--gradient-secondary);
+  color: white;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 2px solid rgb(var(--color-primary-500));
+  color: rgb(var(--color-primary-500));
+}
+
+.btn-ghost {
+  background: transparent;
+  color: rgb(var(--color-primary-500));
+}
+
+.btn-ghost:hover {
+  background: rgba(var(--color-primary-500), 0.1);
+}
+
+/* 输入框基础样式 */
+.input-modern {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: var(--text-base);
+  transition: all var(--duration-base) var(--ease-smooth);
+  outline: none;
+}
+
+.input-modern:focus {
+  border-color: rgb(var(--color-primary-500));
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-500), 0.1);
+}
+
+/* 骨架屏 */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* 加载点 */
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(var(--color-primary-500));
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+/* ==========================================================================
+   响应式布局
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  :root {
+    --text-xs: 10px;
+    --text-sm: 12px;
+    --text-base: 14px;
+    --text-lg: 16px;
+    --text-xl: 18px;
+    --text-2xl: 20px;
+    --text-3xl: 24px;
+    --text-4xl: 28px;
+  }
+}
+
+/* ==========================================================================
+   暗色模式
+   ========================================================================== */
+
+.dark {
+  --gradient-card: var(--gradient-card-dark);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.dark .modern-card {
+  background: var(--gradient-card-dark);
+}
+
+.dark .input-modern {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.dark .input-modern:focus {
+  border-color: rgb(var(--color-primary-400));
+  box-shadow: 0 0 0 3px rgba(var(--color-primary-400), 0.2);
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 波纹动画 */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* 闪烁动画 (光标) */
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+/* 打字机效果 */
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+/* 渐变动画 */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 发光动画 */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+  }
+}
+
+/* ==========================================================================
+   通用动画类
+   ========================================================================== */
+
+.animate-fade-in {
+  animation: fadeIn var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-fade-out {
+  animation: fadeOut var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-slide-up {
+  animation: slideUp var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-slide-down {
+  animation: slideDown var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-slide-left {
+  animation: slideLeft var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-slide-right {
+  animation: slideRight var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-scale-out {
+  animation: scaleOut var(--duration-base) var(--ease-out-cubic);
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.animate-bounce {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   通用效果类
+   ========================================================================== */
+
+/* 悬浮效果 */
+.hover-lift {
+  transition:
+    transform var(--duration-base) var(--ease-out-cubic),
+    box-shadow var(--duration-base) var(--ease-out-cubic);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.hover-lift:active {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* 缩放效果 */
+.hover-scale {
+  transition: transform var(--duration-base) var(--ease-out-cubic);
+}
+
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+.hover-scale:active {
+  transform: scale(0.98);
+}
+
+/* 发光效果 */
+.hover-glow {
+  transition: box-shadow var(--duration-base) var(--ease-out-cubic);
+}
+
+.hover-glow:hover {
+  box-shadow: var(--shadow-glow);
+}
+
+/* 旋转效果 */
+.hover-rotate {
+  transition: transform var(--duration-base) var(--ease-out-cubic);
+}
+
+.hover-rotate:hover {
+  transform: rotate(5deg);
+}
+
+/* 毛玻璃效果 */
+.glass-effect {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-effect-dark {
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 渐变文字 */
+.gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-secondary {
+  background: var(--gradient-secondary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 渐变边框 */
+.gradient-border {
+  position: relative;
+  background: white;
+  border-radius: var(--radius-lg);
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: var(--gradient-primary);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* 按钮波纹效果 */
+.ripple-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width var(--duration-slow) ease-out, height var(--duration-slow) ease-out;
+}
+
+.ripple-effect:active::after {
+  width: 200%;
+  height: 200%;
+}
+
+/* 卡片悬浮动画 */
+.card-hover {
+  transition:
+    transform var(--duration-base) var(--ease-out-cubic),
+    box-shadow var(--duration-base) var(--ease-out-cubic);
+  cursor: pointer;
+}
+
+.card-hover:hover {
+  transform: translateY(-8px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* 输入框焦点效果 */
+.input-focus {
+  transition: all var(--duration-fast) ease-in-out;
+}
+
+.input-focus:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* 加载骨架屏 */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 滚动条样式 */
+.scrollbar-modern::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-modern::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-full);
+  transition: background var(--duration-fast);
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* 暗色模式滚动条 */
+.dark .scrollbar-modern::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark .scrollbar-modern::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

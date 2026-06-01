@@ -108,9 +108,23 @@ function getFlatRequest(options: Partial<RequestOption<App.Service.Response>> = 
         if (error.code === 'ERR_CANCELED') return;
 
         // handle 403 Forbidden error - user needs to login
+        // IMPROVED: Only logout for auth-related endpoints, not all 403 errors
         if (error.response?.status === 403) {
-          const authStore = useAuthStore();
-          authStore.resetStore();
+          // List of endpoints where 403 definitely means authentication failure
+          const authEndpoints = ['/users/me', '/users/login', '/users/logout'];
+          const requestUrl = error.config?.url || '';
+          
+          // Only reset store if it's an auth-related endpoint
+          const isAuthEndpoint = authEndpoints.some(endpoint => requestUrl.includes(endpoint));
+          
+          if (isAuthEndpoint) {
+            const authStore = useAuthStore();
+            authStore.resetStore();
+            return;
+          }
+          
+          // For other 403 errors, just show error message without logging out
+          showErrorMsg(request.state, error.response?.data?.message || 'Access forbidden');
           return;
         }
 

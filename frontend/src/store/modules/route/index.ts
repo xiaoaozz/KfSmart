@@ -176,7 +176,9 @@ export const useRouteStore = defineStore(SetupStoreId.Route, () => {
 
   /** Init auth route */
   async function initAuthRoute() {
-    // check if user info is initialized
+    // CRITICAL FIX: Only fetch user info if it hasn't been loaded yet
+    // This prevents redundant /users/me calls that could trigger logout on error
+    // The userInfo.id check ensures we don't reset the store unnecessarily
     if (!authStore.userInfo.id) {
       await authStore.initUserInfo();
     }
@@ -318,7 +320,10 @@ export const useRouteStore = defineStore(SetupStoreId.Route, () => {
   }
 
   async function onRouteSwitchWhenLoggedIn() {
-    await authStore.initUserInfo();
+    // Only fetch user info if it hasn't been loaded yet (userInfo.id === 0 means not loaded)
+    if (!authStore.userInfo.id) {
+      await authStore.initUserInfo();
+    }
   }
 
   async function onRouteSwitchWhenNotLoggedIn() {

@@ -16,18 +16,18 @@ import SearchResults from './modules/search-results.vue';
     <!-- 主体内容区 -->
     <div class="flex-1 flex overflow-hidden">
       <!-- 左侧：会话列表 -->
-      <div class="w-320px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div class="w-320px flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden h-full">
         <SessionList />
       </div>
 
       <!-- 中间：对话区域 -->
-      <div class="flex-1 flex flex-col">
+      <div class="flex-1 flex flex-col overflow-hidden min-w-0">
         <ChatList />
         <InputBox />
       </div>
 
       <!-- 右侧：检索结果面板 -->
-      <div class="w-360px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div class="w-360px flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden h-full">
         <SearchResults />
       </div>
     </div>

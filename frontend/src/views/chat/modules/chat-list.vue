@@ -55,7 +55,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="chat-list-container flex-1 flex flex-col bg-white dark:bg-gray-800">
+  <div class="chat-list-container flex-1 flex flex-col bg-white dark:bg-gray-800 min-h-0 overflow-hidden">
     <!-- 顶部信息栏 -->
     <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
@@ -87,7 +87,7 @@ onMounted(() => {
 
     <!-- 消息列表 -->
     <Suspense>
-      <NScrollbar ref="scrollbarRef" class="flex-1">
+      <NScrollbar ref="scrollbarRef" class="flex-1 h-0">
         <div class="px-6 py-4">
           <NSpin :show="loading">
             <VueMarkdownItProvider>
@@ -102,6 +102,11 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .chat-list-container {
+  :deep(.n-scrollbar) {
+    flex: 1;
+    min-height: 0;
+  }
+
   :deep(.n-scrollbar-content) {
     display: flex;
     flex-direction: column;

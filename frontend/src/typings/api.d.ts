@@ -188,6 +188,15 @@ declare namespace Api {
       timestamp?: string;
     }
 
+    interface Session {
+      id: string;
+      title: string;
+      lastMessage: string;
+      lastRole: string;
+      time: string;
+      messageCount: number;
+    }
+
     interface Token {
       cmdToken: string;
     }
