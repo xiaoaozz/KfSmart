@@ -1,3 +1,5 @@
+import '../public/js/particles.min.js'
+
 // 等待页面加载完成后初始化粒子效果
 window.addEventListener('load', function () {
   console.log('Window loaded, checking particles...')

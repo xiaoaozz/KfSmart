@@ -1,6 +1,6 @@
 const local: App.I18n.Schema = {
   system: {
-    title: 'PaiSmart',
+    title: 'KnowFlow',
     updateTitle: 'System Version Update Notification',
     updateContent: 'A new version of the system has been detected. Do you want to refresh the page immediately?',
     updateConfirm: 'Refresh immediately',
@@ -162,9 +162,11 @@ const local: App.I18n.Schema = {
     404: 'Page Not Found',
     500: 'Server Error',
     'iframe-page': 'Iframe',
+    'system-overview': 'System Overview',
     chat: 'Chat Assistant',
     'chat-history': 'Chat History',
     'knowledge-base': 'Knowledge Base',
+    'mcp-tools': 'MCP Tools',
     'org-tag': 'Organization Tag',
     user: 'User Management',
     'personal-center': 'Personal Center'

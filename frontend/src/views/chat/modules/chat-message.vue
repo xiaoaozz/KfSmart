@@ -209,58 +209,266 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
 </script>
 
 <template>
-  <div class="mb-8 flex-col gap-2">
-    <div v-if="msg.role === 'user'" class="flex items-center gap-4">
-      <NAvatar class="bg-success">
-        <SvgIcon icon="ph:user-circle" class="text-icon-large color-white" />
-      </NAvatar>
-      <div class="flex-col gap-1">
-        <NText class="text-4 font-bold">{{ authStore.userInfo.username }}</NText>
-        <NText class="text-3 color-gray-500">{{ formatDate(msg.timestamp) }}</NText>
+  <div class="chat-message mb-4">
+    <!-- 用户消息（右侧） -->
+    <div v-if="msg.role === 'user'" class="flex justify-end">
+      <div class="flex items-start gap-3 max-w-[70%]">
+        <div class="flex-1 min-w-0 flex flex-col items-end">
+          <div class="flex items-center gap-2 mb-1.5 px-1">
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(msg.timestamp) }}</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white">{{ authStore.userInfo.username }}</span>
+          </div>
+          <div class="user-content bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-sm">
+            <div class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ content }}</div>
+          </div>
+        </div>
+        <NAvatar size="medium" round class="flex-shrink-0 bg-gradient-to-br from-green-400 to-green-600 mt-6">
+          <icon-ph:user-circle class="text-lg text-white" />
+        </NAvatar>
       </div>
     </div>
-    <div v-else class="flex items-center gap-4">
-      <NAvatar class="bg-primary">
-        <SystemLogo class="text-6 text-white" />
-      </NAvatar>
-      <div class="flex-col gap-1">
-        <NText class="text-4 font-bold">派聪明</NText>
-        <NText class="text-3 color-gray-500">{{ formatDate(msg.timestamp) }}</NText>
+
+    <!-- 助手消息（左侧） -->
+    <div v-else class="flex justify-start">
+      <div class="flex items-start gap-3 max-w-[80%]">
+        <NAvatar size="medium" round class="flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600 mt-6">
+          <SystemLogo class="text-base text-white" />
+        </NAvatar>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1.5 px-1">
+            <span class="text-sm font-medium text-gray-900 dark:text-white">KnowFlow</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDate(msg.timestamp) }}</span>
+          </div>
+          
+          <!-- 加载状态 -->
+          <div v-if="msg.status === 'pending'" class="assistant-content bg-gray-50 dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-700">
+            <icon-eos-icons:three-dots-loading class="text-xl text-blue-500" />
+          </div>
+          
+          <!-- 错误状态 -->
+          <div v-else-if="msg.status === 'error'" class="assistant-content bg-red-50 dark:bg-red-900/20 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-red-200 dark:border-red-800">
+            <div class="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+              <icon-carbon:warning class="text-base flex-shrink-0" />
+              <span>服务器繁忙，请稍后再试</span>
+            </div>
+          </div>
+          
+          <!-- 正常内容 -->
+          <div v-else class="assistant-content bg-gray-50 dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-700" @click="handleContentClick">
+            <div class="prose prose-sm dark:prose-invert max-w-none">
+              <VueMarkdownIt :content="content" />
+            </div>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="flex items-center gap-1 mt-1.5 ml-1">
+            <NButton text size="tiny" class="opacity-60 hover:opacity-100" @click="handleCopy(msg.content)">
+              <template #icon>
+                <icon-mynaui:copy class="text-gray-500 dark:text-gray-400" />
+              </template>
+              <span class="text-xs text-gray-500 dark:text-gray-400">复制</span>
+            </NButton>
+          </div>
+        </div>
       </div>
-    </div>
-    <NText v-if="msg.status === 'pending'">
-      <icon-eos-icons:three-dots-loading class="ml-12 mt-2 text-8" />
-    </NText>
-    <NText v-else-if="msg.status === 'error'" class="ml-12 mt-2 italic">服务器繁忙，请稍后再试</NText>
-    <div v-else-if="msg.role === 'assistant'" class="mt-2 pl-12" @click="handleContentClick">
-      <VueMarkdownIt :content="content" />
-    </div>
-    <NText v-else-if="msg.role === 'user'" class="ml-12 mt-2 text-4">{{ content }}</NText>
-    <NDivider class="ml-12 w-[calc(100%-3rem)] mb-0! mt-2!" />
-    <div class="ml-12 flex gap-4">
-      <NButton quaternary @click="handleCopy(msg.content)">
-        <template #icon>
-          <icon-mynaui:copy />
-        </template>
-      </NButton>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-:deep(.source-file-link) {
-  color: #1890ff;
-  cursor: pointer;
-  text-decoration: underline;
-  transition: color 0.2s;
+.chat-message {
+  animation: slideIn 0.2s ease-out;
 
-  &:hover {
-    color: #40a9ff;
-    text-decoration: none;
+  .user-content {
+    word-break: break-word;
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.12);
   }
 
-  &:active {
-    color: #096dd9;
+  .assistant-content {
+    word-break: break-word;
+
+    :deep(.source-file-link) {
+      color: #3b82f6;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+      transition: all 0.2s;
+      font-weight: 500;
+
+      &:hover {
+        color: #2563eb;
+        text-decoration-color: #2563eb;
+      }
+
+      &:active {
+        color: #1d4ed8;
+      }
+    }
+
+    // Markdown 样式优化
+    :deep(.prose) {
+      color: inherit;
+      font-size: 0.875rem;
+      
+      p {
+        margin: 0.75em 0;
+        line-height: 1.7;
+
+        &:first-child {
+          margin-top: 0;
+        }
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+
+      code {
+        background: rgba(0, 0, 0, 0.06);
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      }
+
+      pre {
+        background: rgba(0, 0, 0, 0.04);
+        padding: 0.875em;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 0.75em 0;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+
+        code {
+          background: none;
+          padding: 0;
+          border-radius: 0;
+          font-size: 0.8125em;
+        }
+      }
+
+      ul, ol {
+        margin: 0.75em 0;
+        padding-left: 1.5em;
+
+        li {
+          margin: 0.375em 0;
+          line-height: 1.6;
+        }
+      }
+
+      blockquote {
+        border-left: 3px solid #3b82f6;
+        padding-left: 1em;
+        margin: 0.75em 0;
+        color: #6b7280;
+        font-style: italic;
+      }
+
+      h1, h2, h3, h4, h5, h6 {
+        margin: 1em 0 0.5em;
+        font-weight: 600;
+        line-height: 1.3;
+
+        &:first-child {
+          margin-top: 0;
+        }
+      }
+
+      h1 { font-size: 1.5em; }
+      h2 { font-size: 1.3em; }
+      h3 { font-size: 1.15em; }
+      h4 { font-size: 1em; }
+
+      a {
+        color: #3b82f6;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+        
+        &:hover {
+          color: #2563eb;
+        }
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1em 0;
+        font-size: 0.875em;
+
+        th, td {
+          border: 1px solid #e5e7eb;
+          padding: 0.5em 0.75em;
+          text-align: left;
+        }
+
+        th {
+          background: rgba(0, 0, 0, 0.02);
+          font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+          background: rgba(0, 0, 0, 0.01);
+        }
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid #e5e7eb;
+        margin: 1.5em 0;
+      }
+    }
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:deep(.dark) {
+  .assistant-content {
+    .prose {
+      code {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      pre {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      table {
+        th, td {
+          border-color: #374151;
+        }
+
+        th {
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        tr:nth-child(even) {
+          background: rgba(255, 255, 255, 0.02);
+        }
+      }
+
+      blockquote {
+        color: #9ca3af;
+        border-left-color: #60a5fa;
+      }
+
+      hr {
+        border-top-color: #374151;
+      }
+    }
   }
 }
 </style>

@@ -1,4 +1,13 @@
 // initialization
+import './public/js/typed.min.js'
+import './public/js/gsap.min.js'
+import './public/js/ScrollTrigger.min.js'
+import { Dropdown, initPromptPlayground } from './scripts/components.js'
+
+const Typed = window.Typed
+const gsap = window.gsap
+const ScrollTrigger = window.ScrollTrigger
+const promptWindow = initPromptPlayground()
 
 const RESPONSIVE_WIDTH = 1024
 
@@ -142,7 +151,8 @@ function closeNavDropdown(event) {
  * Animations
  */
 
-const typed = new Typed('#prompts-sample', {
+if (Typed) {
+    new Typed('#prompts-sample', {
     strings: ["派聪明RAG知识库是什么？",
         "派聪明能让大家学到什么？",
         "派聪明如何写到简历上？",
@@ -151,33 +161,36 @@ const typed = new Typed('#prompts-sample', {
     smartBackspace: true,
     loop: true,
     backDelay: 2000,
-})
+    })
+}
 
-gsap.registerPlugin(ScrollTrigger)
-
-
-gsap.to(".reveal-up", {
-    opacity: 0,
-    y: "100%",
-})
+if (gsap && ScrollTrigger) {
+    gsap.registerPlugin(ScrollTrigger)
 
 
-// straightens the slanting image
-gsap.to("#dashboard", {
+    gsap.to(".reveal-up", {
+        opacity: 0,
+        y: "100%",
+    })
 
-    scale: 1,
-    translateY: 0,
-    // translateY: "0%",
-    rotateX: "0deg",
-    scrollTrigger: {
-        trigger: "#hero-section",
-        start: window.innerWidth > RESPONSIVE_WIDTH ? "top 95%" : "top 70%",
-        end: "bottom bottom",
-        scrub: 1,
-        // markers: true,
-    }
 
-})
+    // straightens the slanting image
+    gsap.to("#dashboard", {
+
+        scale: 1,
+        translateY: 0,
+        // translateY: "0%",
+        rotateX: "0deg",
+        scrollTrigger: {
+            trigger: "#hero-section",
+            start: window.innerWidth > RESPONSIVE_WIDTH ? "top 95%" : "top 70%",
+            end: "bottom bottom",
+            scrub: 1,
+            // markers: true,
+        }
+
+    })
+}
 
 const faqAccordion = document.querySelectorAll('.faq-accordion')
 
@@ -207,27 +220,29 @@ faqAccordion.forEach(function (btn) {
 
 // ------------- reveal section animations ---------------
 
-const sections = gsap.utils.toArray("section")
+if (gsap) {
+    const sections = gsap.utils.toArray("section")
 
-sections.forEach((sec) => {
+    sections.forEach((sec) => {
 
-    const revealUptimeline = gsap.timeline({
-        paused: true,
-        scrollTrigger: {
-            trigger: sec,
-            start: "10% 80%", // top of trigger hits the top of viewport
-            end: "20% 90%",
-            // markers: true,
-            // scrub: 1,
-        }
+        const revealUptimeline = gsap.timeline({
+            paused: true,
+            scrollTrigger: {
+                trigger: sec,
+                start: "10% 80%", // top of trigger hits the top of viewport
+                end: "20% 90%",
+                // markers: true,
+                // scrub: 1,
+            }
+        })
+
+        revealUptimeline.to(sec.querySelectorAll(".reveal-up"), {
+            opacity: 1,
+            duration: 0.8,
+            y: "0%",
+            stagger: 0.2,
+        })
+
+
     })
-
-    revealUptimeline.to(sec.querySelectorAll(".reveal-up"), {
-        opacity: 1,
-        duration: 0.8,
-        y: "0%",
-        stagger: 0.2,
-    })
-
-
-})
+}

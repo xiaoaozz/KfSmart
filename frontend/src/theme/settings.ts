@@ -22,7 +22,7 @@ export const themeSettings: App.Theme.ThemeSetting = {
     mixChildMenuWidth: 200
   },
   footer: { visible: false, fixed: false, height: 48, right: true },
-  watermark: { visible: false, text: '派聪明 PaiSmart' },
+  watermark: { visible: false, text: 'KnowFlow' },
   tokens: {
     light: {
       colors: {
@@ -33,7 +33,7 @@ export const themeSettings: App.Theme.ThemeSetting = {
       },
       boxShadow: {
         header: '0 1px 2px rgb(0, 21, 41, 0.08)',
-        sider: '2px 0 8px 0 rgb(29, 35, 41, 0.05)',
+        sider: 'none',
         tab: '0 1px 2px rgb(0, 21, 41, 0.08)'
       }
     },

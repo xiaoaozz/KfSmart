@@ -18,7 +18,7 @@ function loginOrRegister() {
   toLogin();
 }
 
-type DropdownKey = 'logout';
+type DropdownKey = 'profile' | 'settings' | 'logout';
 
 type DropdownOption =
   | {
@@ -34,9 +34,23 @@ type DropdownOption =
 const options = computed(() => {
   const opts: DropdownOption[] = [
     {
+      label: '个人中心',
+      key: 'profile',
+      icon: SvgIconVNode({ icon: 'carbon:user', fontSize: 18 })
+    },
+    {
+      label: '系统设置',
+      key: 'settings',
+      icon: SvgIconVNode({ icon: 'carbon:settings', fontSize: 18 })
+    },
+    {
+      type: 'divider',
+      key: 'd1'
+    },
+    {
       label: $t('common.logout'),
       key: 'logout',
-      icon: SvgIconVNode({ icon: 'ph:sign-out', fontSize: 18 })
+      icon: SvgIconVNode({ icon: 'carbon:logout', fontSize: 18 })
     }
   ];
 
@@ -63,18 +77,42 @@ function handleDropdown(key: DropdownKey) {
     routerPushByKey(key);
   }
 }
+
+// 获取用户角色标签
+const userRoleLabel = computed(() => {
+  return authStore.userInfo?.role === 'admin' ? '管理员' : '普通用户';
+});
 </script>
 
 <template>
   <NButton v-if="!authStore.isLogin" quaternary @click="loginOrRegister">
     {{ $t('page.login.common.loginOrRegister') }}
   </NButton>
-  <NDropdown v-else placement="bottom" trigger="click" :options="options" @select="handleDropdown">
-    <div>
-      <ButtonIcon>
-        <SvgIcon icon="ph:user-circle" class="text-icon-large" />
-        <span class="text-16px font-medium">{{ authStore.userInfo.username }}</span>
-      </ButtonIcon>
+  <NDropdown v-else placement="bottom-end" trigger="click" :options="options" @select="handleDropdown">
+    <div class="flex items-center gap-3 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl cursor-pointer transition-all">
+      <!-- 用户头像 -->
+      <NAvatar 
+        :size="36"
+        round
+        :src="authStore.userInfo?.avatar"
+        :fallback-src="'https://api.dicebear.com/7.x/avataaars/svg?seed=' + authStore.userInfo?.username"
+        class="flex-shrink-0"
+      >
+        {{ authStore.userInfo?.username?.charAt(0).toUpperCase() }}
+      </NAvatar>
+      
+      <!-- 用户信息 -->
+      <div class="flex flex-col items-start min-w-0">
+        <span class="text-sm font-medium text-gray-900 dark:text-white truncate max-w-120px">
+          {{ authStore.userInfo?.username || '张朋' }}
+        </span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">
+          {{ userRoleLabel }}
+        </span>
+      </div>
+      
+      <!-- 下拉箭头 -->
+      <icon-carbon:chevron-down class="text-gray-400 text-sm flex-shrink-0" />
     </div>
   </NDropdown>
 </template>
