@@ -88,7 +88,7 @@ function onUpdate(option: unknown) {
           </NSpace>
         </NRadioGroup>
       </NFormItem>
-      <NFormItem label="标签描述" path="fileList">
+      <NFormItem label="选择文件" path="fileList">
         <NUpload
           v-model:file-list="model.fileList"
           :accept="uploadAccept"

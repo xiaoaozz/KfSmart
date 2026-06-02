@@ -7,6 +7,7 @@ import { UploadStatus } from '@/enum';
 import SvgIcon from '@/components/custom/svg-icon.vue';
 import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from './modules/upload-dialog.vue';
+import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
 
 const appStore = useAppStore();
@@ -330,6 +331,13 @@ function handleUpload() {
 }
 // #endregion
 
+// #region 新建知识库
+const createKbVisible = ref(false);
+function handleCreateKb() {
+  createKbVisible.value = true;
+}
+// #endregion
+
 // #region 检索知识库
 const searchVisible = ref(false);
 function handleSearch() {
@@ -416,7 +424,7 @@ async function onBeforeUpload(
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <NButton type="primary" size="large" @click="handleUpload">
+          <NButton type="primary" size="large" @click="handleCreateKb">
             <template #icon>
               <icon-carbon:add class="text-lg" />
             </template>
@@ -754,6 +762,7 @@ async function onBeforeUpload(
     </div>
 
     <!-- 对话框 -->
+    <CreateKbDialog v-model:visible="createKbVisible" @submitted="refreshKnowledgeBaseStats" />
     <UploadDialog v-model:visible="uploadVisible" />
     <SearchDialog v-model:visible="searchVisible" />
     

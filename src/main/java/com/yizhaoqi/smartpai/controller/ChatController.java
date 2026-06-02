@@ -35,7 +35,7 @@ public class ChatController extends TextWebSocketHandler {
             LogUtils.logChat(userId, session.getId(), "USER_MESSAGE", userMessage.length());
             LogUtils.logBusiness("WEBSOCKET_CHAT", userId, "处理WebSocket聊天消息: messageLength=%d", userMessage.length());
             
-        chatHandler.processMessage(userId, userMessage, session);
+            chatHandler.processMessage(userId, userMessage, session);
             
             LogUtils.logUserOperation(userId, "WEBSOCKET_CHAT", "message_processing", "SUCCESS");
             monitor.end("WebSocket消息处理成功");
@@ -54,12 +54,11 @@ public class ChatController extends TextWebSocketHandler {
         try {
             String cmdToken = ChatWebSocketHandler.getInternalCmdToken();
             
-            // 检查token是否有效
-            if (cmdToken == null || cmdToken.trim().isEmpty()) {
+            // 检查token是否有效（INTERNAL_CMD_TOKEN是静态常量，不会为null，只需检查空字符串）
+            if (cmdToken.trim().isEmpty()) {
                 return ResponseEntity.status(500).body(Map.of(
                     "code", 500,
-                    "message", "Token生成失败",
-                    "data", null
+                    "message", "Token生成失败"
                 ));
             }
             
@@ -73,8 +72,7 @@ public class ChatController extends TextWebSocketHandler {
             LogUtils.logBusinessError("GET_WEBSOCKET_TOKEN", "system", "获取WebSocket Token失败", e);
             return ResponseEntity.status(500).body(Map.of(
                 "code", 500,
-                "message", "服务器内部错误：" + e.getMessage(),
-                "data", null
+                "message", "服务器内部错误：" + e.getMessage()
             ));
         }
     }
