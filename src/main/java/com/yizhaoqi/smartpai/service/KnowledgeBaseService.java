@@ -11,11 +11,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
  * 知识库服务
  * 提供知识库的创建、查询、更新、删除以及统计功能
+ * 支持筛选功能：按关键字搜索、按组织标签筛选、按公开状态筛选、按创建者筛选
  */
 @Service
 public class KnowledgeBaseService {
@@ -28,6 +30,9 @@ public class KnowledgeBaseService {
     
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private OrgTagCacheService orgTagCacheService;
 
     private static final int CHUNK_SIZE_BYTES = 4096;
 
@@ -86,18 +91,43 @@ public class KnowledgeBaseService {
     }
 
     /**
-     * 获取用户可访问的知识库列表
+     * 获取用户可访问的知识库列表（无筛选）
      * 包括：用户创建的、公开的、用户所属组织标签关联的
      */
     public List<Map<String, Object>> getAccessibleKnowledgeBases(String username, String orgTags) {
-        LogUtils.logBusiness("GET_KB_LIST", username, "获取知识库列表: orgTags=%s", orgTags);
+        return getAccessibleKnowledgeBases(username, orgTags, null, null, null, null, null);
+    }
+
+    /**
+     * 获取用户可访问的知识库列表（带筛选参数）
+     * 包括：用户创建的、公开的、用户所属组织标签关联的
+     * 支持筛选：关键字搜索、组织标签、公开状态、创建者、更新时间范围
+     *
+     * @param username 用户名
+     * @param orgTags 用户组织标签（逗号分隔）
+     * @param keyword 搜索关键字（匹配知识库名称和描述）
+     * @param filterOrgTag 按组织标签筛选
+     * @param filterIsPublic 按公开状态筛选（true=仅公开，false=仅私有，null=全部）
+     * @param filterCreatedBy 按创建者筛选
+     * @param filterUpdatedAfter 按更新时间筛选（只返回在此时间之后更新的知识库）
+     */
+    public List<Map<String, Object>> getAccessibleKnowledgeBases(String username, String orgTags, 
+            String keyword, String filterOrgTag, Boolean filterIsPublic, 
+            String filterCreatedBy, LocalDateTime filterUpdatedAfter) {
+        LogUtils.logBusiness("GET_KB_LIST", username, "获取知识库列表: orgTags=%s, keyword=%s, filterOrgTag=%s, filterIsPublic=%s, filterCreatedBy=%s, filterUpdatedAfter=%s", 
+            orgTags, keyword, filterOrgTag, filterIsPublic, filterCreatedBy, filterUpdatedAfter);
         
         List<KnowledgeBase> allKbs = knowledgeBaseRepository.findAll();
         
-        // 解析用户的组织标签
+        // 解析用户的组织标签（使用层级权限）
         Set<String> userOrgTags = new HashSet<>();
         if (orgTags != null && !orgTags.isEmpty()) {
             userOrgTags.addAll(Arrays.asList(orgTags.split(",")));
+        }
+        // 同时加入层级权限中的有效标签
+        List<String> effectiveTags = orgTagCacheService.getUserEffectiveOrgTags(username);
+        if (effectiveTags != null) {
+            userOrgTags.addAll(effectiveTags);
         }
         
         // 过滤出用户可访问的知识库
@@ -105,8 +135,34 @@ public class KnowledgeBaseService {
             .filter(kb -> isAccessible(kb, username, userOrgTags))
             .toList();
         
+        // 应用筛选条件
+        List<KnowledgeBase> filteredKbs = accessibleKbs.stream()
+            .filter(kb -> {
+                // 关键字筛选（匹配名称或描述）
+                if (keyword != null && !keyword.isEmpty()) {
+                    boolean nameMatch = kb.getName() != null && kb.getName().contains(keyword);
+                    boolean descMatch = kb.getDescription() != null && kb.getDescription().contains(keyword);
+                    if (!nameMatch && !descMatch) return false;
+                }
+                // 组织标签筛选
+                if (filterOrgTag != null && !filterOrgTag.isEmpty()) {
+                    if (!filterOrgTag.equals(kb.getOrgTag())) return false;
+                }
+                // 公开状态筛选
+                if (filterIsPublic != null) {
+                    if (filterIsPublic != kb.isPublic()) return false;
+                }
+                // 创建者筛选
+                if (filterCreatedBy != null && !filterCreatedBy.isEmpty()) {
+                    if (kb.getCreatedBy() == null || !filterCreatedBy.equals(kb.getCreatedBy().getUsername())) return false;
+                }
+                // 更新时间筛选
+                return filterUpdatedAfter == null || (kb.getUpdatedAt() != null && !kb.getUpdatedAt().isBefore(filterUpdatedAfter));
+            })
+            .toList();
+        
         // 构建返回数据（含统计信息）
-        return accessibleKbs.stream().map(this::buildKbDto).toList();
+        return filteredKbs.stream().map(this::buildKbDto).toList();
     }
 
     /**
@@ -211,5 +267,107 @@ public class KnowledgeBaseService {
         }
         
         return buildKbDto(kbOpt.get());
+    }
+
+    /**
+     * 刷新知识库统计信息
+     * 重新计算所有知识库的文档数、总大小、Chunk数等统计数据
+     * 用于手动触发统计数据更新，确保统计数据与实际文件状态一致
+     *
+     * @param username 用户名
+     * @param orgTags 用户组织标签
+     * @return 刷新后的统计信息
+     */
+    public Map<String, Object> refreshKnowledgeBaseStats(String username, String orgTags) {
+        LogUtils.logBusiness("REFRESH_KB_STATS", username, "刷新知识库统计信息");
+        
+        // 清除缓存中的有效标签，强制重新计算
+        orgTagCacheService.invalidateAllEffectiveTagsCache();
+        
+        // 重新获取统计信息（已自动计算最新数据）
+        Map<String, Object> stats = getKnowledgeBaseStats(username, orgTags);
+        stats.put("refreshedAt", LocalDateTime.now());
+        
+        LogUtils.logBusiness("REFRESH_KB_STATS", username, "知识库统计信息刷新完成: kbCount=%d, docCount=%d", 
+            stats.get("knowledgeBaseCount"), stats.get("documentCount"));
+        
+        return stats;
+    }
+
+    /**
+     * 获取筛选选项数据
+     * 返回可用的组织标签列表、图标列表等，用于前端筛选下拉框
+     *
+     * @param username 用户名
+     * @param orgTags 用户组织标签
+     * @return 筛选选项数据
+     */
+    public Map<String, Object> getFilterOptions(String username, String orgTags) {
+        LogUtils.logBusiness("GET_KB_FILTER_OPTIONS", username, "获取知识库筛选选项");
+        
+        List<Map<String, Object>> kbList = getAccessibleKnowledgeBases(username, orgTags);
+        
+        // 提取所有组织标签（去重）
+        List<String> orgTagOptions = kbList.stream()
+            .map(kb -> (String) kb.get("orgTag"))
+            .filter(tag -> tag != null && !tag.isEmpty())
+            .distinct()
+            .sorted()
+            .toList();
+        
+        // 提取所有创建者（去重）
+        List<String> creatorOptions = kbList.stream()
+            .map(kb -> (String) kb.get("createdBy"))
+            .filter(creator -> creator != null && !creator.isEmpty())
+            .distinct()
+            .sorted()
+            .toList();
+        
+        // 提取所有图标类型（去重）
+        List<String> iconOptions = kbList.stream()
+            .map(kb -> (String) kb.get("icon"))
+            .filter(icon -> icon != null && !icon.isEmpty())
+            .distinct()
+            .sorted()
+            .toList();
+        
+        // 公开状态选项
+        List<Map<String, Object>> publicOptions = List.of(
+            Map.of("label", "公开", "value", true),
+            Map.of("label", "私有", "value", false)
+        );
+        
+        // 时间范围选项
+        List<Map<String, Object>> timeRangeOptions = List.of(
+            Map.of("label", "近7天", "value", LocalDateTime.now().minusDays(7).toString()),
+            Map.of("label", "近30天", "value", LocalDateTime.now().minusDays(30).toString()),
+            Map.of("label", "近90天", "value", LocalDateTime.now().minusDays(90).toString())
+        );
+
+        // 文件类型选项（基于知识库下文件扩展名统计）
+        Set<String> fileTypeOptions = new TreeSet<>();
+        for (Map<String, Object> kb : kbList) {
+            String kbOrgTag = (String) kb.get("orgTag");
+            if (kbOrgTag != null) {
+                var files = fileUploadRepository.findByOrgTag(kbOrgTag);
+                for (FileUpload file : files) {
+                    String fileName = file.getFileName();
+                    if (fileName != null && fileName.contains(".")) {
+                        String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toUpperCase();
+                        fileTypeOptions.add(ext);
+                    }
+                }
+            }
+        }
+        
+        Map<String, Object> options = new HashMap<>();
+        options.put("orgTags", orgTagOptions);
+        options.put("creators", creatorOptions);
+        options.put("icons", iconOptions);
+        options.put("publicOptions", publicOptions);
+        options.put("timeRangeOptions", timeRangeOptions);
+        options.put("fileTypes", fileTypeOptions.stream().toList());
+        
+        return options;
     }
 }

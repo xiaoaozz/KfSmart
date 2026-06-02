@@ -1,6 +1,6 @@
 <script setup lang="tsx">
 import type { UploadFileInfo } from 'naive-ui';
-import { NButton, NEllipsis, NModal, NPopconfirm, NProgress, NTag, NUpload } from 'naive-ui';
+import { NButton, NEllipsis, NModal, NPopconfirm, NProgress, NTag, NTooltip, NUpload } from 'naive-ui';
 import { uploadAccept } from '@/constants/common';
 import { fakePaginationRequest } from '@/service/request';
 import { UploadStatus } from '@/enum';
@@ -9,7 +9,7 @@ import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
-import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
+import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions } from '@/service/api/knowledge-base';
 
 const appStore = useAppStore();
 
@@ -19,9 +19,20 @@ const previewFileName = ref('');
 const previewFileMd5 = ref('');
 
 // 筛选器状态
-const selectedCategory = ref('全部');
-const selectedStatus = ref('全部类型');
+const selectedFileType = ref('全部');
+const selectedOwner = ref('全部');
 const selectedTimeRange = ref('全部时间');
+const kbSearchKeyword = ref('');
+
+// 筛选选项（从后端动态获取）
+const filterOptions = ref<Api.KnowledgeBase.KnowledgeBaseFilterOptions>({
+  orgTags: [],
+  creators: [],
+  icons: [],
+  publicOptions: [],
+  timeRangeOptions: [],
+  fileTypes: []
+});
 
 // 知识库列表 - 从后端独立的知识库API获取
 const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
@@ -35,7 +46,11 @@ const panelStats = ref({
 });
 
 function apiFn() {
-  return fakePaginationRequest<Api.KnowledgeBase.List>({ url: '/documents/uploads' });
+  const params: Record<string, string | boolean> = {};
+  if (selectedFileType.value && selectedFileType.value !== '全部') params.fileType = selectedFileType.value;
+  if (selectedOwner.value && selectedOwner.value !== '全部') params.orgTag = selectedOwner.value;
+  if (selectedTimeRange.value && selectedTimeRange.value !== '全部时间') params.timeRange = selectedTimeRange.value;
+  return fakePaginationRequest<Api.KnowledgeBase.List>({ url: '/documents/uploads', params });
 }
 
 function renderIcon(fileName: string) {
@@ -175,12 +190,28 @@ const { tasks } = storeToRefs(store);
 onMounted(async () => {
   await getList();
   await refreshKnowledgeBaseStats();
+  await loadFilterOptions();
 });
 
-/** 从后端独立的知识库API获取知识库列表和统计 */
+/** 加载筛选选项 */
+async function loadFilterOptions() {
+  try {
+    const { error, data } = await fetchGetKnowledgeBaseFilterOptions();
+    if (!error && data) {
+      filterOptions.value = data;
+    }
+  } catch (e) {
+    console.error('[知识库] 加载筛选选项失败:', e);
+  }
+}
+
+/** 从后端独立的知识库API获取知识库列表和统计（带筛选参数） */
 async function refreshKnowledgeBaseStats() {
   try {
-    const { error, data } = await fetchGetKnowledgeBases();
+    const params: Record<string, string> = {};
+    if (kbSearchKeyword.value) params.keyword = kbSearchKeyword.value;
+    
+    const { error, data } = await fetchGetKnowledgeBases(params);
     if (!error && data) {
       knowledgeBases.value = data;
 
@@ -194,6 +225,27 @@ async function refreshKnowledgeBaseStats() {
         documentCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.fileCount, 0),
         chunkCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.chunkCount, 0)
       };
+    }
+  } catch (e) {
+    console.error('[知识库] 刷新统计失败:', e);
+  }
+}
+
+/** 刷新知识库统计信息（调用刷新接口） */
+async function handleRefreshStats() {
+  try {
+    const { error, data } = await fetchRefreshKnowledgeBaseStats();
+    if (!error && data) {
+      knowledgeBases.value = data.knowledgeBases || [];
+      if (knowledgeBases.value.length > 0 && !activeKnowledgeBase.value) {
+        activeKnowledgeBase.value = knowledgeBases.value[0].kbId;
+      }
+      panelStats.value = {
+        knowledgeBaseCount: data.knowledgeBaseCount || 0,
+        documentCount: data.documentCount || 0,
+        chunkCount: data.chunkCount || 0
+      };
+      window.$message?.success('统计信息已刷新');
     }
   } catch (e) {
     console.error('[知识库] 刷新统计失败:', e);
@@ -362,30 +414,25 @@ async function onBeforeUpload(
 <template>
   <div class="knowledge-base-page flex flex-col h-full bg-gray-50 dark:bg-gray-900">
     <!-- 页面标题和操作栏 -->
-    <div class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-8 py-6">
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">知识库管理</h1>
-          <p class="text-sm text-gray-600 dark:text-gray-400">
-            集中管理企业文档与检索资源，支持高效的文档导入、解析、回忆化与检索服务。
-          </p>
-        </div>
+    <div class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
+      <div class="flex items-center justify-between">
+        <h1 class="text-base font-bold text-gray-900 dark:text-white">知识库管理</h1>
         <div class="flex items-center gap-3">
-          <NButton type="primary" size="large" @click="handleCreateKb">
+          <NButton type="primary" size="medium" @click="handleCreateKb">
             <template #icon>
-              <icon-carbon:add class="text-lg" />
+              <icon-carbon:add class="text-base" />
             </template>
             新建知识库
           </NButton>
-          <NButton type="primary" size="large" ghost @click="handleUpload">
+          <NButton type="primary" size="medium" ghost @click="handleUpload">
             <template #icon>
-              <icon-carbon:cloud-upload class="text-lg" />
+              <icon-carbon:cloud-upload class="text-base" />
             </template>
             上传文档
           </NButton>
-          <NButton size="large" tertiary @click="handleUpload">
+          <NButton size="medium" tertiary @click="handleUpload">
             <template #icon>
-              <icon-carbon:download class="text-lg" />
+              <icon-carbon:download class="text-base" />
             </template>
             批量导入
           </NButton>
@@ -396,19 +443,14 @@ async function onBeforeUpload(
     <!-- 主体内容 -->
     <div class="flex-1 flex overflow-hidden">
       <!-- 左侧：知识库列表 -->
-      <div class="w-280px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+      <div class="w-340px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <!-- 知识库列表标题 -->
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-bold text-gray-900 dark:text-white">知识库列表</h2>
-            <NButton text circle size="tiny" @click="handleCreateKb">
-              <template #icon>
-                <icon-carbon:add class="text-lg" />
-              </template>
-            </NButton>
           </div>
           <!-- 搜索框 -->
-          <NInput placeholder="搜索知识库" size="small">
+          <NInput v-model:value="kbSearchKeyword" placeholder="搜索知识库" size="small" @input="refreshKnowledgeBaseStats">
             <template #prefix>
               <icon-carbon:search class="text-gray-400" />
             </template>
@@ -445,10 +487,15 @@ async function onBeforeUpload(
               </div>
               <div class="flex-1 min-w-0">
                 <h3 :class="[
-                  'text-sm font-medium mb-1',
+                  'text-sm font-medium mb-1 truncate',
                   activeKnowledgeBase === kb.kbId ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'
                 ]">
-                  {{ kb.name }}
+                  <NTooltip>
+                    <template #trigger>
+                      <span>{{ kb.name }}</span>
+                    </template>
+                    {{ kb.name }}
+                  </NTooltip>
                 </h3>
                 <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                   <span>{{ kb.fileCount }} 文档</span>
@@ -493,16 +540,14 @@ async function onBeforeUpload(
             <div class="flex items-center gap-2">
               <span class="text-sm text-gray-600 dark:text-gray-400">文件类型</span>
               <NSelect
-                v-model:value="selectedCategory"
+                v-model:value="selectedFileType"
                 :options="[
                   { label: '全部类型', value: '全部' },
-                  { label: 'PDF', value: 'PDF' },
-                  { label: 'DOCX', value: 'DOCX' },
-                  { label: 'MD', value: 'MD' },
-                  { label: 'XLSX', value: 'XLSX' }
+                  ...filterOptions.fileTypes.map(t => ({ label: t, value: t }))
                 ]"
                 size="small"
                 class="w-140px"
+                @update:value="getList"
               />
             </div>
 
@@ -510,28 +555,14 @@ async function onBeforeUpload(
             <div class="flex items-center gap-2">
               <span class="text-sm text-gray-600 dark:text-gray-400">所属者</span>
               <NSelect
-                v-model:value="selectedCategory"
+                v-model:value="selectedOwner"
                 :options="[
                   { label: '全部', value: '全部' },
-                  { label: 'HR', value: 'HR' },
-                  { label: '产品', value: '产品' },
-                  { label: '研发', value: '研发' }
+                  ...filterOptions.orgTags.map(t => ({ label: t, value: t }))
                 ]"
                 size="small"
                 class="w-140px"
-              />
-            </div>
-
-            <!-- 检索筛选 -->
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-600 dark:text-gray-400">检索</span>
-              <NSelect
-                v-model:value="selectedStatus"
-                :options="[
-                  { label: '全部检索', value: '全部类型' }
-                ]"
-                size="small"
-                class="w-140px"
+                @update:value="getList"
               />
             </div>
 
@@ -543,17 +574,19 @@ async function onBeforeUpload(
                 :options="[
                   { label: '全部时间', value: '全部时间' },
                   { label: '近7天', value: '近7天' },
-                  { label: '近30天', value: '近30天' }
+                  { label: '近30天', value: '近30天' },
+                  { label: '近90天', value: '近90天' }
                 ]"
                 size="small"
                 class="w-140px"
+                @update:value="getList"
               />
             </div>
 
             <div class="flex-1"></div>
 
             <!-- 刷新按钮 -->
-            <NButton circle size="small" tertiary @click="getList">
+            <NButton circle size="small" tertiary @click="handleRefreshStats">
               <template #icon>
                 <icon-carbon:renew class="text-lg" />
               </template>
@@ -580,20 +613,20 @@ async function onBeforeUpload(
       </div>
 
       <!-- 右侧面板：知识库概览 -->
-      <div class="w-360px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
-        <div class="p-6">
-          <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-6">知识库概览</h2>
+      <div class="w-280px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+        <div class="p-4">
+          <h2 class="text-base font-bold text-gray-900 dark:text-white mb-4">知识库概览</h2>
 
           <!-- 统计卡片 -->
-          <div class="space-y-4 mb-6">
-            <div class="stat-card bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
+          <div class="space-y-3 mb-4">
+            <div class="stat-card bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3">
               <div class="flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-800 flex items-center justify-center">
-                  <icon-carbon:data-base class="text-blue-600 text-xl" />
+                <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-800 flex items-center justify-center">
+                  <icon-carbon:data-base class="text-blue-600 text-base" />
                 </div>
                 <div class="flex-1">
-                  <div class="text-xs text-gray-600 dark:text-gray-400">知识库数量</div>
-                  <div class="text-2xl font-bold text-blue-600">{{ panelStats.knowledgeBaseCount }}</div>
+                  <div class="text-11px text-gray-600 dark:text-gray-400">知识库数量</div>
+                  <div class="text-xl font-bold text-blue-600">{{ panelStats.knowledgeBaseCount }}</div>
                 </div>
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500">
@@ -601,14 +634,14 @@ async function onBeforeUpload(
               </div>
             </div>
 
-            <div class="stat-card bg-green-50 dark:bg-green-900/20 rounded-xl p-4">
+            <div class="stat-card bg-green-50 dark:bg-green-900/20 rounded-xl p-3">
               <div class="flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-800 flex items-center justify-center">
-                  <icon-carbon:document class="text-green-600 text-xl" />
+                <div class="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-800 flex items-center justify-center">
+                  <icon-carbon:document class="text-green-600 text-base" />
                 </div>
                 <div class="flex-1">
-                  <div class="text-xs text-gray-600 dark:text-gray-400">文档总数</div>
-                  <div class="text-2xl font-bold text-green-600">{{ panelStats.documentCount }}</div>
+                  <div class="text-11px text-gray-600 dark:text-gray-400">文档总数</div>
+                  <div class="text-xl font-bold text-green-600">{{ panelStats.documentCount }}</div>
                 </div>
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500">
@@ -616,14 +649,14 @@ async function onBeforeUpload(
               </div>
             </div>
 
-            <div class="stat-card bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4">
+            <div class="stat-card bg-purple-50 dark:bg-purple-900/20 rounded-xl p-3">
               <div class="flex items-center gap-3 mb-2">
-                <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-800 flex items-center justify-center">
-                  <icon-carbon:chart-cluster-bar class="text-purple-600 text-xl" />
+                <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-800 flex items-center justify-center">
+                  <icon-carbon:chart-cluster-bar class="text-purple-600 text-base" />
                 </div>
                 <div class="flex-1">
-                  <div class="text-xs text-gray-600 dark:text-gray-400">Chunk 数量</div>
-                  <div class="text-2xl font-bold text-purple-600">{{ panelStats.chunkCount.toLocaleString() }}</div>
+                  <div class="text-11px text-gray-600 dark:text-gray-400">Chunk 数量</div>
+                  <div class="text-xl font-bold text-purple-600">{{ panelStats.chunkCount.toLocaleString() }}</div>
                 </div>
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500">
@@ -633,9 +666,9 @@ async function onBeforeUpload(
           </div>
 
           <!-- 向量索引实时状态 -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">向量索引实时状态</h3>
-            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 space-y-3">
+          <div class="mb-4">
+            <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">向量索引实时状态</h3>
+            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 space-y-2">
               <div class="flex items-center justify-between text-xs">
                 <span class="text-gray-600 dark:text-gray-400">索引健康度</span>
                 <div class="flex items-center gap-2">
@@ -656,9 +689,9 @@ async function onBeforeUpload(
 
           <!-- 最近入库任务 -->
           <div>
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">最近上传文件</h3>
-              <NButton text size="tiny" type="primary" @click="refreshKnowledgeBaseStats">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300">最近上传文件</h3>
+              <NButton text size="tiny" type="primary" @click="handleRefreshStats">
                 <template #icon>
                   <icon-carbon:renew class="text-xs" />
                 </template>

@@ -177,6 +177,17 @@ declare namespace Api {
       totalSize: number;
       chunkCount: number;
       knowledgeBases: KnowledgeBaseInfo[];
+      refreshedAt?: string;
+    }
+
+    /** 知识库筛选选项 */
+    interface KnowledgeBaseFilterOptions {
+      orgTags: string[];
+      creators: string[];
+      icons: string[];
+      publicOptions: { label: string; value: boolean }[];
+      timeRangeOptions: { label: string; value: string }[];
+      fileTypes: string[];
     }
 
     type List = Common.PaginatingQueryRecord<UploadTask>;

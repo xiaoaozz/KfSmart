@@ -8,24 +8,17 @@ import com.yizhaoqi.smartpai.service.DocumentService;
 import com.yizhaoqi.smartpai.utils.LogUtils;
 import com.yizhaoqi.smartpai.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * 文档控制器类，处理文档相关操作请求
@@ -152,11 +145,16 @@ public class DocumentController {
      */
     @GetMapping("/uploads")
     public ResponseEntity<?> getUserUploadedFiles(
-            @RequestAttribute("userId") String userId) {
+            @RequestAttribute("userId") String userId,
+            @RequestParam(required = false) String fileType,
+            @RequestParam(required = false) String orgTag,
+            @RequestParam(required = false) String timeRange,
+            @RequestParam(required = false) Boolean isPublic) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
         try {
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求");
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求: fileType=%s, orgTag=%s, timeRange=%s, isPublic=%s", 
+                fileType, orgTag, timeRange, isPublic);
             
             List<FileUpload> files = documentService.getUserUploadedFiles(userId);
 
@@ -169,8 +167,34 @@ public class DocumentController {
                     i, file.getFileName(), file.getFileMd5(), file.getTotalSize());
             }
 
+            // 应用筛选条件
+            List<FileUpload> filteredFiles = files.stream().filter(file -> {
+                // 文件类型筛选（根据文件扩展名）
+                if (fileType != null && !fileType.isEmpty() && !"全部".equals(fileType) && !"全部类型".equals(fileType)) {
+                    String fileName = file.getFileName();
+                    if (fileName == null || !fileName.toLowerCase().endsWith("." + fileType.toLowerCase())) {
+                        return false;
+                    }
+                }
+                // 组织标签筛选
+                if (orgTag != null && !orgTag.isEmpty() && !"全部".equals(orgTag)) {
+                    if (!orgTag.equals(file.getOrgTag())) {
+                        return false;
+                    }
+                }
+                // 时间范围筛选
+                if (timeRange != null && !timeRange.isEmpty() && !"全部时间".equals(timeRange)) {
+                    LocalDateTime since = parseTimeRange(timeRange);
+                    if (since != null && file.getCreatedAt() != null && file.getCreatedAt().isBefore(since)) {
+                        return false;
+                    }
+                }
+                // 公开状态筛选
+                return isPublic == null || isPublic == file.isPublic();
+            }).toList();
+
             // 将FileUpload转换为包含tagName的DTO
-            List<Map<String, Object>> fileData = files.stream().map(file -> {
+            List<Map<String, Object>> fileData = filteredFiles.stream().map(file -> {
                 Map<String, Object> dto = new HashMap<>();
                 dto.put("fileMd5", file.getFileMd5());
                 dto.put("fileName", file.getFileName());
@@ -178,18 +202,20 @@ public class DocumentController {
                 dto.put("status", file.getStatus());
                 dto.put("userId", file.getUserId());
                 dto.put("public", file.isPublic());
+                dto.put("isPublic", file.isPublic());
                 dto.put("createdAt", file.getCreatedAt());
                 dto.put("mergedAt", file.getMergedAt());
+                dto.put("orgTag", file.getOrgTag());
                 
                 // 将orgTag从tagId转换为tagName
                 String orgTagName = getOrgTagName(file.getOrgTag());
                 dto.put("orgTagName", orgTagName);
                 
                 return dto;
-            }).collect(Collectors.toList());
+            }).toList();
             
             LogUtils.logUserOperation(userId, "GET_USER_UPLOADED_FILES", "file_list", "SUCCESS");
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d", files.size());
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d, filteredCount=%d", files.size(), fileData.size());
             monitor.end("获取用户上传文件成功");
             
             Map<String, Object> response = new HashMap<>();
@@ -204,6 +230,36 @@ public class DocumentController {
             response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
             response.put("message", "获取用户上传文件列表失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+    
+    /**
+     * 解析时间范围参数
+     * 支持格式：近7天、近30天、近90天、ISO 8601日期、天数数字
+     */
+    private LocalDateTime parseTimeRange(String timeRange) {
+        if (timeRange == null || timeRange.isEmpty()) return null;
+        
+        switch (timeRange) {
+            case "近7天":
+                return LocalDateTime.now().minusDays(7);
+            case "近30天":
+                return LocalDateTime.now().minusDays(30);
+            case "近90天":
+                return LocalDateTime.now().minusDays(90);
+            default:
+                try {
+                    // 尝试解析为天数数字
+                    long days = Long.parseLong(timeRange);
+                    return LocalDateTime.now().minusDays(days);
+                } catch (NumberFormatException e) {
+                    try {
+                        // 尝试解析为 ISO 8601 日期
+                        return LocalDateTime.parse(timeRange);
+                    } catch (Exception ex) {
+                        return null;
+                    }
+                }
         }
     }
     
@@ -356,8 +412,7 @@ public class DocumentController {
             try {
                 var authentication = SecurityContextHolder.getContext().getAuthentication();
                 if (authentication != null && authentication.isAuthenticated() 
-                    && authentication.getPrincipal() instanceof UserDetails) {
-                    UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                    && authentication.getPrincipal() instanceof UserDetails userDetails) {
                     userId = userDetails.getUsername();
                     // 从userDetails中获取组织标签信息
                     orgTags = userDetails.getAuthorities().stream()

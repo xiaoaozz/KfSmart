@@ -1,13 +1,29 @@
 import { request } from '../request';
 
 /** 获取用户可访问的知识库列表 */
-export function fetchGetKnowledgeBases() {
-  return request<Api.KnowledgeBase.KnowledgeBaseInfo[]>({ url: '/knowledge-bases' });
+export function fetchGetKnowledgeBases(params?: {
+  keyword?: string;
+  orgTag?: string;
+  isPublic?: boolean;
+  createdBy?: string;
+  updatedAfter?: string;
+}) {
+  return request<Api.KnowledgeBase.KnowledgeBaseInfo[]>({ url: '/knowledge-bases', params });
 }
 
 /** 获取知识库统计概览 */
 export function fetchGetKnowledgeBaseStats() {
   return request<Api.KnowledgeBase.KnowledgeBaseStats>({ url: '/knowledge-bases/stats' });
+}
+
+/** 获取知识库筛选选项 */
+export function fetchGetKnowledgeBaseFilterOptions() {
+  return request<Api.KnowledgeBase.KnowledgeBaseFilterOptions>({ url: '/knowledge-bases/filter-options' });
+}
+
+/** 刷新知识库统计信息 */
+export function fetchRefreshKnowledgeBaseStats() {
+  return request<Api.KnowledgeBase.KnowledgeBaseStats>({ url: '/knowledge-bases/refresh', method: 'POST' });
 }
 
 /** 创建知识库 */

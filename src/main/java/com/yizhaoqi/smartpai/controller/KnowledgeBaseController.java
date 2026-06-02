@@ -8,11 +8,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
  * 知识库控制器
- * 提供知识库的CRUD接口和统计接口
+ * 提供知识库的CRUD接口、统计接口、筛选接口和刷新接口
  * 知识库(KnowledgeBase)与组织标签(OrganizationTag)是独立的两个概念：
  * - 知识库：文档集合管理单元，用于分组管理文档
  * - 组织标签：权限控制单元，用于控制文档的访问权限
@@ -67,11 +68,22 @@ public class KnowledgeBaseController {
     }
     
     /**
-     * 获取用户可访问的知识库列表
+     * 获取用户可访问的知识库列表（支持筛选参数）
+     * 筛选参数说明：
+     * - keyword: 搜索关键字，匹配知识库名称和描述（模糊匹配）
+     * - orgTag: 按组织标签筛选
+     * - isPublic: 按公开状态筛选（true=仅公开，false=仅私有）
+     * - createdBy: 按创建者筛选
+     * - updatedAfter: 按更新时间筛选，格式为 ISO 8601（如 2025-01-01T00:00:00）
      */
     @GetMapping
     public ResponseEntity<?> getKnowledgeBases(
-            @RequestHeader("Authorization") String token) {
+            @RequestHeader("Authorization") String token,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String orgTag,
+            @RequestParam(required = false) Boolean isPublic,
+            @RequestParam(required = false) String createdBy,
+            @RequestParam(required = false) String updatedAfter) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_KB_LIST");
         String username = null;
@@ -79,9 +91,27 @@ public class KnowledgeBaseController {
             username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
             String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
             
-            LogUtils.logBusiness("GET_KB_LIST", username, "获取知识库列表");
+            LogUtils.logBusiness("GET_KB_LIST", username, "获取知识库列表: keyword=%s, orgTag=%s, isPublic=%s, createdBy=%s, updatedAfter=%s", 
+                keyword, orgTag, isPublic, createdBy, updatedAfter);
             
-            List<Map<String, Object>> kbList = knowledgeBaseService.getAccessibleKnowledgeBases(username, orgTags);
+            // 解析更新时间参数
+            LocalDateTime filterUpdatedAfter = null;
+            if (updatedAfter != null && !updatedAfter.isEmpty()) {
+                try {
+                    filterUpdatedAfter = LocalDateTime.parse(updatedAfter);
+                } catch (Exception e) {
+                    // 如果解析失败，尝试按天数解析（如 "7" 表示近7天）
+                    try {
+                        long days = Long.parseLong(updatedAfter);
+                        filterUpdatedAfter = LocalDateTime.now().minusDays(days);
+                    } catch (NumberFormatException nfe) {
+                        LogUtils.logBusiness("GET_KB_LIST", username, "更新时间参数格式错误: %s", updatedAfter);
+                    }
+                }
+            }
+            
+            List<Map<String, Object>> kbList = knowledgeBaseService.getAccessibleKnowledgeBases(
+                username, orgTags, keyword, orgTag, isPublic, createdBy, filterUpdatedAfter);
             
             monitor.end("获取知识库列表成功");
             return ResponseEntity.ok(Map.of("code", 200, "message", "获取知识库列表成功", "data", kbList));
@@ -117,6 +147,64 @@ public class KnowledgeBaseController {
             monitor.end("获取异常: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("code", 500, "message", "获取知识库统计失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取知识库筛选选项
+     * 返回可用的组织标签列表、创建者列表、图标类型、公开状态选项等
+     * 用于前端筛选下拉框的数据源
+     */
+    @GetMapping("/filter-options")
+    public ResponseEntity<?> getFilterOptions(
+            @RequestHeader("Authorization") String token) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_KB_FILTER_OPTIONS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
+            
+            LogUtils.logBusiness("GET_KB_FILTER_OPTIONS", username, "获取知识库筛选选项");
+            
+            Map<String, Object> options = knowledgeBaseService.getFilterOptions(username, orgTags);
+            
+            monitor.end("获取知识库筛选选项成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取知识库筛选选项成功", "data", options));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_KB_FILTER_OPTIONS", username, "获取知识库筛选选项异常", e);
+            monitor.end("获取异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "获取知识库筛选选项失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 刷新知识库统计信息
+     * 手动触发统计数据的重新计算，确保统计数据与实际文件状态一致
+     * 清除相关缓存并重新计算所有知识库的文档数、总大小、Chunk数等
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshKnowledgeBaseStats(
+            @RequestHeader("Authorization") String token) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("REFRESH_KB_STATS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
+            
+            LogUtils.logBusiness("REFRESH_KB_STATS", username, "刷新知识库统计信息");
+            
+            Map<String, Object> stats = knowledgeBaseService.refreshKnowledgeBaseStats(username, orgTags);
+            
+            monitor.end("刷新知识库统计成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "知识库统计信息已刷新", "data", stats));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("REFRESH_KB_STATS", username, "刷新知识库统计异常", e);
+            monitor.end("刷新异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "刷新知识库统计失败: " + e.getMessage()));
         }
     }
     
