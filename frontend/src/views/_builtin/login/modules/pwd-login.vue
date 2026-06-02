@@ -166,9 +166,14 @@ function handleAccountLogin(account: Account) {
       <NCheckbox v-model:checked="model.rememberMe">
         <span class="text-sm text-gray-600 dark:text-gray-400">记住我</span>
       </NCheckbox>
-      <NButton text type="primary" size="small" @click="toggleLoginModule('reset-pwd')">
-        <span class="text-sm">忘记密码？</span>
-      </NButton>
+      <div class="flex items-center gap-3">
+        <NButton text type="primary" size="small" @click="toggleLoginModule('register')">
+          <span class="text-sm">注册账号</span>
+        </NButton>
+        <NButton text type="primary" size="small" @click="toggleLoginModule('reset-pwd')">
+          <span class="text-sm">忘记密码？</span>
+        </NButton>
+      </div>
     </div>
 
     <!-- 登录按钮 -->

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { computed, reactive, ref } from 'vue';
+import { useRouterPush } from '@/hooks/common/router';
+import { useFormRules, useNaiveForm } from '@/hooks/common/form';
+import { fetchRegister } from '@/service/api/auth';
 import { $t } from '@/locales';
 
 defineOptions({
