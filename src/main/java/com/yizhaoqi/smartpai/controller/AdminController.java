@@ -213,7 +213,8 @@ public class AdminController {
                     originalFilename,
                     adminUsername,
                     "admin",
-                    true
+                    true,
+                    null
                 );
                 
                 LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 

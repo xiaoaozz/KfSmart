@@ -57,4 +57,10 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
      * 用于删除组织标签时重新分配文档归属
      */
     List<FileUpload> findByOrgTag(String orgTag);
+
+    /**
+     * 查找指定知识库的所有文件
+     * 用于按知识库检索文档
+     */
+    List<FileUpload> findByKbId(String kbId);
 }

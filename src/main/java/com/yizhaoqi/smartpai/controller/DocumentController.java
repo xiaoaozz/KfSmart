@@ -149,12 +149,13 @@ public class DocumentController {
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) String orgTag,
             @RequestParam(required = false) String timeRange,
-            @RequestParam(required = false) Boolean isPublic) {
+            @RequestParam(required = false) Boolean isPublic,
+            @RequestParam(required = false) String kbId) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
         try {
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求: fileType=%s, orgTag=%s, timeRange=%s, isPublic=%s", 
-                fileType, orgTag, timeRange, isPublic);
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求: fileType=%s, orgTag=%s, timeRange=%s, isPublic=%s, kbId=%s", 
+                fileType, orgTag, timeRange, isPublic, kbId);
             
             List<FileUpload> files = documentService.getUserUploadedFiles(userId);
 
@@ -169,6 +170,12 @@ public class DocumentController {
 
             // 应用筛选条件
             List<FileUpload> filteredFiles = files.stream().filter(file -> {
+                // 知识库筛选
+                if (kbId != null && !kbId.isEmpty()) {
+                    if (!kbId.equals(file.getKbId())) {
+                        return false;
+                    }
+                }
                 // 文件类型筛选（根据文件扩展名）
                 if (fileType != null && !fileType.isEmpty() && !"全部".equals(fileType) && !"全部类型".equals(fileType)) {
                     String fileName = file.getFileName();
@@ -206,6 +213,7 @@ public class DocumentController {
                 dto.put("createdAt", file.getCreatedAt());
                 dto.put("mergedAt", file.getMergedAt());
                 dto.put("orgTag", file.getOrgTag());
+                dto.put("kbId", file.getKbId());
                 
                 // 将orgTag从tagId转换为tagName
                 String orgTagName = getOrgTagName(file.getOrgTag());
@@ -215,7 +223,7 @@ public class DocumentController {
             }).toList();
             
             LogUtils.logUserOperation(userId, "GET_USER_UPLOADED_FILES", "file_list", "SUCCESS");
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d, filteredCount=%d", files.size(), fileData.size());
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d, filteredCount=%d, kbId=%s", files.size(), fileData.size(), kbId);
             monitor.end("获取用户上传文件成功");
             
             Map<String, Object> response = new HashMap<>();

@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { uploadAccept } from '@/constants/common';
+import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 
 defineOptions({
   name: 'UploadDialog'
 });
+
+const emit = defineEmits<{
+  submitted: [];
+}>();
+
+const props = defineProps<{
+  activeKbId?: string;
+}>();
 
 const loading = ref(false);
 const visible = defineModel<boolean>('visible', { default: false });
@@ -13,10 +22,28 @@ const authStore = useAuthStore();
 const { formRef, validate, restoreValidation } = useNaiveForm();
 const { defaultRequiredRule } = useFormRules();
 
+// 知识库列表选项
+const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
+const kbLoading = ref(false);
+
+async function loadKnowledgeBases() {
+  kbLoading.value = true;
+  try {
+    const { error, data } = await fetchGetKnowledgeBases();
+    if (!error && data) {
+      knowledgeBases.value = data;
+    }
+  } catch (e) {
+    console.error('[上传文档] 加载知识库列表失败:', e);
+  }
+  kbLoading.value = false;
+}
+
 const model = ref<Api.KnowledgeBase.Form>(createDefaultModel());
 
 function createDefaultModel(): Api.KnowledgeBase.Form {
   return {
+    kbId: props.activeKbId || null,
     orgTag: null,
     orgTagName: '',
     isPublic: false,
@@ -25,6 +52,7 @@ function createDefaultModel(): Api.KnowledgeBase.Form {
 }
 
 const rules = ref<FormRules>({
+  kbId: defaultRequiredRule,
   orgTag: defaultRequiredRule,
   isPublic: defaultRequiredRule,
   fileList: defaultRequiredRule
@@ -41,12 +69,14 @@ async function handleSubmit() {
   await store.enqueueUpload(model.value);
   loading.value = false;
   close();
+  emit('submitted');
 }
 
-watch(visible, () => {
-  if (visible.value) {
+watch(visible, (newVal) => {
+  if (newVal) {
     model.value = createDefaultModel();
     restoreValidation();
+    loadKnowledgeBases();
   }
 });
 
@@ -66,6 +96,17 @@ function onUpdate(option: unknown) {
     @positive-click="handleSubmit"
   >
     <NForm ref="formRef" :model="model" :rules="rules" label-placement="left" :label-width="100" mt-10>
+      <!-- 知识库选择 -->
+      <NFormItem label="所属知识库" path="kbId">
+        <NSelect
+          v-model:value="model.kbId"
+          :options="knowledgeBases.map(kb => ({ label: kb.name, value: kb.kbId }))"
+          placeholder="请选择知识库"
+          :loading="kbLoading"
+          size="medium"
+        />
+      </NFormItem>
+
       <NFormItem v-if="authStore.isAdmin" label="组织标签" path="orgTag">
         <OrgTagCascader v-model:value="model.orgTag" @change="onUpdate" />
       </NFormItem>

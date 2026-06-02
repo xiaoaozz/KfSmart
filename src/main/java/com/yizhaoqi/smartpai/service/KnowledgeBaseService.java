@@ -184,7 +184,12 @@ public class KnowledgeBaseService {
         // 计算该知识库下的文档数和总大小
         long docCount = 0;
         long totalSize = 0;
-        if (kb.getOrgTag() != null) {
+        // 优先使用kbId查询文档，如果没有kbId关联的文档则用orgTag查询
+        var filesByKbId = fileUploadRepository.findByKbId(kb.getKbId());
+        if (!filesByKbId.isEmpty()) {
+            docCount = filesByKbId.stream().filter(f -> f.getStatus() == 1).count();
+            totalSize = filesByKbId.stream().filter(f -> f.getStatus() == 1).mapToLong(FileUpload::getTotalSize).sum();
+        } else if (kb.getOrgTag() != null) {
             var files = fileUploadRepository.findByOrgTag(kb.getOrgTag());
             docCount = files.stream().filter(f -> f.getStatus() == 1).count();
             totalSize = files.stream().filter(f -> f.getStatus() == 1).mapToLong(FileUpload::getTotalSize).sum();
@@ -292,6 +297,64 @@ public class KnowledgeBaseService {
             stats.get("knowledgeBaseCount"), stats.get("documentCount"));
         
         return stats;
+    }
+
+    /**
+     * 获取指定知识库下的文档列表
+     * 优先按kbId检索文档，如果没有kbId关联的文档则按orgTag检索
+     *
+     * @param kbId 知识库ID
+     * @param username 用户名（用于权限校验）
+     * @param orgTags 用户组织标签（用于权限校验）
+     * @return 文档列表
+     */
+    public List<Map<String, Object>> getKnowledgeBaseDocuments(String kbId, String username, String orgTags) {
+        LogUtils.logBusiness("GET_KB_DOCUMENTS", username, "获取知识库文档: kbId=%s", kbId);
+        
+        // 检查知识库是否存在
+        Optional<KnowledgeBase> kbOpt = knowledgeBaseRepository.findByKbId(kbId);
+        if (kbOpt.isEmpty()) {
+            throw new IllegalArgumentException("知识库不存在: " + kbId);
+        }
+        
+        KnowledgeBase kb = kbOpt.get();
+        
+        // 权限校验
+        Set<String> userOrgTags = new HashSet<>();
+        if (orgTags != null && !orgTags.isEmpty()) {
+            userOrgTags.addAll(Arrays.asList(orgTags.split(",")));
+        }
+        List<String> effectiveTags = orgTagCacheService.getUserEffectiveOrgTags(username);
+        if (effectiveTags != null) {
+            userOrgTags.addAll(effectiveTags);
+        }
+        
+        if (!isAccessible(kb, username, userOrgTags)) {
+            throw new IllegalArgumentException("无权访问该知识库: " + kbId);
+        }
+        
+        // 优先按kbId检索文档
+        List<FileUpload> files = fileUploadRepository.findByKbId(kbId);
+        if (files.isEmpty() && kb.getOrgTag() != null) {
+            // 如果没有kbId关联的文档，按orgTag检索（兼容旧数据）
+            files = fileUploadRepository.findByOrgTag(kb.getOrgTag());
+        }
+        
+        return files.stream().map(file -> {
+            Map<String, Object> dto = new HashMap<>();
+            dto.put("id", file.getId());
+            dto.put("fileMd5", file.getFileMd5());
+            dto.put("fileName", file.getFileName());
+            dto.put("totalSize", file.getTotalSize());
+            dto.put("status", file.getStatus());
+            dto.put("userId", file.getUserId());
+            dto.put("isPublic", file.isPublic());
+            dto.put("createdAt", file.getCreatedAt());
+            dto.put("mergedAt", file.getMergedAt());
+            dto.put("orgTag", file.getOrgTag());
+            dto.put("kbId", file.getKbId());
+            return dto;
+        }).toList();
     }
 
     /**

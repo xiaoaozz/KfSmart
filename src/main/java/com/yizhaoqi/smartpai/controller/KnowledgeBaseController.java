@@ -330,4 +330,42 @@ public class KnowledgeBaseController {
         Boolean isPublic,
         String icon
     ) {}
+
+    /**
+     * 获取指定知识库下的文档列表
+     * 根据知识库的kbId检索关联的文档
+     *
+     * @param token JWT token
+     * @param kbId 知识库ID
+     * @return 该知识库下的文档列表
+     */
+    @GetMapping("/{kbId}/documents")
+    public ResponseEntity<?> getKnowledgeBaseDocuments(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String kbId) {
+        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_KB_DOCUMENTS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
+            
+            LogUtils.logBusiness("GET_KB_DOCUMENTS", username, "获取知识库文档: kbId=%s", kbId);
+            
+            List<Map<String, Object>> documents = knowledgeBaseService.getKnowledgeBaseDocuments(kbId, username, orgTags);
+            
+            monitor.end("获取知识库文档成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取知识库文档成功", "data", documents));
+        } catch (IllegalArgumentException e) {
+            LogUtils.logBusinessError("GET_KB_DOCUMENTS", username, "获取知识库文档失败: %s", e, e.getMessage());
+            monitor.end("获取失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_KB_DOCUMENTS", username, "获取知识库文档异常", e);
+            monitor.end("获取异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "获取知识库文档失败: " + e.getMessage()));
+        }
+    }
 }

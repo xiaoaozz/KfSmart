@@ -66,8 +66,8 @@ public class SecurityConfig {
                             .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                             // 知识库管理接口 - 用户和管理员都可访问（自己创建的或公开的知识库）
                             .requestMatchers("/api/v1/knowledge-bases/**").hasAnyRole("USER", "ADMIN")
-                            // 用户组织标签管理接口
-                            .requestMatchers("/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
+                            // 用户组织标签管理接口 - 包括查看组织标签树、设置主组织等
+                            .requestMatchers("/api/v1/users/org-tags/**", "/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
                             // 其他请求需要认证
                             .anyRequest().authenticated())
                     // 配置会话管理策略

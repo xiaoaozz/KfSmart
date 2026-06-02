@@ -17,4 +17,5 @@ public class FileProcessingTask {
     private String userId;   // 上传用户ID
     private String orgTag;   // 文件所属组织标签
     private boolean isPublic; // 文件是否公开
+    private String kbId;    // 文件所属知识库ID
 }

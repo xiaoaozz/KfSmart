@@ -30,12 +30,14 @@ CREATE TABLE file_upload (
                              status       TINYINT          NOT NULL DEFAULT 0 COMMENT '上传状态',
                              user_id      VARCHAR(64)      NOT NULL COMMENT '用户 ID',
                              org_tag      VARCHAR(50)      DEFAULT NULL COMMENT '组织标签',
+                             kb_id        VARCHAR(50)      DEFAULT NULL COMMENT '知识库ID',
                              is_public    BOOLEAN          NOT NULL DEFAULT FALSE COMMENT '是否公开',                             created_at   TIMESTAMP        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                              merged_at    TIMESTAMP        NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '合并时间',
                              PRIMARY KEY (id),
                              UNIQUE KEY uk_md5_user (file_md5, user_id),
                              INDEX idx_user (user_id),
-                             INDEX idx_org_tag (org_tag)
+                             INDEX idx_org_tag (org_tag),
+                             INDEX idx_kb_id (kb_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文件上传记录';
 CREATE TABLE chunk_info (
                             id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分块记录唯一标识',

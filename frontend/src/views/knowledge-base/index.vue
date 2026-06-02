@@ -9,7 +9,7 @@ import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
-import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions } from '@/service/api/knowledge-base';
+import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBaseDocuments } from '@/service/api/knowledge-base';
 
 const appStore = useAppStore();
 
@@ -38,6 +38,10 @@ const filterOptions = ref<Api.KnowledgeBase.KnowledgeBaseFilterOptions>({
 const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
 const activeKnowledgeBase = ref('');
 
+// 当前选中知识库的文档列表
+const kbDocuments = ref<Api.KnowledgeBase.UploadTask[]>([]);
+const kbDocumentsLoading = ref(false);
+
 // 右侧面板统计数据
 const panelStats = ref({
   knowledgeBaseCount: 0,
@@ -50,6 +54,7 @@ function apiFn() {
   if (selectedFileType.value && selectedFileType.value !== '全部') params.fileType = selectedFileType.value;
   if (selectedOwner.value && selectedOwner.value !== '全部') params.orgTag = selectedOwner.value;
   if (selectedTimeRange.value && selectedTimeRange.value !== '全部时间') params.timeRange = selectedTimeRange.value;
+  if (activeKnowledgeBase.value) params.kbId = activeKnowledgeBase.value;
   return fakePaginationRequest<Api.KnowledgeBase.List>({ url: '/documents/uploads', params });
 }
 
@@ -225,6 +230,11 @@ async function refreshKnowledgeBaseStats() {
         documentCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.fileCount, 0),
         chunkCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.chunkCount, 0)
       };
+
+      // 加载当前选中知识库的文档
+      if (activeKnowledgeBase.value) {
+        await loadKnowledgeBaseDocuments();
+      }
     }
   } catch (e) {
     console.error('[知识库] 刷新统计失败:', e);
@@ -252,8 +262,67 @@ async function handleRefreshStats() {
   }
 }
 
+/** 加载当前选中知识库的文档列表 */
+async function loadKnowledgeBaseDocuments() {
+  if (!activeKnowledgeBase.value) return;
+  
+  kbDocumentsLoading.value = true;
+  try {
+    const { error, data } = await fetchGetKnowledgeBaseDocuments(activeKnowledgeBase.value);
+    if (!error && data) {
+      kbDocuments.value = data;
+      
+      // 更新任务列表
+      tasks.value = [];
+      data.forEach((item: any) => {
+        if (item.status === 1) {
+          tasks.value.push({
+            ...item,
+            status: UploadStatus.Completed,
+            progress: 100,
+            file: {} as File,
+            chunk: null,
+            chunkIndex: 0,
+            uploadedChunks: [],
+            requestIds: []
+          });
+        } else {
+          tasks.value.push({
+            ...item,
+            status: UploadStatus.Break,
+            progress: 0,
+            file: {} as File,
+            chunk: null,
+            chunkIndex: 0,
+            uploadedChunks: [],
+            requestIds: []
+          });
+        }
+      });
+    }
+  } catch (e) {
+    console.error('[知识库] 加载知识库文档失败:', e);
+  }
+  kbDocumentsLoading.value = false;
+}
+
+/** 当选中知识库变化时，加载该知识库的文档 */
+watch(activeKnowledgeBase, () => {
+  if (activeKnowledgeBase.value) {
+    loadKnowledgeBaseDocuments();
+  } else {
+    tasks.value = [];
+  }
+});
+
 /** 异步获取列表函数 */
 async function getList() {
+  if (activeKnowledgeBase.value) {
+    // 如果有选中的知识库，优先从知识库文档接口获取
+    await loadKnowledgeBaseDocuments();
+    return;
+  }
+  
   console.log('[知识库] 开始获取文件列表');
 
   await getData();
@@ -272,7 +341,7 @@ async function getList() {
     return;
   }
 
-  data.value.forEach((item, dataIndex) => {
+  data.value.forEach((item) => {
     if (item.status === UploadStatus.Completed) {
       const index = tasks.value.findIndex(task => task.fileMd5 === item.fileMd5);
       if (index !== -1) {
@@ -310,16 +379,17 @@ async function handleDelete(fileMd5: string) {
     });
   }
 
-  if (tasks.value[index].uploadedChunks && tasks.value[index].uploadedChunks.length === 0) {
-    tasks.value.splice(index, 1);
-    return;
-  }
-
+  // 无论文件是否上传了分片，都调用后端删除接口
+  // 这样可以确保后端数据库中的记录被删除，刷新页面后不会重新出现
   const { error } = await request({ url: `/documents/${fileMd5}`, method: 'DELETE' });
   if (!error) {
     tasks.value.splice(index, 1);
     window.$message?.success('删除成功');
-    await getData();
+    if (activeKnowledgeBase.value) {
+      await loadKnowledgeBaseDocuments();
+    } else {
+      await getData();
+    }
     await refreshKnowledgeBaseStats();
   }
 }
@@ -328,6 +398,13 @@ async function handleDelete(fileMd5: string) {
 const uploadVisible = ref(false);
 function handleUpload() {
   uploadVisible.value = true;
+}
+/** 文件上传完成后回调 */
+async function onUploadSubmitted() {
+  await refreshKnowledgeBaseStats();
+  if (activeKnowledgeBase.value) {
+    await loadKnowledgeBaseDocuments();
+  }
 }
 // #endregion
 
@@ -345,10 +422,16 @@ function handleSearch() {
 }
 // #endregion
 
+// 选择知识库
+function handleSelectKnowledgeBase(kbId: string) {
+  activeKnowledgeBase.value = kbId;
+}
+
 // 渲染上传状态
 function renderStatus(status: UploadStatus, percentage: number) {
   if (status === UploadStatus.Completed) return <NTag type="success">已完成</NTag>;
   else if (status === UploadStatus.Break) return <NTag type="error">上传中断</NTag>;
+  else if (status === UploadStatus.Uploading) return <NTag type="info">正在上传</NTag>;
   return <NProgress percentage={percentage} processing />;
 }
 
@@ -468,7 +551,7 @@ async function onBeforeUpload(
                 ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500'
                 : 'bg-gray-50 dark:bg-gray-700/50 border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
             ]"
-            @click="activeKnowledgeBase = kb.kbId"
+            @click="handleSelectKnowledgeBase(kb.kbId)"
           >
             <div class="flex items-start gap-3 mb-3">
               <div :class="[
@@ -716,9 +799,9 @@ async function onBeforeUpload(
                     </div>
                     <div :class="[
                       'text-xs',
-                      task.status === UploadStatus.Completed ? 'text-green-600' : 'text-blue-600'
+                      task.status === UploadStatus.Completed ? 'text-green-600' : task.status === UploadStatus.Uploading ? 'text-blue-600' : task.status === UploadStatus.Break ? 'text-red-600' : 'text-gray-600'
                     ]">
-                      {{ task.status === UploadStatus.Completed ? '已完成' : task.status === UploadStatus.Break ? '上传中断' : '处理中' }}
+                      {{ task.status === UploadStatus.Completed ? '已完成' : task.status === UploadStatus.Break ? '上传中断' : task.status === UploadStatus.Uploading ? '正在上传' : '处理中' }}
                     </div>
                   </div>
                 </div>
@@ -740,7 +823,7 @@ async function onBeforeUpload(
 
     <!-- 对话框 -->
     <CreateKbDialog v-model:visible="createKbVisible" @submitted="refreshKnowledgeBaseStats" />
-    <UploadDialog v-model:visible="uploadVisible" />
+    <UploadDialog v-model:visible="uploadVisible" :active-kb-id="activeKnowledgeBase" @submitted="onUploadSubmitted" />
     <SearchDialog v-model:visible="searchVisible" />
     
     <!-- 文件预览弹窗 -->

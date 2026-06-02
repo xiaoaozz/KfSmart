@@ -26,7 +26,8 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
         totalSize: task.totalSize,
         fileName: task.fileName,
         orgTag: task.orgTag,
-        isPublic: task.isPublic ?? false
+        isPublic: task.isPublic ?? false,
+        kbId: task.kbId
       },
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -37,16 +38,21 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
 
     task.requestIds = task.requestIds.filter(id => id !== requestId);
 
-    if (error) return false;
+    if (error) {
+      // 上传失败，不更新状态，让外层统一处理
+      return false;
+    }
 
     // 更新任务状态
-    const updatedTask = tasks.value.find(t => t.fileMd5 === task.fileMd5)!;
-    updatedTask.uploadedChunks = data.uploaded;
-    updatedTask.progress = Number.parseFloat(data.progress.toFixed(2));
+    const updatedTask = tasks.value.find(t => t.fileMd5 === task.fileMd5);
+    if (updatedTask) {
+      updatedTask.uploadedChunks = data.uploaded;
+      updatedTask.progress = Number.parseFloat(data.progress.toFixed(2));
 
-    if (data.uploaded.length === totalChunks) {
-      const success = await mergeFile(task);
-      if (!success) return false;
+      if (data.uploaded.length === totalChunks) {
+        const success = await mergeFile(task);
+        if (!success) return false;
+      }
     }
     return true;
   }
@@ -108,11 +114,13 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
       fileMd5: md5,
       fileName: file.name,
       totalSize: file.size,
+      kbId: form.kbId,
+      orgTag: form.orgTag,
+      public: form.isPublic,
       isPublic: form.isPublic,
       uploadedChunks: [],
       progress: 0,
-      status: UploadStatus.Pending,
-      orgTag: form.orgTag
+      status: UploadStatus.Pending
     };
 
     newTask.orgTagName = form.orgTagName ?? null;
@@ -138,6 +146,7 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
 
     // 获取第一个待上传的文件
     const task = pendingTasks[0];
+    // 立即设置为上传中状态
     task.status = UploadStatus.Uploading;
     activeUploads.value.add(task.fileMd5);
 
@@ -166,7 +175,9 @@ export const useKnowledgeBaseStore = defineStore(SetupStoreId.KnowledgeBase, () 
       console.error('%c [ 👉 upload error 👈 ]-168', 'font-size:16px; background:#94cc97; color:#d8ffdb;', e);
       // 如果上传失败，则将任务状态设置为中断
       const index = tasks.value.findIndex(t => t.fileMd5 === task.fileMd5);
-      tasks.value[index].status = UploadStatus.Break;
+      if (index !== -1) {
+        tasks.value[index].status = UploadStatus.Break;
+      }
     } finally {
       // 无论成功或失败，都从活跃队列中移除
       activeUploads.value.delete(task.fileMd5);

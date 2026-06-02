@@ -57,3 +57,8 @@ export function fetchDeleteKnowledgeBase(kbId: string) {
 export function fetchGetKnowledgeBaseDetail(kbId: string) {
   return request<Api.KnowledgeBase.KnowledgeBaseInfo>({ url: `/knowledge-bases/${kbId}` });
 }
+
+/** 获取指定知识库下的文档列表 */
+export function fetchGetKnowledgeBaseDocuments(kbId: string) {
+  return request<Api.KnowledgeBase.UploadTask[]>({ url: `/knowledge-bases/${kbId}/documents` });
+}

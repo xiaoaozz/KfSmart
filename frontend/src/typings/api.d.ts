@@ -127,6 +127,7 @@ declare namespace Api {
     }
 
     interface Form {
+      kbId: string | null;
       orgTag: string | null;
       orgTagName: string | null;
       isPublic: boolean;
@@ -140,6 +141,7 @@ declare namespace Api {
       chunkIndex: number;
       totalSize: number;
       fileName: string;
+      kbId: string | null;
       orgTag: string | null;
       orgTagName?: string | null;
       public: boolean;
