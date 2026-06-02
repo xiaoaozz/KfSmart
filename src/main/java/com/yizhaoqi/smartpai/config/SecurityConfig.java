@@ -43,6 +43,8 @@ public class SecurityConfig {
             http.csrf(csrf -> csrf.disable())
                     // 配置请求的授权规则
                     .authorizeHttpRequests(authorize -> authorize
+                            // 允许错误处理路径（防止404等错误转发时丢失认证上下文变成403）
+                            .requestMatchers("/error").permitAll()
                             // 允许静态资源访问
                             .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/*.js", "/*.css", "/*.ico").permitAll()
                             // 允许 WebSocket 连接

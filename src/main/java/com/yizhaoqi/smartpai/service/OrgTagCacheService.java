@@ -30,7 +30,7 @@ public class OrgTagCacheService {
     private static final String USER_PRIMARY_ORG_KEY_PREFIX = "user:primary_org:";
     private static final String USER_EFFECTIVE_TAGS_KEY_PREFIX = "user:effective_org_tags:";
     private static final long CACHE_TTL_HOURS = 24;
-    private static final String DEFAULT_ORG_TAG = "DEFAULT";
+    private static final String DEFAULT_ORG_TAG = "default";
     
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
@@ -61,7 +61,6 @@ public class OrgTagCacheService {
      * @param username 用户名
      * @return 组织标签列表
      */
-    @SuppressWarnings("unchecked")
     public List<String> getUserOrgTags(String username) {
         try {
             String key = USER_ORG_TAGS_KEY_PREFIX + username;
@@ -221,7 +220,7 @@ public class OrgTagCacheService {
     public void invalidateAllEffectiveTagsCache() {
         try {
             Set<String> keys = redisTemplate.keys(USER_EFFECTIVE_TAGS_KEY_PREFIX + "*");
-            if (keys != null && !keys.isEmpty()) {
+            if (!keys.isEmpty()) {
                 redisTemplate.delete(keys);
                 logger.info("Invalidated all effective organization tags cache");
             }

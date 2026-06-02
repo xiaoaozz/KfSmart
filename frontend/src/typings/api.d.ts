@@ -215,4 +215,32 @@ declare namespace Api {
       referenceNumber: number;
     }
   }
+
+  namespace System {
+    interface Stats {
+      totalUsers: number;
+      totalFiles: number;
+      totalDocuments: number;
+      totalConversations: number;
+      totalOrgTags: number;
+      todayUploads: number;
+      todayConversations: number;
+    }
+
+    interface Status {
+      cpu_usage: string;
+      memory_usage: string;
+      disk_usage: string;
+      active_users: number;
+      total_documents: number;
+      total_conversations: number;
+    }
+
+    interface UserActivity {
+      username: string;
+      action: string;
+      timestamp: string;
+      ip_address: string;
+    }
+  }
 }

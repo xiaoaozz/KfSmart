@@ -3,24 +3,38 @@ package com.yizhaoqi.smartpai.controller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yizhaoqi.smartpai.config.KafkaConfig;
 import com.yizhaoqi.smartpai.exception.CustomException;
+import com.yizhaoqi.smartpai.model.FileProcessingTask;
+import com.yizhaoqi.smartpai.model.FileUpload;
 import com.yizhaoqi.smartpai.model.OrganizationTag;
 import com.yizhaoqi.smartpai.model.User;
+import com.yizhaoqi.smartpai.repository.FileUploadRepository;
 import com.yizhaoqi.smartpai.repository.OrganizationTagRepository;
 import com.yizhaoqi.smartpai.repository.UserRepository;
+import com.yizhaoqi.smartpai.service.DocumentService;
+import com.yizhaoqi.smartpai.service.FileTypeValidationService;
 import com.yizhaoqi.smartpai.service.UserService;
 import com.yizhaoqi.smartpai.utils.JwtUtils;
 import com.yizhaoqi.smartpai.utils.LogUtils;
 import com.yizhaoqi.smartpai.utils.MinioMigrationUtil;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
+import java.lang.management.ManagementFactory;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 管理员控制器，提供管理知识库、查看系统状态和监控用户活动的接口
@@ -50,6 +64,28 @@ public class AdminController {
     @Autowired
     private MinioMigrationUtil migrationUtil;
 
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
+
+    @Autowired
+    private MinioClient minioClient;
+
+    @Autowired
+    @Qualifier("minioPublicUrl")
+    private String minioPublicUrl;
+
+    @Autowired
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Autowired
+    private KafkaConfig kafkaConfig;
+
+    @Autowired
+    private FileTypeValidationService fileTypeValidationService;
+
+    @Autowired
+    private DocumentService documentService;
+
     /**
      * 获取所有用户列表
      */
@@ -59,7 +95,7 @@ public class AdminController {
         String adminUsername = null;
         try {
             adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-            User admin = validateAdmin(adminUsername);
+            validateAdmin(adminUsername);
             
             LogUtils.logBusiness("ADMIN_GET_ALL_USERS", adminUsername, "管理员开始获取所有用户列表");
             
@@ -88,21 +124,131 @@ public class AdminController {
             @RequestHeader("Authorization") String token,
             @RequestParam("file") MultipartFile file,
             @RequestParam("description") String description) {
-        
-        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-        validateAdmin(adminUsername);
-        
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_ADD_KNOWLEDGE");
+        String adminUsername = null;
         try {
-            // 这里应该调用知识库管理服务来处理文档
-            // knowledgeService.addDocument(file, description);
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+
+            String originalFilename = file.getOriginalFilename();
+            LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                "管理员添加知识库文档: fileName=%s, description=%s", originalFilename, description);
+
+            // 1. 验证文件类型
+            if (originalFilename != null && !originalFilename.isEmpty()) {
+                FileTypeValidationService.FileTypeValidationResult validationResult = 
+                    fileTypeValidationService.validateFileType(originalFilename);
+                if (!validationResult.isValid()) {
+                    LogUtils.logBusinessError("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                        "文件类型验证失败: fileName=%s, message=%s", 
+                        new RuntimeException(validationResult.getMessage()), 
+                        originalFilename, validationResult.getMessage());
+                    monitor.end("文件类型验证失败");
+                    return ResponseEntity.badRequest()
+                        .body(Map.of("code", 400, "message", validationResult.getMessage(),
+                            "supportedTypes", fileTypeValidationService.getSupportedFileTypes()));
+                }
+            }
+
+            // 2. 计算文件 MD5
+            byte[] fileBytes = file.getBytes();
+            String fileMd5 = DigestUtils.md5Hex(fileBytes);
+
+            // 3. 检查文件是否已存在（通过 MD5 去重）
+            Optional<FileUpload> existing = fileUploadRepository.findByFileMd5(fileMd5);
+            if (existing.isPresent()) {
+                LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                    "文件已存在: fileMd5=%s, fileName=%s", fileMd5, originalFilename);
+                monitor.end("文件已存在，跳过上传");
+                return ResponseEntity.ok(Map.of(
+                    "code", 200, 
+                    "message", "文件已存在于知识库中",
+                    "data", Map.of("fileMd5", fileMd5, "fileName", existing.get().getFileName())
+                ));
+            }
+
+            // 4. 上传文件到 MinIO
+            String objectPath = "merged/" + fileMd5;
+            long fileSize = file.getSize();
+            String contentType = file.getContentType();
+
+            LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                "开始上传文件到MinIO: fileMd5=%s, fileName=%s, size=%d, contentType=%s", 
+                fileMd5, originalFilename, fileSize, contentType);
+
+            minioClient.putObject(
+                PutObjectArgs.builder()
+                    .bucket("uploads")
+                    .object(objectPath)
+                    .stream(new ByteArrayInputStream(fileBytes), fileSize, -1)
+                    .contentType(contentType != null ? contentType : "application/octet-stream")
+                    .build()
+            );
+
+            LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                "文件上传到MinIO成功: fileMd5=%s, path=%s", fileMd5, objectPath);
+
+            // 5. 创建 FileUpload 记录
+            FileUpload fileUpload = new FileUpload();
+            fileUpload.setFileMd5(fileMd5);
+            fileUpload.setFileName(originalFilename);
+            fileUpload.setTotalSize(fileSize);
+            fileUpload.setStatus(1); // 已完成
+            fileUpload.setUserId(adminUsername);
+            fileUpload.setOrgTag("admin");
+            fileUpload.setPublic(true);
+            fileUploadRepository.save(fileUpload);
+
+            LogUtils.logFileOperation(adminUsername, "ADD_KNOWLEDGE", originalFilename, fileMd5, "SUCCESS");
+
+            // 6. 发送 Kafka 文件处理任务（向量化、ES 索引）
+            String objectUrl = minioPublicUrl + "/uploads/" + objectPath;
             
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "文档已成功添加到知识库");
-            return ResponseEntity.ok(response);
+            // 检查 Kafka 是否可用
+            try {
+                FileProcessingTask task = new FileProcessingTask(
+                    fileMd5,
+                    objectUrl,
+                    originalFilename,
+                    adminUsername,
+                    "admin",
+                    true
+                );
+                
+                LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                    "发送文件处理任务到Kafka: topic=%s, fileMd5=%s", 
+                    kafkaConfig.getFileProcessingTopic(), fileMd5);
+                    
+                kafkaTemplate.executeInTransaction(kt -> {
+                    kt.send(kafkaConfig.getFileProcessingTopic(), task);
+                    return true;
+                });
+                
+                LogUtils.logBusiness("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                    "Kafka任务发送成功: fileMd5=%s", fileMd5);
+            } catch (Exception kafkaEx) {
+                LogUtils.logBusinessError("ADMIN_ADD_KNOWLEDGE", adminUsername, 
+                    "Kafka任务发送失败（文件已保存，仅跳过索引）: fileMd5=%s", kafkaEx, fileMd5);
+            }
+
+            monitor.end("知识库文档添加成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200, 
+                "message", "文档已成功添加到知识库",
+                "data", Map.of(
+                    "fileMd5", fileMd5,
+                    "fileName", originalFilename != null ? originalFilename : "unknown",
+                    "fileSize", fileSize,
+                    "description", description
+                )
+            ));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_ADD_KNOWLEDGE", adminUsername, "添加知识库文档失败", e);
+            monitor.end("添加知识库文档失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "添加文档失败: " + e.getMessage()));
+                    .body(Map.of("code", 500, "message", "添加文档失败: " + e.getMessage()));
         }
     }
 
@@ -113,21 +259,55 @@ public class AdminController {
     public ResponseEntity<?> deleteKnowledgeDocument(
             @RequestHeader("Authorization") String token,
             @PathVariable("documentId") String documentId) {
-        
-        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-        validateAdmin(adminUsername);
-        
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_DELETE_KNOWLEDGE");
+        String adminUsername = null;
         try {
-            // 这里应该调用知识库管理服务来删除文档
-            // knowledgeService.deleteDocument(documentId);
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
             
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "文档已成功从知识库中删除");
-            return ResponseEntity.ok(response);
+            LogUtils.logBusiness("ADMIN_DELETE_KNOWLEDGE", adminUsername, 
+                "管理员删除知识库文档: documentId=%s", documentId);
+            
+            // 查找文件记录
+            Optional<FileUpload> fileOpt = fileUploadRepository.findByFileMd5(documentId);
+            if (fileOpt.isEmpty()) {
+                LogUtils.logBusiness("ADMIN_DELETE_KNOWLEDGE", adminUsername, 
+                    "文档不存在: documentId=%s", documentId);
+                monitor.end("删除失败：文档不存在");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("code", 404, "message", "文档不存在"));
+            }
+            
+            FileUpload file = fileOpt.get();
+            String fileMd5 = file.getFileMd5();
+            String fileName = file.getFileName();
+            String fileUserId = file.getUserId();
+            
+            LogUtils.logBusiness("ADMIN_DELETE_KNOWLEDGE", adminUsername, 
+                "找到文档: fileMd5=%s, fileName=%s, fileUserId=%s", fileMd5, fileName, fileUserId);
+            
+            // 调用 DocumentService 删除文档及其所有关联数据
+            documentService.deleteDocument(fileMd5, fileUserId);
+            
+            LogUtils.logFileOperation(adminUsername, "DELETE_KNOWLEDGE", fileName, fileMd5, "SUCCESS");
+            LogUtils.logBusiness("ADMIN_DELETE_KNOWLEDGE", adminUsername, 
+                "文档删除成功: fileMd5=%s, fileName=%s", fileMd5, fileName);
+            monitor.end("知识库文档删除成功");
+            
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "文档已成功从知识库中删除",
+                "data", Map.of(
+                    "fileMd5", fileMd5,
+                    "fileName", fileName
+                )
+            ));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_DELETE_KNOWLEDGE", adminUsername, "删除知识库文档失败", e);
+            monitor.end("删除知识库文档失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "删除文档失败: " + e.getMessage()));
+                    .body(Map.of("code", 500, "message", "删除文档失败: " + e.getMessage()));
         }
     }
 
@@ -136,68 +316,344 @@ public class AdminController {
      */
     @GetMapping("/system/status")
     public ResponseEntity<?> getSystemStatus(@RequestHeader("Authorization") String token) {
-        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-        validateAdmin(adminUsername);
-        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_SYSTEM_STATUS");
+        String adminUsername = null;
         try {
-            // 这里应该调用系统监控服务来获取系统状态
-            // SystemStatus status = monitoringService.getSystemStatus();
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
             
-            // 模拟系统状态数据
-            Map<String, Object> status = new HashMap<>();
-            status.put("cpu_usage", "30%");
-            status.put("memory_usage", "45%");
-            status.put("disk_usage", "60%");
-            status.put("active_users", 15);
-            status.put("total_documents", 250);
-            status.put("total_conversations", 1200);
+            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATUS", adminUsername, "管理员获取系统状态");
+
+            Map<String, Object> status = new LinkedHashMap<>();
+
+            // 1. JVM 内存使用情况
+            Runtime runtime = Runtime.getRuntime();
+            long maxMemory = runtime.maxMemory();
+            long totalMemory = runtime.totalMemory();
+            long freeMemory = runtime.freeMemory();
+            long usedMemory = totalMemory - freeMemory;
+            double memoryUsagePercent = maxMemory > 0 ? (usedMemory * 100.0 / maxMemory) : 0;
+            status.put("jvm_memory_max_mb", maxMemory / (1024 * 1024));
+            status.put("jvm_memory_used_mb", usedMemory / (1024 * 1024));
+            status.put("jvm_memory_free_mb", freeMemory / (1024 * 1024));
+            status.put("memory_usage", String.format("%.1f%%", memoryUsagePercent));
+
+            // 2. CPU 使用情况
+            try {
+                java.lang.management.OperatingSystemMXBean osMxBean = 
+                    ManagementFactory.getOperatingSystemMXBean();
+                if (osMxBean instanceof com.sun.management.OperatingSystemMXBean sunOsMxBean) {
+                    double cpuLoad = sunOsMxBean.getCpuLoad();
+                    double processCpuLoad = sunOsMxBean.getProcessCpuLoad();
+                    status.put("cpu_usage", String.format("%.1f%%", 
+                        cpuLoad >= 0 ? cpuLoad * 100 : 0));
+                    status.put("process_cpu_usage", String.format("%.1f%%", 
+                        processCpuLoad >= 0 ? processCpuLoad * 100 : 0));
+                } else {
+                    double systemLoad = osMxBean.getSystemLoadAverage();
+                    status.put("cpu_usage", String.format("系统负载: %.2f", systemLoad));
+                    status.put("available_processors", Runtime.getRuntime().availableProcessors());
+                }
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "获取CPU状态失败", e);
+                status.put("cpu_usage", "N/A");
+            }
+
+            // 3. 磁盘使用情况
+            try {
+                java.io.File root = new java.io.File("/");
+                long totalDisk = root.getTotalSpace();
+                long freeDisk = root.getFreeSpace();
+                long usedDisk = totalDisk - freeDisk;
+                double diskUsagePercent = totalDisk > 0 ? (usedDisk * 100.0 / totalDisk) : 0;
+                status.put("disk_total_gb", String.format("%.1f", totalDisk / (1024.0 * 1024 * 1024)));
+                status.put("disk_free_gb", String.format("%.1f", freeDisk / (1024.0 * 1024 * 1024)));
+                status.put("disk_usage", String.format("%.1f%%", diskUsagePercent));
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "获取磁盘状态失败", e);
+                status.put("disk_usage", "N/A");
+            }
+
+            // 4. 数据库统计数据
+            long totalUsers = userRepository.count();
+            long totalFiles = fileUploadRepository.count();
+            long totalOrgTags = organizationTagRepository.count();
             
-            return ResponseEntity.ok(Map.of("data", status));
+            // 统计对话数
+            long totalConversations = 0;
+            try {
+                Set<String> conversationKeys = redisTemplate.keys("conversation:*");
+                totalConversations = conversationKeys.size();
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "统计对话数失败", e);
+            }
+
+            // 统计活跃用户（今日有活动的用户）
+            long activeUsers = 0;
+            try {
+                Set<String> userKeys = redisTemplate.keys("user:*:current_conversation");
+                activeUsers = userKeys.size();
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "统计活跃用户失败", e);
+            }
+            
+            status.put("active_users", activeUsers);
+            status.put("total_users", totalUsers);
+            status.put("total_documents", totalFiles);
+            status.put("total_conversations", totalConversations);
+            status.put("total_org_tags", totalOrgTags);
+
+            // 5. 运行信息
+            status.put("available_processors", Runtime.getRuntime().availableProcessors());
+            status.put("java_version", System.getProperty("java.version"));
+            status.put("os_name", System.getProperty("os.name"));
+            status.put("os_arch", System.getProperty("os.arch"));
+
+            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATUS", adminUsername, 
+                "系统状态获取成功: memory=%s, cpu=%s, disk=%s, users=%d, files=%d",
+                status.get("memory_usage"), status.get("cpu_usage"), 
+                status.get("disk_usage"), totalUsers, totalFiles);
+            monitor.end("获取系统状态成功");
+
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取系统状态成功", "data", status));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATUS", adminUsername, "获取系统状态失败", e);
+            monitor.end("获取系统状态失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "获取系统状态失败: " + e.getMessage()));
+                    .body(Map.of("code", 500, "message", "获取系统状态失败: " + e.getMessage()));
         }
     }
 
     /**
-     * 获取用户活动日志
+     * 获取系统统计数据（从数据库实时查询）
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<?> getSystemStats(@RequestHeader("Authorization") String token) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_SYSTEM_STATS");
+        String adminUsername = null;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+            
+            // 从数据库查询真实数据
+            long totalUsers = userRepository.count();
+            long totalFiles = fileUploadRepository.count();
+            long totalDocuments = fileUploadRepository.count(); // 文件即文档
+            long totalConversations = 0L;
+            
+            // 统计对话数（从 Redis 中统计）
+            try {
+                Set<String> conversationKeys = redisTemplate.keys("conversation:*");
+                totalConversations = conversationKeys.size();
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "统计对话数失败", e);
+            }
+            
+            // 统计今日新增数据
+            java.time.LocalDateTime todayStart = java.time.LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+            long todayUploads = 0;
+            long todayConversations = 0;
+            
+            try {
+                // 统计今日上传的文件
+                List<FileUpload> recentFiles = fileUploadRepository.findAll();
+                todayUploads = recentFiles.stream()
+                    .filter(f -> f.getCreatedAt() != null && f.getCreatedAt().isAfter(todayStart))
+                    .count();
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "统计今日上传失败", e);
+            }
+            
+            // 统计组织标签数量
+            long totalOrgTags = organizationTagRepository.count();
+            
+            Map<String, Object> stats = new LinkedHashMap<>();
+            stats.put("totalUsers", totalUsers);
+            stats.put("totalFiles", totalFiles);
+            stats.put("totalDocuments", totalDocuments);
+            stats.put("totalConversations", totalConversations);
+            stats.put("totalOrgTags", totalOrgTags);
+            stats.put("todayUploads", todayUploads);
+            stats.put("todayConversations", todayConversations);
+            
+            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATS", adminUsername, 
+                "获取系统统计成功: users=%d, files=%d, conversations=%d, orgTags=%d", 
+                totalUsers, totalFiles, totalConversations, totalOrgTags);
+            monitor.end("获取系统统计成功");
+            
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取系统统计成功", "data", stats));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "获取系统统计失败", e);
+            monitor.end("获取系统统计失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取系统统计失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取用户活动日志（从数据库查询真实数据）
      */
     @GetMapping("/user-activities")
     public ResponseEntity<?> getUserActivities(
             @RequestHeader("Authorization") String token,
             @RequestParam(required = false) String username,
-            @RequestParam(required = false) String start_date,
-            @RequestParam(required = false) String end_date) {
+            @RequestParam(required = false, name = "start_date") String startDate,
+            @RequestParam(required = false, name = "end_date") String endDate) {
         
-        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-        validateAdmin(adminUsername);
-        
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_USER_ACTIVITIES");
+        String adminUsername = null;
         try {
-            // 这里应该调用用户活动监控服务来获取活动日志
-            // List<UserActivity> activities = activityService.getUserActivities(username, startDate, endDate);
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
             
-            // 模拟用户活动数据
-            List<Map<String, Object>> activities = List.of(
-                Map.of(
-                    "username", "user1",
-                    "action", "LOGIN",
-                    "timestamp", "2023-03-01T10:15:30",
-                    "ip_address", "192.168.1.100"
-                ),
-                Map.of(
-                    "username", "user2",
-                    "action", "UPLOAD_FILE",
-                    "timestamp", "2023-03-01T11:20:45",
-                    "ip_address", "192.168.1.101"
+            LogUtils.logBusiness("ADMIN_GET_USER_ACTIVITIES", adminUsername, 
+                "管理员查询用户活动: username=%s, startDate=%s, endDate=%s", 
+                username, startDate, endDate);
+
+            // 解析时间范围
+            LocalDateTime startDateTime = null;
+            LocalDateTime endDateTime = null;
+            if (startDate != null && !startDate.trim().isEmpty()) {
+                startDateTime = parseDateTime(startDate);
+            }
+            if (endDate != null && !endDate.trim().isEmpty()) {
+                endDateTime = parseDateTime(endDate);
+                // 结束日期设为当天结束
+                if (endDateTime != null && endDateTime.getHour() == 0 && endDateTime.getMinute() == 0) {
+                    endDateTime = endDateTime.plusDays(1);
+                }
+            }
+
+            List<Map<String, Object>> activities = new ArrayList<>();
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+
+            // 1. 从文件上传记录构建活动
+            List<FileUpload> allFiles = fileUploadRepository.findAll();
+            for (FileUpload file : allFiles) {
+                // 筛选指定用户
+                if (username != null && !username.trim().isEmpty()) {
+                    if (!username.equals(file.getUserId())) {
+                        continue;
+                    }
+                }
+                // 时间筛选
+                if (file.getCreatedAt() != null) {
+                    if (startDateTime != null && file.getCreatedAt().isBefore(startDateTime)) {
+                        continue;
+                    }
+                    if (endDateTime != null && file.getCreatedAt().isAfter(endDateTime)) {
+                        continue;
+                    }
+                }
+
+                // 添加文件上传活动
+                Map<String, Object> activity = new LinkedHashMap<>();
+                activity.put("username", file.getUserId());
+                activity.put("action", "UPLOAD_FILE");
+                activity.put("timestamp", file.getCreatedAt() != null ? 
+                    file.getCreatedAt().format(fmt) : "未知时间");
+                activity.put("resource", file.getFileName());
+                activity.put("details", Map.of(
+                    "fileMd5", file.getFileMd5(),
+                    "fileSize", file.getTotalSize(),
+                    "orgTag", file.getOrgTag() != null ? file.getOrgTag() : "",
+                    "isPublic", file.isPublic()
+                ));
+                activities.add(activity);
+            }
+
+            // 2. 从用户注册记录构建活动
+            List<User> allUsers = userRepository.findAll();
+            for (User user : allUsers) {
+                // 筛选指定用户
+                if (username != null && !username.trim().isEmpty()) {
+                    if (!username.equals(user.getUsername())) {
+                        continue;
+                    }
+                }
+                // 时间筛选
+                if (user.getCreatedAt() != null) {
+                    if (startDateTime != null && user.getCreatedAt().isBefore(startDateTime)) {
+                        continue;
+                    }
+                    if (endDateTime != null && user.getCreatedAt().isAfter(endDateTime)) {
+                        continue;
+                    }
+                }
+
+                // 添加用户注册活动
+                Map<String, Object> activity = new LinkedHashMap<>();
+                activity.put("username", user.getUsername());
+                activity.put("action", "REGISTER");
+                activity.put("timestamp", user.getCreatedAt() != null ? 
+                    user.getCreatedAt().format(fmt) : "未知时间");
+                activity.put("resource", "user_account");
+                activity.put("details", Map.of(
+                    "role", user.getRole().name(),
+                    "orgTags", user.getOrgTags() != null ? user.getOrgTags() : ""
+                ));
+                activities.add(activity);
+            }
+
+            // 3. 从 Redis 会话信息构建登录活动
+            try {
+                for (String userKey : redisTemplate.keys("user:*:current_conversation")) {
+                    String redisUsername = userKey.replace("user:", "").replace(":current_conversation", "");
+                    
+                    // 筛选指定用户
+                    if (username != null && !username.trim().isEmpty()) {
+                        if (!username.equals(redisUsername)) {
+                            continue;
+                        }
+                    }
+
+                    // 添加会话活动（表示用户在活跃对话中）
+                    String conversationId = redisTemplate.opsForValue().get(userKey);
+                    if (conversationId != null) {
+                        Map<String, Object> activity = new LinkedHashMap<>();
+                        activity.put("username", redisUsername);
+                        activity.put("action", "ACTIVE_SESSION");
+                        activity.put("timestamp", LocalDateTime.now().format(fmt));
+                        activity.put("resource", "conversation");
+                        activity.put("details", Map.of(
+                            "conversationId", conversationId
+                        ));
+                        activities.add(activity);
+                    }
+                }
+            } catch (Exception e) {
+                LogUtils.logBusinessError("ADMIN_GET_USER_ACTIVITIES", adminUsername, "获取Redis会话信息失败", e);
+            }
+
+            // 按时间倒序排列
+            activities.sort((a, b) -> {
+                String ta = (String) a.getOrDefault("timestamp", "");
+                String tb = (String) b.getOrDefault("timestamp", "");
+                return tb.compareTo(ta);
+            });
+
+            // 限制返回数量
+            if (activities.size() > 500) {
+                activities = activities.subList(0, 500);
+            }
+
+            LogUtils.logBusiness("ADMIN_GET_USER_ACTIVITIES", adminUsername, 
+                "获取用户活动成功: total=%d", activities.size());
+            monitor.end("获取用户活动成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200, 
+                "message", "获取用户活动成功", 
+                "data", Map.of(
+                    "total", activities.size(),
+                    "activities", activities
                 )
-            );
-            
-            return ResponseEntity.ok(Map.of("data", activities));
+            ));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_USER_ACTIVITIES", adminUsername, "获取用户活动失败", e);
+            monitor.end("获取用户活动失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "获取用户活动失败: " + e.getMessage()));
+                    .body(Map.of("code", 500, "message", "获取用户活动失败: " + e.getMessage()));
         }
     }
     
@@ -367,10 +823,21 @@ public class AdminController {
         validateAdmin(adminUsername);
         
         try {
-            userService.deleteOrganizationTag(tagId, adminUsername);
+            Map<String, Object> result = userService.deleteOrganizationTag(tagId, adminUsername);
+            int affectedUsers = (int) result.getOrDefault("affectedUserCount", 0);
+            int affectedDocs = (int) result.getOrDefault("affectedDocumentCount", 0);
+            int reassignedChildren = (int) result.getOrDefault("reassignedChildrenCount", 0);
+            
+            String message = "组织标签删除成功";
+            if (affectedUsers > 0 || affectedDocs > 0 || reassignedChildren > 0) {
+                message = String.format("组织标签删除成功（已自动处理：%d个子标签重新分配、%d个用户移除标签、%d个文档重新归属）", 
+                    reassignedChildren, affectedUsers, affectedDocs);
+            }
+            
             return ResponseEntity.ok(Map.of(
                 "code", 200, 
-                "message", "组织标签删除成功"
+                "message", message,
+                "data", result
             ));
         } catch (CustomException e) {
             LogUtils.logBusinessError("ADMIN_DELETE_ORG_TAG", adminUsername, "删除组织标签失败: %s", e, e.getMessage());
@@ -429,7 +896,7 @@ public class AdminController {
         try {
             // 验证管理员权限
             adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
-            User admin = validateAdmin(adminUsername);
+            validateAdmin(adminUsername);
             
             LogUtils.logBusiness("ADMIN_GET_ALL_CONVERSATIONS", adminUsername, "管理员开始查询对话历史，目标用户ID: %s, 时间范围: %s 到 %s", userid, start_date, end_date);
             
@@ -459,7 +926,7 @@ public class AdminController {
             // 获取所有Redis键中以"user:"开头的键
             Set<String> userKeys = redisTemplate.keys("user:*:current_conversation");
             
-            if (userKeys != null && !userKeys.isEmpty()) {
+            if (!userKeys.isEmpty()) {
                 for (String userKey : userKeys) {
                     String conversationId = redisTemplate.opsForValue().get(userKey);
                     if (conversationId != null) {
@@ -511,8 +978,7 @@ public class AdminController {
      * 处理Redis中的对话数据
      */
     private void processRedisConversation(String json, List<Map<String, Object>> targetList, String username, String startDate, String endDate) throws JsonProcessingException {
-        List<Map<String, String>> history = objectMapper.readValue(json, 
-                new TypeReference<List<Map<String, String>>>() {});
+        List<Map<String, String>> history = objectMapper.readValue(json, new TypeReference<>() {});
         
         // 解析时间范围
         java.time.LocalDateTime startDateTime = null;
@@ -558,7 +1024,7 @@ public class AdminController {
                     }
                 }
                 // 如果是"未知时间"且设置了时间过滤，跳过该消息
-                else if (startDateTime != null || endDateTime != null) {
+                else {
                     continue;
                 }
             }
@@ -613,7 +1079,7 @@ public class AdminController {
     /**
      * 验证用户是否为管理员
      */
-    private User validateAdmin(String username) {
+    private void validateAdmin(String username) {
         if (username == null || username.isEmpty()) {
             throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
         }
@@ -624,8 +1090,6 @@ public class AdminController {
         if (admin.getRole() != User.Role.ADMIN) {
             throw new CustomException("Unauthorized access: Admin role required", HttpStatus.FORBIDDEN);
         }
-
-        return admin;
     }
 
     /**
@@ -757,22 +1221,16 @@ public class AdminController {
             return ResponseEntity.status(500).body(response);
         }
     }
+
+    /** 管理员用户请求体 */
+    public record AdminUserRequest(String username, String password) {}
+
+    /** 组织标签请求体 */
+    public record OrgTagRequest(String tagId, String name, String description, String parentTag) {}
+
+    /** 分配组织标签请求体 */
+    public record AssignOrgTagsRequest(List<String> orgTags) {}
+
+    /** 组织标签更新请求记录类 */
+    public record OrgTagUpdateRequest(String name, String description, String parentTag) {}
 }
-
-/**
- * 管理员用户请求体
- */
-record AdminUserRequest(String username, String password) {}
-
-/**
- * 组织标签请求体
- */
-record OrgTagRequest(String tagId, String name, String description, String parentTag) {}
-
-/**
- * 分配组织标签请求体
- */
-record AssignOrgTagsRequest(List<String> orgTags) {}
-
-// 添加组织标签更新请求记录类
-record OrgTagUpdateRequest(String name, String description, String parentTag) {} 

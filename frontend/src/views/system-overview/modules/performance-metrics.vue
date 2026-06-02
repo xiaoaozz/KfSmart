@@ -1,210 +1,216 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import type { EChartsOption } from 'echarts';
+import { fetchGetSystemStats, fetchGetSystemStatus } from '@/service/api/system';
 
 defineOptions({
   name: 'PerformanceMetrics'
 });
 
-const performanceData = ref([
+const loading = ref(false);
+
+// 系统状态数据
+const systemStatus = ref<Api.System.Status | null>(null);
+
+// 性能指标数据
+interface PerformanceItem {
+  metric: string;
+  value: string;
+  target: string;
+  status: 'good' | 'normal' | 'warning';
+  icon: string;
+  color: string;
+  description: string;
+}
+
+const performanceData = computed<PerformanceItem[]>(() => [
   {
-    metric: '平均响应时间',
-    value: '1.42s',
-    target: '< 2s',
-    status: 'good',
-    trend: 'down',
-    change: '-0.21s',
-    icon: 'time'
+    metric: 'CPU 使用率',
+    value: systemStatus.value?.cpu_usage || '--',
+    target: '< 80%',
+    status: parseFloat(systemStatus.value?.cpu_usage || '0') > 80 ? 'warning' : 'good',
+    icon: 'meter',
+    color: 'blue',
+    description: '服务器 CPU 当前使用率'
   },
   {
-    metric: 'API成功率',
-    value: '99.8%',
-    target: '> 99%',
-    status: 'good',
-    trend: 'up',
-    change: '+0.2%',
-    icon: 'checkmark-outline'
+    metric: '内存使用率',
+    value: systemStatus.value?.memory_usage || '--',
+    target: '< 85%',
+    status: parseFloat(systemStatus.value?.memory_usage || '0') > 85 ? 'warning' : 'good',
+    icon: 'data-base',
+    color: 'green',
+    description: '服务器内存当前使用率'
   },
   {
-    metric: '并发处理能力',
-    value: '2,847',
-    target: '> 2000',
-    status: 'good',
-    trend: 'up',
-    change: '+423',
-    icon: 'cloud-upload'
+    metric: '磁盘使用率',
+    value: systemStatus.value?.disk_usage || '--',
+    target: '< 90%',
+    status: parseFloat(systemStatus.value?.disk_usage || '0') > 90 ? 'warning' : 'good',
+    icon: 'document',
+    color: 'orange',
+    description: '服务器磁盘当前使用率'
   },
   {
-    metric: '系统可用性',
-    value: '99.95%',
-    target: '> 99.9%',
-    status: 'good',
-    trend: 'stable',
-    change: '0%',
-    icon: 'cloud-monitoring'
+    metric: '活跃用户数',
+    value: systemStatus.value?.active_users?.toString() || '--',
+    target: '> 0',
+    status: (systemStatus.value?.active_users || 0) > 0 ? 'good' : 'normal',
+    icon: 'user-multiple',
+    color: 'purple',
+    description: '当前活跃用户数量'
   }
 ]);
 
-const responseTimeChartOptions = computed<EChartsOption>(() => ({
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: {
-      type: 'shadow'
-    }
-  },
-  grid: {
-    left: '3%',
-    right: '4%',
-    bottom: '3%',
-    top: '8%',
-    containLabel: true
-  },
-  xAxis: {
-    type: 'category',
-    data: ['0-1s', '1-2s', '2-3s', '3-5s', '5s+'],
-    axisLine: {
-      lineStyle: {
-        color: '#ddd'
-      }
-    },
-    axisLabel: {
-      color: '#666',
-      fontSize: 11
-    }
-  },
-  yAxis: {
-    type: 'value',
-    axisLine: {
-      lineStyle: {
-        color: '#ddd'
-      }
-    },
-    axisLabel: {
-      color: '#666',
-      fontSize: 11
-    },
-    splitLine: {
-      lineStyle: {
-        color: '#f0f0f0'
-      }
-    }
-  },
-  series: [
-    {
-      name: '响应分布',
-      type: 'bar',
-      barWidth: '50%',
-      itemStyle: {
-        borderRadius: [6, 6, 0, 0],
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: '#667eea' },
-            { offset: 1, color: '#764ba2' }
-          ]
-        }
-      },
-      data: [1823, 734, 245, 89, 23]
-    }
-  ]
-}));
+// 资源占用图
+const chartOptions = computed<EChartsOption>(() => {
+  const cpu = parseFloat(systemStatus.value?.cpu_usage || '0');
+  const mem = parseFloat(systemStatus.value?.memory_usage || '0');
+  const disk = parseFloat(systemStatus.value?.disk_usage || '0');
 
-const getStatusColor = (status: string) => {
-  return status === 'good' ? 'text-green-500' : status === 'warning' ? 'text-orange-500' : 'text-red-500';
+  return {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        return params.map((p: any) => `${p.seriesName}: ${p.value}%`).join('<br/>');
+      }
+    },
+    radar: {
+      center: ['50%', '55%'],
+      radius: '65%',
+      indicator: [
+        { name: 'CPU 使用率', max: 100 },
+        { name: '内存使用率', max: 100 },
+        { name: '磁盘使用率', max: 100 },
+        { name: '系统负载', max: 100 },
+        { name: '响应速度', max: 100 }
+      ]
+    },
+    series: [
+      {
+        name: '系统资源使用',
+        type: 'radar',
+        data: [
+          {
+            value: [cpu, mem, disk, (cpu + mem + disk) / 3, 100 - (cpu + mem + disk) / 3],
+            name: '当前状态',
+            areaStyle: {
+              color: {
+                type: 'radial',
+                x: 0.5, y: 0.5, r: 0.5,
+                colorStops: [
+                  { offset: 0, color: 'rgba(102, 126, 234, 0.3)' },
+                  { offset: 0.5, color: 'rgba(6, 182, 212, 0.2)' },
+                  { offset: 1, color: 'rgba(16, 185, 129, 0.1)' }
+                ]
+              }
+            },
+            lineStyle: {
+              color: '#667eea',
+              width: 2
+            },
+            itemStyle: {
+              color: '#667eea'
+            }
+          }
+        ]
+      }
+    ]
+  };
+});
+
+async function fetchPerformanceData() {
+  loading.value = true;
+  try {
+    // 尝试获取系统状态
+    const { error, data } = await fetchGetSystemStatus();
+    if (!error && data) {
+      systemStatus.value = data;
+    }
+  } catch (e) {
+    console.error('[PerformanceMetrics] 获取性能数据失败:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+const getStatusColor = (status: 'good' | 'normal' | 'warning') => {
+  const map = {
+    good: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
+    normal: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
+    warning: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400'
+  };
+  return map[status];
 };
 
-const getStatusBg = (status: string) => {
-  return status === 'good' 
-    ? 'bg-green-50 dark:bg-green-900/20' 
-    : status === 'warning' 
-    ? 'bg-orange-50 dark:bg-orange-900/20' 
-    : 'bg-red-50 dark:bg-red-900/20';
+const getColorClasses = (color: string) => {
+  const colorMap: Record<string, { icon: string; bg: string }> = {
+    blue: { icon: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+    green: { icon: 'text-green-500', bg: 'bg-green-50 dark:bg-green-900/20' },
+    orange: { icon: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
+    purple: { icon: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20' }
+  };
+  return colorMap[color] || colorMap.blue;
 };
+
+onMounted(() => {
+  fetchPerformanceData();
+});
 </script>
 
 <template>
   <div class="performance-metrics">
     <NCard>
       <template #header>
-        <div>
-          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">性能指标</h2>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">系统性能实时监控</p>
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">系统性能</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              服务器资源使用情况实时监控
+              <span class="text-blue-500" v-if="systemStatus">（数据来自系统 API）</span>
+            </p>
+          </div>
+          <NButton text @click="fetchPerformanceData">
+            <template #icon>
+              <icon-carbon:renew class="text-lg" />
+            </template>
+            刷新
+          </NButton>
         </div>
       </template>
 
-      <div class="flex flex-col gap-4">
-        <!-- 性能指标卡片 -->
-        <div class="grid grid-cols-2 gap-3">
+      <NSpin :show="loading">
+        <!-- 指标卡片 -->
+        <div class="grid grid-cols-4 gap-4 mb-6">
           <div
-            v-for="metric in performanceData"
-            :key="metric.metric"
-            class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all"
+            v-for="item in performanceData"
+            :key="item.metric"
+            class="metric-card rounded-xl p-4 border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all hover:shadow-md"
           >
-            <div class="flex items-start justify-between mb-2">
-              <div :class="['w-8 h-8 rounded-lg flex items-center justify-center', getStatusBg(metric.status)]">
-                <!-- 使用静态图标组件 -->
-                <icon-carbon:time v-if="metric.icon === 'time'" :class="['text-lg', getStatusColor(metric.status)]" />
-                <icon-carbon:checkmark-outline v-else-if="metric.icon === 'checkmark-outline'" :class="['text-lg', getStatusColor(metric.status)]" />
-                <icon-carbon:cloud-upload v-else-if="metric.icon === 'cloud-upload'" :class="['text-lg', getStatusColor(metric.status)]" />
-                <icon-carbon:cloud-monitoring v-else-if="metric.icon === 'cloud-monitoring'" :class="['text-lg', getStatusColor(metric.status)]" />
+            <div class="flex items-start justify-between mb-3">
+              <div :class="['w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', getColorClasses(item.color).bg]">
+                <icon-carbon:meter v-if="item.icon === 'meter'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                <icon-carbon:data-base v-else-if="item.icon === 'data-base'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                <icon-carbon:document v-else-if="item.icon === 'document'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                <icon-carbon:user-multiple v-else-if="item.icon === 'user-multiple'" :class="['text-xl', getColorClasses(item.color).icon]" />
               </div>
-              <div v-if="metric.trend !== 'stable'" class="flex items-center gap-1 text-xs">
-                <icon-carbon:arrow-up 
-                  v-if="metric.trend === 'up'"
-                  :class="[
-                    'text-xs',
-                    'text-green-500'
-                  ]"
-                />
-                <icon-carbon:arrow-down 
-                  v-else
-                  :class="[
-                    'text-xs',
-                    metric.metric === '平均响应时间' ? 'text-green-500' : 'text-red-500'
-                  ]"
-                />
-                <span :class="[
-                  metric.trend === 'down' && metric.metric === '平均响应时间' 
-                    ? 'text-green-600 dark:text-green-400' 
-                    : metric.trend === 'up' 
-                    ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
-                ]">
-                  {{ metric.change }}
-                </span>
+              <div :class="['inline-flex px-2 py-1 rounded-full text-xs', getStatusColor(item.status)]">
+                {{ item.status === 'good' ? '正常' : item.status === 'normal' ? '一般' : '警告' }}
               </div>
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">{{ metric.metric }}</div>
-            <div class="flex items-end justify-between">
-              <div class="text-xl font-bold text-gray-900 dark:text-white">{{ metric.value }}</div>
-              <div class="text-xs text-gray-400">目标: {{ metric.target }}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ item.metric }}</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ item.value }}</div>
+            <div class="text-xs text-gray-400 dark:text-gray-500">
+              目标：{{ item.target }} | {{ item.description }}
             </div>
           </div>
         </div>
 
-        <!-- 响应时间分布图 -->
-        <div class="mt-2">
-          <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">响应时间分布</div>
-          <div class="chart-container">
-            <VChart :option="responseTimeChartOptions" autoresize />
-          </div>
+        <!-- 资源占用雷达图 -->
+        <div class="chart-container">
+          <VChart :option="chartOptions" autoresize />
         </div>
-
-        <!-- 系统状态摘要 -->
-        <div class="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-          <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-            <icon-carbon:checkmark class="text-lg text-white" />
-          </div>
-          <div class="flex-1">
-            <div class="text-sm font-medium text-green-900 dark:text-green-100">系统运行正常</div>
-            <div class="text-xs text-green-700 dark:text-green-300">所有性能指标均在正常范围内</div>
-          </div>
-        </div>
-      </div>
+      </NSpin>
     </NCard>
   </div>
 </template>
@@ -212,8 +218,16 @@ const getStatusBg = (status: string) => {
 <style scoped lang="scss">
 .performance-metrics {
   .chart-container {
-    height: 200px;
+    height: 380px;
     width: 100%;
+  }
+
+  .metric-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    &:hover {
+      transform: translateY(-2px);
+    }
   }
 }
 </style>

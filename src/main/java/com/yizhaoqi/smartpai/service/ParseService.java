@@ -87,7 +87,7 @@ public class ParseService {
      */
     public void parseAndSave(String fileMd5, InputStream fileStream) throws IOException, TikaException {
         // 使用默认值调用新方法
-        parseAndSave(fileMd5, fileStream, "unknown", "DEFAULT", false);
+        parseAndSave(fileMd5, fileStream, "unknown", "default", false);
     }
 
     private void checkMemoryThreshold() {
@@ -100,7 +100,7 @@ public class ParseService {
         double memoryUsage = (double) usedMemory / maxMemory;
         
         if (memoryUsage > maxMemoryThreshold) {
-            logger.warn("内存使用率过高: {:.2f}%, 触发垃圾回收", memoryUsage * 100);
+            logger.warn("内存使用率过高: {}, 触发垃圾回收", String.format("%.2f%%", memoryUsage * 100));
             System.gc();
             
             // 重新检查
@@ -146,7 +146,7 @@ public class ParseService {
         @Override
         public void endDocument() {
             // 处理文档末尾剩余的最后一部分内容
-            if (buffer.length() > 0) {
+            if (!buffer.isEmpty()) {
                 processParentChunk();
             }
         }
@@ -210,7 +210,7 @@ public class ParseService {
             // 如果单个段落超过chunk大小，需要进一步分割
             if (paragraph.length() > chunkSize) {
                 // 先保存当前chunk
-                if (currentChunk.length() > 0) {
+                if (!currentChunk.isEmpty()) {
                     chunks.add(currentChunk.toString().trim());
                     currentChunk = new StringBuilder();
                 }
@@ -222,7 +222,7 @@ public class ParseService {
             // 如果添加这个段落会超过chunk大小
             else if (currentChunk.length() + paragraph.length() > chunkSize) {
                 // 保存当前chunk
-                if (currentChunk.length() > 0) {
+                if (!currentChunk.isEmpty()) {
                     chunks.add(currentChunk.toString().trim());
                 }
                 // 开始新chunk
@@ -230,7 +230,7 @@ public class ParseService {
             }
             // 可以添加到当前chunk
             else {
-                if (currentChunk.length() > 0) {
+                if (!currentChunk.isEmpty()) {
                     currentChunk.append("\n\n");
                 }
                 currentChunk.append(paragraph);
@@ -238,7 +238,7 @@ public class ParseService {
         }
 
         // 添加最后一个chunk
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             chunks.add(currentChunk.toString().trim());
         }
 
@@ -258,7 +258,7 @@ public class ParseService {
 
         for (String sentence : sentences) {
             if (currentChunk.length() + sentence.length() > chunkSize) {
-                if (currentChunk.length() > 0) {
+                if (!currentChunk.isEmpty()) {
                     chunks.add(currentChunk.toString().trim());
                     currentChunk = new StringBuilder();
                 }
@@ -274,7 +274,7 @@ public class ParseService {
             }
         }
 
-        if (currentChunk.length() > 0) {
+        if (!currentChunk.isEmpty()) {
             chunks.add(currentChunk.toString().trim());
         }
 

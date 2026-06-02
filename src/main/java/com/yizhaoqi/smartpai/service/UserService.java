@@ -1,8 +1,10 @@
 package com.yizhaoqi.smartpai.service;
 
 import com.yizhaoqi.smartpai.exception.CustomException;
+import com.yizhaoqi.smartpai.model.FileUpload;
 import com.yizhaoqi.smartpai.model.OrganizationTag;
 import com.yizhaoqi.smartpai.model.User;
+import com.yizhaoqi.smartpai.repository.FileUploadRepository;
 import com.yizhaoqi.smartpai.repository.OrganizationTagRepository;
 import com.yizhaoqi.smartpai.repository.UserRepository;
 import com.yizhaoqi.smartpai.utils.PasswordUtil;
@@ -37,7 +39,8 @@ public class UserService {
 
     private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     
-    private static final String DEFAULT_ORG_TAG = "DEFAULT";
+    private static final String DEFAULT_ORG_TAG = "default";
+    private static final String ADMIN_ORG_TAG = "admin";
     private static final String DEFAULT_ORG_NAME = "默认组织";
     private static final String DEFAULT_ORG_DESCRIPTION = "系统默认组织标签，自动分配给所有新用户";
     private static final String PRIVATE_TAG_PREFIX = "PRIVATE_";
@@ -49,6 +52,9 @@ public class UserService {
     
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
+    
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
     
     @Autowired
     private OrgTagCacheService orgTagCacheService;
@@ -122,8 +128,22 @@ public class UserService {
 
     /**
      * 确保默认组织标签存在
+     * 同时处理旧版 "DEFAULT" (大写) 标签的数据迁移
      */
     private void ensureDefaultOrgTagExists() {
+        // 先检查是否需要迁移旧版 "DEFAULT" (大写) 标签
+        if (organizationTagRepository.existsByTagId("DEFAULT") && !organizationTagRepository.existsByTagId(DEFAULT_ORG_TAG)) {
+            logger.info("Migrating legacy DEFAULT tag to lowercase 'default'");
+            OrganizationTag legacyTag = organizationTagRepository.findByTagId("DEFAULT").orElse(null);
+            if (legacyTag != null) {
+                legacyTag.setTagId(DEFAULT_ORG_TAG);
+                organizationTagRepository.save(legacyTag);
+            }
+            // 同时更新 users 表和 file_upload 表中的引用
+            migrateOrgTagReferences();
+            logger.info("Legacy DEFAULT tag migration completed");
+        }
+        
         if (!organizationTagRepository.existsByTagId(DEFAULT_ORG_TAG)) {
             logger.info("Creating default organization tag");
             
@@ -132,13 +152,7 @@ public class UserService {
                     .filter(user -> User.Role.ADMIN.equals(user.getRole()))
                     .findFirst();
             
-            User creator;
-            if (adminUser.isPresent()) {
-                creator = adminUser.get();
-            } else {
-                // 如果没有管理员用户，则创建一个系统用户作为创建者
-                creator = createSystemAdminIfNotExists();
-            }
+            User creator = adminUser.orElseGet(this::createSystemAdminIfNotExists);
             
             // 创建默认组织标签
             OrganizationTag defaultTag = new OrganizationTag();
@@ -150,6 +164,35 @@ public class UserService {
             organizationTagRepository.save(defaultTag);
             logger.info("Default organization tag created successfully");
         }
+    }
+    
+    /**
+     * 迁移组织标签引用（更新 users 表和 file_upload 表中的标签ID）
+     */
+    private void migrateOrgTagReferences() {
+        // 更新 users 表
+        List<User> allUsers = userRepository.findAll();
+        for (User user : allUsers) {
+            if (user.getOrgTags() != null && user.getOrgTags().contains("DEFAULT")) {
+                String updatedOrgTags = user.getOrgTags().replace("DEFAULT", DEFAULT_ORG_TAG);
+                user.setOrgTags(updatedOrgTags);
+            }
+            if ("DEFAULT".equals(user.getPrimaryOrg())) {
+                user.setPrimaryOrg(DEFAULT_ORG_TAG);
+            }
+            userRepository.save(user);
+        }
+        
+        // 更新 file_upload 表
+        List<FileUpload> allFiles = fileUploadRepository.findAll();
+        for (FileUpload file : allFiles) {
+            if ("DEFAULT".equals(file.getOrgTag())) {
+                file.setOrgTag(DEFAULT_ORG_TAG);
+                fileUploadRepository.save(file);
+            }
+        }
+        
+        logger.info("Migrated org tag references from 'DEFAULT' to '{}': {} users, scanned all files", DEFAULT_ORG_TAG, allUsers.size());
     }
     
     /**
@@ -322,9 +365,7 @@ public class UserService {
         
         // 确保用户的私人组织标签不会被删除
         Set<String> finalTags = new HashSet<>(orgTags);
-        if (hasPrivateTag && !finalTags.contains(privateTagId)) {
-            finalTags.add(privateTagId);
-        }
+        finalTags.add(privateTagId);
         
         // 将标签列表转换为逗号分隔的字符串
         String orgTagsStr = String.join(",", finalTags);
@@ -606,12 +647,16 @@ public class UserService {
     
     /**
      * 删除组织标签
+     * 系统保护标签（default、admin）不可删除。
+     * 对于分配给用户的标签：自动从用户中移除该标签，并将主组织替换为默认标签。
+     * 对于关联文档的标签：自动将文档的组织标签替换为默认标签。
      * 
      * @param tagId 标签ID
      * @param adminUsername 管理员用户名
+     * @return 删除结果，包含受影响的用户数和文档数
      */
     @Transactional
-    public void deleteOrganizationTag(String tagId, String adminUsername) {
+    public Map<String, Object> deleteOrganizationTag(String tagId, String adminUsername) {
         // 验证操作者是否为管理员
         User admin = userRepository.findByUsername(adminUsername)
                 .orElseThrow(() -> new CustomException("Admin not found", HttpStatus.NOT_FOUND));
@@ -624,44 +669,70 @@ public class UserService {
         OrganizationTag tag = organizationTagRepository.findByTagId(tagId)
                 .orElseThrow(() -> new CustomException("Organization tag not found", HttpStatus.NOT_FOUND));
         
-        // 检查是否是特殊标签（如默认标签）
+        // 检查是否是系统保护标签（default 和 admin 不可删除）
         if (DEFAULT_ORG_TAG.equals(tagId)) {
-            throw new CustomException("Cannot delete the default organization tag", HttpStatus.BAD_REQUEST);
+            throw new CustomException("默认组织标签是系统内置标签，所有新用户都会自动分配，无法删除", HttpStatus.BAD_REQUEST);
+        }
+        if (ADMIN_ORG_TAG.equals(tagId)) {
+            throw new CustomException("管理员组织标签是系统内置标签，用于管理员权限控制，无法删除", HttpStatus.BAD_REQUEST);
         }
         
-        // 检查是否有子标签
+        // 检查是否是私人标签（PRIVATE_ 前缀的标签不可删除）
+        if (tagId.startsWith(PRIVATE_TAG_PREFIX)) {
+            throw new CustomException("私人空间标签是用户个人专属标签，仅用户本人可访问，无法删除", HttpStatus.BAD_REQUEST);
+        }
+        
+        // 检查是否有子标签 - 自动将子标签重新分配到被删除标签的父标签
         List<OrganizationTag> children = organizationTagRepository.findByParentTag(tagId);
+        int reassignedChildrenCount = 0;
         if (!children.isEmpty()) {
-            throw new CustomException("Cannot delete a tag with child tags", HttpStatus.BAD_REQUEST);
+            String newParentTag = tag.getParentTag();
+            for (OrganizationTag child : children) {
+                child.setParentTag(newParentTag);
+                organizationTagRepository.save(child);
+                reassignedChildrenCount++;
+            }
+            logger.info("Reassigned {} child tags of '{}' to parent '{}'", children.size(), tagId, newParentTag);
         }
         
-        // 检查是否有用户使用此标签
-        List<User> users = userRepository.findAll();
-        for (User user : users) {
+        // 从用户中自动移除该标签，并将主组织替换为默认标签
+        List<User> allUsers = userRepository.findAll();
+        int affectedUserCount = 0;
+        for (User user : allUsers) {
             if (user.getOrgTags() != null && !user.getOrgTags().isEmpty()) {
                 Set<String> userTags = new HashSet<>(Arrays.asList(user.getOrgTags().split(",")));
-                if (userTags.contains(tagId)) {
-                    throw new CustomException("Cannot delete a tag that is assigned to users", HttpStatus.CONFLICT);
-                }
-                
-                // 检查是否被用作主组织标签
-                if (tagId.equals(user.getPrimaryOrg())) {
-                    throw new CustomException("Cannot delete a tag that is used as primary organization", HttpStatus.CONFLICT);
+                if (userTags.remove(tagId)) {
+                    affectedUserCount++;
+                    // 确保用户至少有默认标签
+                    userTags.add(DEFAULT_ORG_TAG);
+                    user.setOrgTags(String.join(",", userTags));
+                    
+                    // 如果被删除的标签是用户的主组织，替换为默认标签
+                    if (tagId.equals(user.getPrimaryOrg())) {
+                        user.setPrimaryOrg(DEFAULT_ORG_TAG);
+                    }
+                    userRepository.save(user);
+                    
+                    // 清除用户缓存
+                    orgTagCacheService.deleteUserOrgTagsCache(user.getUsername());
+                    orgTagCacheService.deleteUserEffectiveTagsCache(user.getUsername());
                 }
             }
         }
+        if (affectedUserCount > 0) {
+            logger.info("Unassigned tag '{}' from {} users, reassigned to default tag", tagId, affectedUserCount);
+        }
         
-        // 检查是否有文档使用此标签（此处应检查file_upload表中的org_tag字段）
-        // 由于我们没有直接访问FileUploadRepository，这里采用简化的方式检查
-        // 实际实现中，应该注入FileUploadRepository并使用正确的查询方法
-        try {
-            long fileCount = 0; // 应该是 fileUploadRepository.countByOrgTag(tagId);
-            if (fileCount > 0) {
-                throw new CustomException("Cannot delete a tag that is associated with documents", HttpStatus.CONFLICT);
+        // 将关联文档的组织标签替换为默认标签
+        List<FileUpload> filesWithTag = fileUploadRepository.findByOrgTag(tagId);
+        int affectedDocumentCount = 0;
+        if (!filesWithTag.isEmpty()) {
+            for (FileUpload file : filesWithTag) {
+                file.setOrgTag(DEFAULT_ORG_TAG);
+                fileUploadRepository.save(file);
+                affectedDocumentCount++;
             }
-        } catch (Exception e) {
-            logger.error("Error checking file usage of tag: {}", tagId, e);
-            throw new CustomException("Failed to check if tag is used by documents", HttpStatus.INTERNAL_SERVER_ERROR);
+            logger.info("Reassigned {} documents from tag '{}' to default tag", filesWithTag.size(), tagId);
         }
         
         // 删除标签
@@ -670,7 +741,15 @@ public class UserService {
         // 清除所有标签缓存，因为层级关系可能变化
         orgTagCacheService.invalidateAllEffectiveTagsCache();
         
-        logger.info("Organization tag deleted successfully: {}", tagId);
+        logger.info("Organization tag deleted successfully: {}, affected users: {}, affected documents: {}, reassigned children: {}", 
+                    tagId, affectedUserCount, affectedDocumentCount, reassignedChildrenCount);
+        
+        // 返回删除结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("affectedUserCount", affectedUserCount);
+        result.put("affectedDocumentCount", affectedDocumentCount);
+        result.put("reassignedChildrenCount", reassignedChildrenCount);
+        return result;
     }
     
     /**
