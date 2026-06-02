@@ -55,3 +55,20 @@ CREATE TABLE document_vectors (
                                   org_tag VARCHAR(50) COMMENT '文件所属组织标签',
                                   is_public BOOLEAN NOT NULL DEFAULT FALSE COMMENT '文件是否公开'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档向量存储表';
+
+CREATE TABLE knowledge_bases (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    kb_id VARCHAR(50) NOT NULL COMMENT '知识库唯一标识',
+    name VARCHAR(100) NOT NULL COMMENT '知识库名称',
+    description TEXT COMMENT '知识库描述',
+    org_tag VARCHAR(50) DEFAULT NULL COMMENT '关联的组织标签（可选，用于权限控制）',
+    is_public BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否公开',
+    icon VARCHAR(50) DEFAULT 'folder' COMMENT '知识库图标标识',
+    created_by BIGINT NOT NULL COMMENT '创建者ID',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_kb_id (kb_id),
+    INDEX idx_org_tag (org_tag),
+    INDEX idx_created_by (created_by),
+    CONSTRAINT fk_kb_created_by FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { EChartsOption } from 'echarts';
-import { request } from '@/service/request';
+import { fetchGetKnowledgeBaseStats } from '@/service/api/knowledge-base';
 
 defineOptions({
   name: 'KnowledgeStats'
@@ -9,6 +9,7 @@ defineOptions({
 
 interface KnowledgeBaseItem {
   name: string;
+  kbId: string;
   docCount: number;
   totalSize: number;
   updateTime: string;
@@ -100,41 +101,20 @@ function formatTime(dateStr: string): string {
   }
 }
 
-/** 从后端获取文件列表，按组织标签聚合 */
+/** 从后端独立的知识库统计API获取数据 */
 async function fetchKnowledgeStats() {
   loading.value = true;
   try {
-    const { error, data } = await request<any[]>({ url: '/documents/uploads' });
-    if (!error && data && data.length > 0) {
-      // 按 orgTagName 聚合
-      const tagMap = new Map<string, { count: number; totalSize: number; latestTime: string }>();
-      
-      data.forEach((file: any) => {
-        const tagName = file.orgTagName || '未分类';
-        const existing = tagMap.get(tagName);
-        if (existing) {
-          existing.count++;
-          existing.totalSize += file.totalSize || 0;
-          if (file.createdAt && (!existing.latestTime || file.createdAt > existing.latestTime)) {
-            existing.latestTime = file.createdAt;
-          }
-        } else {
-          tagMap.set(tagName, {
-            count: 1,
-            totalSize: file.totalSize || 0,
-            latestTime: file.createdAt || ''
-          });
-        }
-      });
-
-      knowledgeBases.value = Array.from(tagMap.entries())
-        .map(([name, info]) => ({
-          name,
-          docCount: info.count,
-          totalSize: info.totalSize,
-          updateTime: formatTime(info.latestTime)
-        }))
-        .sort((a, b) => b.docCount - a.docCount);
+    const { error, data } = await fetchGetKnowledgeBaseStats();
+    if (!error && data) {
+      // 使用独立的知识库数据，不再按组织标签聚合
+      knowledgeBases.value = data.knowledgeBases.map((kb: Api.KnowledgeBase.KnowledgeBaseInfo) => ({
+        name: kb.name,
+        kbId: kb.kbId,
+        docCount: kb.fileCount,
+        totalSize: kb.totalSize,
+        updateTime: formatTime(kb.updatedAt)
+      })).sort((a, b) => b.docCount - a.docCount);
     } else {
       knowledgeBases.value = [];
     }
@@ -157,7 +137,7 @@ onMounted(() => {
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">知识库统计</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">按组织标签统计的文档分布</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">按知识库统计的文档分布</p>
           </div>
           <NButton text @click="fetchKnowledgeStats">
             <template #icon>
@@ -170,8 +150,8 @@ onMounted(() => {
       <NSpin :show="loading">
         <div v-if="knowledgeBases.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400">
           <icon-carbon:document-blank class="text-4xl mb-3" />
-          <p class="text-sm">暂无文档数据</p>
-          <p class="text-xs mt-1">上传文档后将在此显示统计</p>
+          <p class="text-sm">暂无知识库数据</p>
+          <p class="text-xs mt-1">创建知识库后将在此显示统计</p>
         </div>
 
         <div v-else class="flex flex-col gap-4">
@@ -184,7 +164,7 @@ onMounted(() => {
           <div class="knowledge-list space-y-2">
             <div
               v-for="(kb, index) in knowledgeBases"
-              :key="kb.name"
+              :key="kb.kbId"
               class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               <div class="flex items-center gap-3 flex-1">

@@ -9,6 +9,7 @@ import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
+import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 
 const appStore = useAppStore();
 
@@ -18,22 +19,12 @@ const previewFileName = ref('');
 const previewFileMd5 = ref('');
 
 // 筛选器状态
-const selectedKnowledgeBase = ref('全部');
 const selectedCategory = ref('全部');
 const selectedStatus = ref('全部类型');
 const selectedTimeRange = ref('全部时间');
 
-// 知识库列表 - 从后端数据动态构建
-interface KnowledgeBaseItem {
-  id: string;
-  name: string;
-  icon: string;
-  fileCount: number;
-  chunkCount: number;
-  status: string;
-}
-
-const knowledgeBases = ref<KnowledgeBaseItem[]>([]);
+// 知识库列表 - 从后端独立的知识库API获取
+const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
 const activeKnowledgeBase = ref('');
 
 // 右侧面板统计数据
@@ -186,49 +177,21 @@ onMounted(async () => {
   await refreshKnowledgeBaseStats();
 });
 
-/** 从后端数据刷新左侧知识库列表和右侧面板统计 */
+/** 从后端独立的知识库API获取知识库列表和统计 */
 async function refreshKnowledgeBaseStats() {
   try {
-    const { error, data } = await request<Api.KnowledgeBase.List[]>({ url: '/documents/uploads' });
+    const { error, data } = await fetchGetKnowledgeBases();
     if (!error && data) {
-      // 按 orgTagName 聚合，构建知识库列表
-      const tagMap = new Map<string, { count: number; size: number }>();
-      
-      data.forEach((file: Api.KnowledgeBase.List) => {
-        const tagName = file.orgTagName || '未分类';
-        const existing = tagMap.get(tagName);
-        if (existing) {
-          existing.count++;
-          existing.size += file.totalSize || 0;
-        } else {
-          tagMap.set(tagName, { count: 1, size: file.totalSize || 0 });
-        }
-      });
-
-      // 图标映射（使用标准 Carbon 图标）
-      const iconPool = [
-        'enterprise', 'product', 'code',
-        'tool-kit', 'chart-line', 'folder',
-        'catalog', 'bookmark'
-      ];
-
-      knowledgeBases.value = Array.from(tagMap.entries()).map(([name, info], index) => ({
-        id: String(index + 1),
-        name,
-        icon: iconPool[index % iconPool.length],
-        fileCount: info.count,
-        chunkCount: Math.floor(info.size / 4096), // 估算 chunk 数
-        status: '正常'
-      }));
+      knowledgeBases.value = data;
 
       if (knowledgeBases.value.length > 0 && !activeKnowledgeBase.value) {
-        activeKnowledgeBase.value = knowledgeBases.value[0].id;
+        activeKnowledgeBase.value = knowledgeBases.value[0].kbId;
       }
 
       // 更新右侧面板统计
       panelStats.value = {
         knowledgeBaseCount: knowledgeBases.value.length,
-        documentCount: data.length,
+        documentCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.fileCount, 0),
         chunkCount: knowledgeBases.value.reduce((sum, kb) => sum + kb.chunkCount, 0)
       };
     }
@@ -237,11 +200,10 @@ async function refreshKnowledgeBaseStats() {
   }
 }
 
-/** 异步获取列表函数 该函数主要用于更新或初始化上传任务列表 它首先调用getData函数获取数据，然后根据获取到的数据状态更新任务列表 */
+/** 异步获取列表函数 */
 async function getList() {
   console.log('[知识库] 开始获取文件列表');
 
-  // 等待获取最新数据
   await getData();
 
   console.log('[知识库] 获取到原始数据，数量:', data.value.length);
@@ -258,13 +220,9 @@ async function getList() {
     return;
   }
 
-  // 遍历获取到的数据，以处理每个项目
   data.value.forEach((item, dataIndex) => {
-    // 检查项目状态是否为已完成
     if (item.status === UploadStatus.Completed) {
-      // 查找任务列表中是否有匹配的文件MD5
       const index = tasks.value.findIndex(task => task.fileMd5 === item.fileMd5);
-      // 如果找到匹配项，则更新其状态
       if (index !== -1) {
         tasks.value[index].status = UploadStatus.Completed;
         console.log(`[知识库] 更新现有任务[${index}]:`, {
@@ -272,7 +230,6 @@ async function getList() {
           fileMd5: item.fileMd5
         });
       } else {
-        // 如果没有找到匹配项，则将该项目添加到任务列表中
         tasks.value.push(item);
         console.log(`[知识库] 添加新任务[${tasks.value.length - 1}]:`, {
           fileName: item.fileName,
@@ -280,7 +237,6 @@ async function getList() {
         });
       }
     } else if (!tasks.value.some(task => task.fileMd5 === item.fileMd5)) {
-      // 如果项目状态不是已完成，并且任务列表中没有相同的文件MD5，则将该项目的状态设置为中断，并添加到任务列表中
       item.status = UploadStatus.Break;
       tasks.value.push(item);
       console.log(`[知识库] 添加中断任务[${tasks.value.length - 1}]:`, {
@@ -291,13 +247,6 @@ async function getList() {
   });
 
   console.log('[知识库] 任务列表处理完成，总数:', tasks.value.length);
-  tasks.value.forEach((task, index) => {
-    console.log(`[知识库] 最终任务[${index}]:`, {
-      fileName: task.fileName,
-      fileMd5: task.fileMd5,
-      status: task.status
-    });
-  });
 }
 
 async function handleDelete(fileMd5: string) {
@@ -309,7 +258,6 @@ async function handleDelete(fileMd5: string) {
     });
   }
 
-  // 如果文件一个分片也没有上传完成，则直接删除
   if (tasks.value[index].uploadedChunks && tasks.value[index].uploadedChunks.length === 0) {
     tasks.value.splice(index, 1);
     return;
@@ -378,7 +326,6 @@ function renderResumeUploadButton(row: Api.KnowledgeBase.UploadTask) {
   return null;
 }
 
-// 任务列表存在文件，直接续传
 function resumeUpload(row: Api.KnowledgeBase.UploadTask) {
   row.status = UploadStatus.Pending;
   store.startUpload();
@@ -454,7 +401,7 @@ async function onBeforeUpload(
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-bold text-gray-900 dark:text-white">知识库列表</h2>
-            <NButton text circle size="tiny">
+            <NButton text circle size="tiny" @click="handleCreateKb">
               <template #icon>
                 <icon-carbon:add class="text-lg" />
               </template>
@@ -472,34 +419,34 @@ async function onBeforeUpload(
         <div class="flex-1 overflow-y-auto p-3 space-y-2">
           <div
             v-for="kb in knowledgeBases"
-            :key="kb.id"
+            :key="kb.kbId"
             :class="[
               'knowledge-base-card p-4 rounded-xl cursor-pointer transition-all',
-              activeKnowledgeBase === kb.id
+              activeKnowledgeBase === kb.kbId
                 ? 'bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-500'
                 : 'bg-gray-50 dark:bg-gray-700/50 border-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600'
             ]"
-            @click="activeKnowledgeBase = kb.id"
+            @click="activeKnowledgeBase = kb.kbId"
           >
             <div class="flex items-start gap-3 mb-3">
               <div :class="[
                 'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                activeKnowledgeBase === kb.id ? 'bg-blue-100 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-600'
+                activeKnowledgeBase === kb.kbId ? 'bg-blue-100 dark:bg-blue-800' : 'bg-gray-100 dark:bg-gray-600'
               ]">
-                <icon-carbon:enterprise v-if="kb.icon === 'enterprise'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:product v-else-if="kb.icon === 'product'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:code v-else-if="kb.icon === 'code'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:tool-kit v-else-if="kb.icon === 'tool-kit'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:chart-line v-else-if="kb.icon === 'chart-line'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:folder v-else-if="kb.icon === 'folder'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:catalog v-else-if="kb.icon === 'catalog'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:bookmark v-else-if="kb.icon === 'bookmark'" :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
-                <icon-carbon:folder v-else :class="['text-lg', activeKnowledgeBase === kb.id ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:enterprise v-if="kb.icon === 'enterprise'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:product v-else-if="kb.icon === 'product'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:code v-else-if="kb.icon === 'code'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:tool-kit v-else-if="kb.icon === 'tool-kit'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:chart-line v-else-if="kb.icon === 'chart-line'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:folder v-else-if="kb.icon === 'folder'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:catalog v-else-if="kb.icon === 'catalog'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:bookmark v-else-if="kb.icon === 'bookmark'" :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
+                <icon-carbon:data-base v-else :class="['text-lg', activeKnowledgeBase === kb.kbId ? 'text-blue-600' : 'text-gray-600']" />
               </div>
               <div class="flex-1 min-w-0">
                 <h3 :class="[
                   'text-sm font-medium mb-1',
-                  activeKnowledgeBase === kb.id ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'
+                  activeKnowledgeBase === kb.kbId ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'
                 ]">
                   {{ kb.name }}
                 </h3>
@@ -512,11 +459,8 @@ async function onBeforeUpload(
             </div>
             <div class="flex items-center justify-between">
               <NTag :type="kb.status === '正常' ? 'success' : 'warning'" size="small">{{ kb.status }}</NTag>
-              <NButton text size="tiny">
-                <template #icon>
-                  <icon-carbon:overflow-menu-horizontal />
-                </template>
-              </NButton>
+              <NTag v-if="kb.isPublic" type="info" size="small">公开</NTag>
+              <NTag v-else type="warning" size="small">私有</NTag>
             </div>
           </div>
         </div>
@@ -653,7 +597,7 @@ async function onBeforeUpload(
                 </div>
               </div>
               <div class="flex items-center gap-1 text-xs text-gray-500">
-                <span>按组织标签分类</span>
+                <span>独立管理单元</span>
               </div>
             </div>
 

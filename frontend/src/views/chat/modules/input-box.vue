@@ -85,13 +85,28 @@ const handShortcut = (e: KeyboardEvent) => {
   }
 };
 
-// 知识库选择器
-const selectedKnowledgeBase = ref('企业知识库（12）');
-const knowledgeBaseOptions = [
-  { label: '企业知识库（12）', value: '企业知识库（12）' },
-  { label: '产品知识库', value: '产品知识库' },
-  { label: '技术文档库', value: '技术文档库' }
-];
+// 知识库选择器 - 从后端独立的知识库API动态获取
+import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
+
+const selectedKnowledgeBase = ref('');
+const knowledgeBaseOptions = ref<{ label: string; value: string }[]>([]);
+
+async function loadKnowledgeBaseOptions() {
+  const { error, data } = await fetchGetKnowledgeBases();
+  if (!error && data) {
+    knowledgeBaseOptions.value = data.map(kb => ({
+      label: `${kb.name}（${kb.fileCount}）`,
+      value: kb.kbId
+    }));
+    if (knowledgeBaseOptions.value.length > 0 && !selectedKnowledgeBase.value) {
+      selectedKnowledgeBase.value = knowledgeBaseOptions.value[0].value;
+    }
+  }
+}
+
+onMounted(() => {
+  loadKnowledgeBaseOptions();
+});
 </script>
 
 <template>

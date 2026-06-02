@@ -151,6 +151,34 @@ declare namespace Api {
       mergedAt?: string;
       requestIds?: string[]; // 请求ID，用于取消上传
     }
+
+    /** 知识库信息（独立于组织标签） */
+    interface KnowledgeBaseInfo {
+      id: number;
+      kbId: string;
+      name: string;
+      description: string;
+      orgTag: string | null;
+      isPublic: boolean;
+      icon: string;
+      fileCount: number;
+      totalSize: number;
+      chunkCount: number;
+      status: string;
+      createdBy: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    /** 知识库统计概览 */
+    interface KnowledgeBaseStats {
+      knowledgeBaseCount: number;
+      documentCount: number;
+      totalSize: number;
+      chunkCount: number;
+      knowledgeBases: KnowledgeBaseInfo[];
+    }
+
     type List = Common.PaginatingQueryRecord<UploadTask>;
 
     type Merge = Pick<UploadTask, 'fileMd5' | 'fileName'>;

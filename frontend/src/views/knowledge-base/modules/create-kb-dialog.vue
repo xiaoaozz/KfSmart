@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fetchCreateKnowledgeBase } from '@/service/api/knowledge-base';
+
 defineOptions({
   name: 'CreateKbDialog'
 });
@@ -18,15 +20,14 @@ function createDefaultModel() {
     name: '',
     description: '',
     orgTag: null as string | null,
-    orgTagName: '' as string,
-    isPublic: false
+    isPublic: false,
+    icon: 'folder'
   };
 }
 
 const rules = ref<FormRules>({
   name: defaultRequiredRule,
   description: defaultRequiredRule,
-  orgTag: defaultRequiredRule,
   isPublic: defaultRequiredRule
 });
 
@@ -37,37 +38,38 @@ function close() {
 function onUpdate(option: unknown) {
   if (option) {
     const tag = option as Api.OrgTag.Item;
-    model.value.orgTagName = tag.name;
+    // 只记录orgTag值，不再混淆标签名称与知识库名称
   }
 }
+
+// 图标选项
+const iconOptions = [
+  { label: '文件夹', value: 'folder' },
+  { label: '企业', value: 'enterprise' },
+  { label: '产品', value: 'product' },
+  { label: '代码', value: 'code' },
+  { label: '工具箱', value: 'tool-kit' },
+  { label: '数据分析', value: 'chart-line' },
+  { label: '目录', value: 'catalog' },
+  { label: '书签', value: 'bookmark' }
+];
 
 async function handleSubmit() {
   await validate();
   loading.value = true;
 
   try {
-    // 如果是管理员，直接创建组织标签作为新的知识库
-    if (authStore.isAdmin) {
-      const tagId = model.value.orgTagName || model.value.name;
-      const { error } = await request({
-        url: '/admin/org-tags',
-        method: 'POST',
-        data: {
-          tagId,
-          name: model.value.name,
-          description: model.value.description,
-          parentTag: model.value.orgTag
-        }
-      });
-      if (!error) {
-        window.$message?.success('知识库创建成功');
-        close();
-        emit('submitted');
-      }
-    } else {
-      // 普通用户使用已有的组织标签作为知识库
-      // 只需要记录选择，后续上传文件时使用这个标签即可
-      window.$message?.success('知识库配置已保存，上传文档后将自动归入该知识库');
+    // 调用独立的知识库创建API
+    const { error, data } = await fetchCreateKnowledgeBase({
+      name: model.value.name,
+      description: model.value.description,
+      orgTag: model.value.orgTag,
+      isPublic: model.value.isPublic,
+      icon: model.value.icon
+    });
+
+    if (!error) {
+      window.$message?.success('知识库创建成功');
       close();
       emit('submitted');
     }
@@ -98,25 +100,29 @@ const emit = defineEmits<{ submitted: [] }>();
     class="w-560px!"
   >
     <NForm ref="formRef" :model="model" :rules="rules" label-placement="left" :label-width="100" mt-10>
-      <!-- 管理员：可以创建新标签 -->
-      <NFormItem v-if="authStore.isAdmin" label="知识库名称" path="name">
+      <!-- 知识库名称 -->
+      <NFormItem label="知识库名称" path="name">
         <NInput v-model:value="model.name" placeholder="请输入知识库名称，如：研发文档库" maxlength="60" />
       </NFormItem>
 
-      <!-- 普通用户：选择已有的组织标签 -->
-      <NFormItem v-else label="所属知识库" path="orgTag">
-        <TheSelect
-          v-model:value="model.orgTag"
-          url="/users/org-tags"
-          key-field="orgTagDetails"
-          label-field="name"
-          value-field="tagId"
-          @change="onUpdate"
-        />
+      <!-- 知识库图标 -->
+      <NFormItem label="图标" path="icon">
+        <NSelect v-model:value="model.icon" :options="iconOptions" placeholder="选择知识库图标" />
       </NFormItem>
 
-      <!-- 管理员：选择上级组织标签 -->
-      <NFormItem v-if="authStore.isAdmin" label="上级组织" path="orgTag">
+      <!-- 关联组织标签（可选，用于权限控制） -->
+      <NFormItem label="关联组织标签" path="orgTag">
+        <template #label>
+          <div class="flex items-center gap-1">
+            <span>关联组织标签</span>
+            <NTooltip>
+              <template #trigger>
+                <icon-carbon:information class="text-gray-400 text-sm" />
+              </template>
+              组织标签用于权限控制，决定谁可以访问此知识库中的文档。此为可选设置。
+            </NTooltip>
+          </div>
+        </template>
         <OrgTagCascader v-model:value="model.orgTag" @change="onUpdate" />
       </NFormItem>
 
