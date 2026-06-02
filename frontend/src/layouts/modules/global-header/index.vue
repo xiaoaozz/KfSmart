@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { useFullscreen } from '@vueuse/core';
 import { computed, ref } from 'vue';
-import { useAppStore } from '@/store/modules/app';
-import { useThemeStore } from '@/store/modules/theme';
 import { useAuthStore } from '@/store/modules/auth';
 import GlobalSearch from '../global-search/index.vue';
-import ThemeButton from './components/theme-button.vue';
 import UserAvatar from './components/user-avatar.vue';
-import GlobalLogo from '../global-logo/index.vue';
 
 defineOptions({
   name: 'GlobalHeader'
@@ -20,12 +15,7 @@ interface Props {
 
 defineProps<Props>();
 
-const appStore = useAppStore();
-const themeStore = useThemeStore();
 const authStore = useAuthStore();
-const { isFullscreen, toggle } = useFullscreen();
-
-const isDev = import.meta.env.DEV;
 
 // 获取当前组织名称（从本地存储或 store）
 const currentOrg = computed(() => {
@@ -56,15 +46,14 @@ const notificationCount = ref(12);
       </div>
     </div>
 
-    <!-- 中间：全局搜索 -->
-    <div class="flex-1 flex justify-center px-12">
-      <div class="w-full max-w-600px">
-        <GlobalSearch />
-      </div>
-    </div>
+    <!-- 中间：占位 -->
+    <div class="flex-1" />
 
     <!-- 右侧：操作按钮组 -->
     <div class="flex items-center gap-3 px-6">
+      <!-- 全局搜索 -->
+      <GlobalSearch />
+
       <!-- 通知 -->
       <NButton text class="relative p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all">
         <icon-carbon:notification class="text-gray-600 dark:text-gray-400 text-xl" />
@@ -80,27 +69,6 @@ const notificationCount = ref(12);
       <NButton text class="p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-all">
         <icon-carbon:help class="text-gray-600 dark:text-gray-400 text-xl" />
       </NButton>
-
-      <!-- 全屏 -->
-      <FullScreen v-if="!appStore.isMobile" :full="isFullscreen" @click="toggle" />
-
-      <!-- 语言切换 -->
-      <LangSwitch
-        v-if="themeStore.header.multilingual.visible"
-        :lang="appStore.locale"
-        :lang-options="appStore.localeOptions"
-        @change-lang="appStore.changeLocale"
-      />
-
-      <!-- 主题切换 -->
-      <ThemeSchemaSwitch
-        :theme-schema="themeStore.themeScheme"
-        :is-dark="themeStore.darkMode"
-        @switch="themeStore.toggleThemeScheme"
-      />
-
-      <!-- 主题设置按钮（开发模式） -->
-      <ThemeButton v-if="isDev" />
 
       <!-- 用户头像和下拉菜单 -->
       <div class="ml-3 pl-3 border-l border-gray-200 dark:border-gray-700">
