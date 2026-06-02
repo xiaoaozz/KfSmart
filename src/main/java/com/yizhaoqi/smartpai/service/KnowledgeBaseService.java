@@ -1,5 +1,6 @@
 package com.yizhaoqi.smartpai.service;
 
+import com.yizhaoqi.smartpai.model.FileUpload;
 import com.yizhaoqi.smartpai.model.KnowledgeBase;
 import com.yizhaoqi.smartpai.model.User;
 import com.yizhaoqi.smartpai.repository.KnowledgeBaseRepository;
