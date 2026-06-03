@@ -147,7 +147,7 @@ services:
       else
         echo 'analysis-ik plugin already installed.';
       fi;
-      /usr/local/bin/docker-entrypoint.sh
+      exec /usr/local/bin/docker-entrypoint.sh
       "
     healthcheck:
       test: [ 'CMD', 'curl', '-s', 'http://localhost:9200/_cluster/health?pretty' ]

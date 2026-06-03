@@ -10,8 +10,18 @@ import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
 import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBaseDocuments } from '@/service/api/knowledge-base';
+import debounce from 'lodash-es/debounce';
 
 const appStore = useAppStore();
+
+// 搜索防抖
+const debouncedRefreshKnowledgeBaseStats = debounce(() => {
+  refreshKnowledgeBaseStats();
+}, 300);
+
+const onKbSearchInput = () => {
+  debouncedRefreshKnowledgeBaseStats();
+};
 
 // 文件预览相关状态
 const previewVisible = ref(false);
@@ -533,7 +543,7 @@ async function onBeforeUpload(
             <h2 class="text-sm font-bold text-gray-900 dark:text-white">知识库列表</h2>
           </div>
           <!-- 搜索框 -->
-          <NInput v-model:value="kbSearchKeyword" placeholder="搜索知识库" size="small" @input="refreshKnowledgeBaseStats">
+          <NInput v-model:value="kbSearchKeyword" placeholder="搜索知识库" size="small" @input="onKbSearchInput">
             <template #prefix>
               <icon-carbon:search class="text-gray-400" />
             </template>

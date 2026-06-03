@@ -220,13 +220,19 @@ public class KnowledgeBaseController {
         String username = null;
         try {
             username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
             
             LogUtils.logBusiness("GET_KB_DETAIL", username, "获取知识库详情: kbId=%s", kbId);
             
-            Map<String, Object> detail = knowledgeBaseService.getKnowledgeBaseDetail(kbId);
+            Map<String, Object> detail = knowledgeBaseService.getKnowledgeBaseDetail(kbId, username, orgTags);
             
             monitor.end("获取知识库详情成功");
             return ResponseEntity.ok(Map.of("code", 200, "message", "获取知识库详情成功", "data", detail));
+        } catch (SecurityException e) {
+            LogUtils.logBusinessError("GET_KB_DETAIL", username, "知识库访问权限不足: %s", e, e.getMessage());
+            monitor.end("权限不足: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", 403, "message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             LogUtils.logBusinessError("GET_KB_DETAIL", username, "获取知识库详情失败: %s", e, e.getMessage());
             monitor.end("获取失败: " + e.getMessage());
@@ -253,6 +259,7 @@ public class KnowledgeBaseController {
         String username = null;
         try {
             username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
             
             LogUtils.logBusiness("UPDATE_KB", username, "更新知识库: kbId=%s", kbId);
             
@@ -263,11 +270,17 @@ public class KnowledgeBaseController {
                 request.orgTag(),
                 request.isPublic(),
                 request.icon(),
-                username
+                username,
+                orgTags
             );
             
             monitor.end("更新知识库成功");
             return ResponseEntity.ok(Map.of("code", 200, "message", "更新知识库成功", "data", kb));
+        } catch (SecurityException e) {
+            LogUtils.logBusinessError("UPDATE_KB", username, "知识库修改权限不足: %s", e, e.getMessage());
+            monitor.end("权限不足: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", 403, "message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             LogUtils.logBusinessError("UPDATE_KB", username, "更新知识库失败: %s", e, e.getMessage());
             monitor.end("更新失败: " + e.getMessage());
@@ -293,13 +306,19 @@ public class KnowledgeBaseController {
         String username = null;
         try {
             username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            String orgTags = jwtUtils.extractOrgTagsFromToken(token.replace("Bearer ", ""));
             
             LogUtils.logBusiness("DELETE_KB", username, "删除知识库: kbId=%s", kbId);
             
-            knowledgeBaseService.deleteKnowledgeBase(kbId, username);
+            knowledgeBaseService.deleteKnowledgeBase(kbId, username, orgTags);
             
             monitor.end("删除知识库成功");
             return ResponseEntity.ok(Map.of("code", 200, "message", "删除知识库成功"));
+        } catch (SecurityException e) {
+            LogUtils.logBusinessError("DELETE_KB", username, "知识库删除权限不足: %s", e, e.getMessage());
+            monitor.end("权限不足: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("code", 403, "message", e.getMessage()));
         } catch (IllegalArgumentException e) {
             LogUtils.logBusinessError("DELETE_KB", username, "删除知识库失败: %s", e, e.getMessage());
             monitor.end("删除失败: " + e.getMessage());

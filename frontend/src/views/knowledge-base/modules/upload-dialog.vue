@@ -51,12 +51,12 @@ function createDefaultModel(): Api.KnowledgeBase.Form {
   };
 }
 
-const rules = ref<FormRules>({
+const rules = computed<FormRules>(() => ({
   kbId: defaultRequiredRule,
-  orgTag: defaultRequiredRule,
+  orgTag: authStore.isAdmin ? defaultRequiredRule : undefined,
   isPublic: defaultRequiredRule,
   fileList: defaultRequiredRule
-});
+}));
 
 function close() {
   visible.value = false;

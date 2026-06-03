@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.*;
 
 /**
@@ -88,6 +89,33 @@ public class KnowledgeBaseService {
         }
         // 用户所属组织标签关联的知识库
         return kb.getOrgTag() != null && userOrgTags.contains(kb.getOrgTag());
+    }
+
+    /**
+     * 判断用户是否无权修改该知识库（更严格的权限检查：非所有者且非管理员）
+     */
+    private boolean isNotModifiable(KnowledgeBase kb, String username, Set<String> userOrgTags) {
+        // 知识库创建者有权修改
+        if (kb.getCreatedBy() != null && kb.getCreatedBy().getUsername().equals(username)) {
+            return false;
+        }
+        // 管理员有权修改（通过组织标签匹配判断，组织标签关联的用户视为管理员）
+        return kb.getOrgTag() == null || !userOrgTags.contains(kb.getOrgTag());
+    }
+
+    /**
+     * 解析用户组织标签集合（包含层级权限）
+     */
+    private Set<String> resolveUserOrgTags(String username, String orgTags) {
+        Set<String> userOrgTags = new HashSet<>();
+        if (orgTags != null && !orgTags.isEmpty()) {
+            userOrgTags.addAll(Arrays.asList(orgTags.split(",")));
+        }
+        List<String> effectiveTags = orgTagCacheService.getUserEffectiveOrgTags(username);
+        if (effectiveTags != null) {
+            userOrgTags.addAll(effectiveTags);
+        }
+        return userOrgTags;
     }
 
     /**
@@ -223,12 +251,12 @@ public class KnowledgeBaseService {
     }
     
     /**
-     * 更新知识库
+     * 更新知识库（带权限校验）
      */
     @Transactional
     public KnowledgeBase updateKnowledgeBase(String kbId, String name, String description, 
                                               String orgTag, Boolean isPublic, String icon, 
-                                              String operatorUsername) {
+                                              String operatorUsername, String operatorOrgTags) {
         LogUtils.logBusiness("UPDATE_KB", operatorUsername, "更新知识库: kbId=%s", kbId);
         
         Optional<KnowledgeBase> kbOpt = knowledgeBaseRepository.findByKbId(kbId);
@@ -237,6 +265,11 @@ public class KnowledgeBaseService {
         }
         
         KnowledgeBase kb = kbOpt.get();
+        Set<String> userOrgTags = resolveUserOrgTags(operatorUsername, operatorOrgTags);
+        if (isNotModifiable(kb, operatorUsername, userOrgTags)) {
+            throw new SecurityException("无权修改该知识库: " + kbId);
+        }
+        
         if (name != null) kb.setName(name);
         if (description != null) kb.setDescription(description);
         if (orgTag != null) kb.setOrgTag(orgTag);
@@ -247,11 +280,11 @@ public class KnowledgeBaseService {
     }
     
     /**
-     * 删除知识库
+     * 删除知识库（带权限校验）
      * 注意：删除知识库不会删除其中的文件，文件仍然保留在系统中
      */
     @Transactional
-    public void deleteKnowledgeBase(String kbId, String operatorUsername) {
+    public void deleteKnowledgeBase(String kbId, String operatorUsername, String operatorOrgTags) {
         LogUtils.logBusiness("DELETE_KB", operatorUsername, "删除知识库: kbId=%s", kbId);
         
         Optional<KnowledgeBase> kbOpt = knowledgeBaseRepository.findByKbId(kbId);
@@ -259,19 +292,31 @@ public class KnowledgeBaseService {
             throw new IllegalArgumentException("知识库不存在: " + kbId);
         }
         
-        knowledgeBaseRepository.delete(kbOpt.get());
+        KnowledgeBase kb = kbOpt.get();
+        Set<String> userOrgTags = resolveUserOrgTags(operatorUsername, operatorOrgTags);
+        if (isNotModifiable(kb, operatorUsername, userOrgTags)) {
+            throw new SecurityException("无权删除该知识库: " + kbId);
+        }
+        
+        knowledgeBaseRepository.delete(kb);
     }
     
     /**
-     * 根据kbId获取知识库详情
+     * 根据kbId获取知识库详情（带访问控制）
      */
-    public Map<String, Object> getKnowledgeBaseDetail(String kbId) {
+    public Map<String, Object> getKnowledgeBaseDetail(String kbId, String username, String orgTags) {
         Optional<KnowledgeBase> kbOpt = knowledgeBaseRepository.findByKbId(kbId);
         if (kbOpt.isEmpty()) {
             throw new IllegalArgumentException("知识库不存在: " + kbId);
         }
         
-        return buildKbDto(kbOpt.get());
+        KnowledgeBase kb = kbOpt.get();
+        Set<String> userOrgTags = resolveUserOrgTags(username, orgTags);
+        if (!isAccessible(kb, username, userOrgTags)) {
+            throw new SecurityException("无权访问该知识库: " + kbId);
+        }
+        
+        return buildKbDto(kb);
     }
 
     /**
@@ -407,19 +452,38 @@ public class KnowledgeBaseService {
             Map.of("label", "近90天", "value", LocalDateTime.now().minusDays(90).toString())
         );
 
-        // 文件类型选项（基于知识库下文件扩展名统计）
+        // 文件类型选项（基于知识库下文件扩展名统计，按 kbId 优先，其次 orgTag，避免 N+1 查询）
         Set<String> fileTypeOptions = new TreeSet<>();
+
+        // 收集所有相关的 kbId 和 orgTag（用于批量查询）
+        Set<String> kbIds = new HashSet<>();
+        Set<String> orgTagsForQuery = new HashSet<>();
         for (Map<String, Object> kb : kbList) {
+            Object kbIdObj = kb.get("kbId");
+            if (kbIdObj != null) {
+                kbIds.add((String) kbIdObj);
+            }
             String kbOrgTag = (String) kb.get("orgTag");
-            if (kbOrgTag != null) {
-                var files = fileUploadRepository.findByOrgTag(kbOrgTag);
-                for (FileUpload file : files) {
-                    String fileName = file.getFileName();
-                    if (fileName != null && fileName.contains(".")) {
-                        String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toUpperCase();
-                        fileTypeOptions.add(ext);
-                    }
-                }
+            if (kbOrgTag != null && !kbOrgTag.isEmpty()) {
+                orgTagsForQuery.add(kbOrgTag);
+            }
+        }
+
+        // 批量查询文件：先按 kbId，再补充按 orgTag
+        List<FileUpload> relatedFiles = new ArrayList<>();
+        if (!kbIds.isEmpty()) {
+            relatedFiles.addAll(fileUploadRepository.findByKbIdIn(kbIds));
+        }
+        if (!orgTagsForQuery.isEmpty()) {
+            relatedFiles.addAll(fileUploadRepository.findByOrgTagIn(orgTagsForQuery));
+        }
+
+        // 统计所有相关文件的扩展名
+        for (FileUpload file : relatedFiles) {
+            String fileName = file.getFileName();
+            if (fileName != null && fileName.contains(".")) {
+                String ext = fileName.substring(fileName.lastIndexOf(".") + 1).toUpperCase();
+                fileTypeOptions.add(ext);
             }
         }
         
