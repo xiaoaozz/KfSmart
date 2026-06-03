@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useThemeStore } from '@/store/modules/theme';
-import { useAppStore } from '@/store/modules/app';
 import ModernTopNav from './components/ModernTopNav.vue';
 import ChatGPTSidebar from './components/ChatGPTSidebar.vue';
 
@@ -24,16 +22,12 @@ const props = withDefaults(defineProps<Props>(), {
   maxWidth: '1400px'
 });
 
-const themeStore = useThemeStore();
-const appStore = useAppStore();
-
 const layoutClasses = computed(() => {
   return [
     'modern-layout',
     {
       'with-sidebar': props.showSidebar,
-      'full-width': props.fullWidth,
-      'dark': themeStore.darkMode
+      'full-width': props.fullWidth
     }
   ];
 });

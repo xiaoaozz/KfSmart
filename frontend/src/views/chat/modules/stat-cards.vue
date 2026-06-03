@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { request } from '@/service/request';
 import { fetchGetSystemStats } from '@/service/api/system';
+import { fetchGetKnowledgeBaseStats } from '@/service/api/knowledge-base';
 
 defineOptions({
   name: 'StatCards'
@@ -23,7 +24,7 @@ interface StatItem {
 const stats = ref<StatItem[]>([
   {
     icon: 'data-base',
-    label: '知识库文件',
+    label: '知识库数量',
     value: '--',
     change: '--',
     trend: 'up',
@@ -68,6 +69,17 @@ async function fetchStats() {
     if (!sErr && sData) {
       stats.value[0].value = formatNumber(sData.totalFiles || 0);
       stats.value[0].change = String(sData.totalFiles || 0);
+    }
+
+    // 获取知识库统计（独立API）
+    try {
+      const { error: kbErr, data: kbData } = await fetchGetKnowledgeBaseStats();
+      if (!kbErr && kbData) {
+        stats.value[0].value = formatNumber(kbData.knowledgeBaseCount || 0);
+        stats.value[0].change = `${kbData.knowledgeBaseCount} 个`;
+      }
+    } catch {
+      // 降级到系统统计
     }
 
     // 获取用户自己的文件列表

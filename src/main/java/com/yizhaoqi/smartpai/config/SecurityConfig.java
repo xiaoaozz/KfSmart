@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -40,7 +41,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         try {
             // 禁用CSRF保护
-            http.csrf(csrf -> csrf.disable())
+            http.csrf(AbstractHttpConfigurer::disable)
                     // 配置请求的授权规则
                     .authorizeHttpRequests(authorize -> authorize
                             // 允许错误处理路径（防止404等错误转发时丢失认证上下文变成403）
@@ -63,8 +64,10 @@ public class SecurityConfig {
                             .requestMatchers("/api/chat/websocket-token").permitAll()
                             // 管理员专属接口 - 知识库管理、系统状态、用户活动监控
                             .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                            // 用户组织标签管理接口
-                            .requestMatchers("/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
+                            // 知识库管理接口 - 用户和管理员都可访问（自己创建的或公开的知识库）
+                            .requestMatchers("/api/v1/knowledge-bases/**").hasAnyRole("USER", "ADMIN")
+                            // 用户组织标签管理接口 - 包括查看组织标签树、设置主组织等
+                            .requestMatchers("/api/v1/users/org-tags/**", "/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
                             // 其他请求需要认证
                             .anyRequest().authenticated())
                     // 配置会话管理策略

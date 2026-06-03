@@ -183,6 +183,48 @@ public class UserController {
         }
     }
     
+    /**
+     * 获取组织标签树（用户版本）
+     * 普通用户可以访问此接口，用于在创建知识库等场景下选择组织标签
+     * 
+     * @param token JWT token
+     * @return 组织标签树结构
+     */
+    @GetMapping("/org-tags/tree")
+    public ResponseEntity<?> getUserOrgTagTree(@RequestHeader("Authorization") String token) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_ORG_TAG_TREE");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                LogUtils.logUserOperation("anonymous", "GET_ORG_TAG_TREE", "token_validation", "FAILED_INVALID_TOKEN");
+                monitor.end("获取组织标签树失败：无效token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+            
+            // 调用service获取组织标签树
+            List<Map<String, Object>> tagTree = userService.getOrganizationTagTree();
+            
+            LogUtils.logUserOperation(username, "GET_ORG_TAG_TREE", "organization_tags_tree", "SUCCESS");
+            monitor.end("获取组织标签树成功");
+            
+            return ResponseEntity.ok(Map.of(
+                "code", 200, 
+                "message", "获取组织标签树成功", 
+                "data", tagTree
+            ));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("GET_USER_ORG_TAG_TREE", username, "获取组织标签树失败: %s", e, e.getMessage());
+            monitor.end("获取组织标签树失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_USER_ORG_TAG_TREE", username, "获取组织标签树异常: %s", e, e.getMessage());
+            monitor.end("获取组织标签树异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取组织标签树失败: " + e.getMessage()));
+        }
+    }
+    
     // 设置用户主组织标签
     @PutMapping("/primary-org")
     public ResponseEntity<?> setPrimaryOrg(@RequestHeader("Authorization") String token, @RequestBody PrimaryOrgRequest request) {
@@ -323,10 +365,10 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
         }
     }
+    
+    // 用户请求记录类
+    public record UserRequest(String username, String password) {}
+
+    // 主组织标签请求记录类
+    public record PrimaryOrgRequest(String primaryOrg) {}
 }
-
-// 用户请求记录类
-record UserRequest(String username, String password) {}
-
-// 主组织标签请求记录类
-record PrimaryOrgRequest(String primaryOrg) {}

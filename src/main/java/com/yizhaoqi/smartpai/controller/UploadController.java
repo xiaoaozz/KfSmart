@@ -53,13 +53,12 @@ public class UploadController {
     /**
      * 上传文件分片接口
      *
-     * @param fileMd5 文件的MD5值，用于唯一标识文件
-     * @param chunkIndex 分片索引，表示当前分片的位置
+     * @param fileMd5 文件的MD5值,用于唯一标识文件
+     * @param chunkIndex 分片索引,表示当前分片的位置
      * @param totalSize 文件总大小
      * @param fileName 文件名
-     * @param totalChunks 总分片数量
-     * @param orgTag 组织标签，如果未指定则使用用户的主组织标签
-     * @param isPublic 是否公开，默认为false
+     * @param orgTag 组织标签,如果未指定则使用用户的主组织标签
+     * @param isPublic 是否公开,默认为false
      * @param file 分片文件对象
      * @return 返回包含已上传分片和上传进度的响应
      * @throws IOException 当文件读写发生错误时抛出
@@ -70,9 +69,9 @@ public class UploadController {
             @RequestParam("chunkIndex") int chunkIndex,
             @RequestParam("totalSize") long totalSize,
             @RequestParam("fileName") String fileName,
-            @RequestParam(value = "totalChunks", required = false) Integer totalChunks,
             @RequestParam(value = "orgTag", required = false) String orgTag,
             @RequestParam(value = "isPublic", required = false, defaultValue = "false") boolean isPublic,
+            @RequestParam(value = "kbId", required = false) String kbId,
             @RequestParam("file") MultipartFile file,
             @RequestAttribute("userId") String userId) throws IOException {
         
@@ -103,15 +102,14 @@ public class UploadController {
             String fileType = getFileType(fileName);
             String contentType = file.getContentType();
             
-            LogUtils.logBusiness("UPLOAD_CHUNK", userId, "接收到分片上传请求: fileMd5=%s, chunkIndex=%d, fileName=%s, fileType=%s, contentType=%s, fileSize=%d, totalSize=%d, orgTag=%s, isPublic=%s", 
-                    fileMd5, chunkIndex, fileName, fileType, contentType, file.getSize(), totalSize, orgTag, isPublic);
+            LogUtils.logBusiness("UPLOAD_CHUNK", userId, "接收到分片上传请求: fileMd5=%s, chunkIndex=%d, fileName=%s, fileType=%s, contentType=%s, fileSize=%d, totalSize=%d, orgTag=%s, isPublic=%s, kbId=%s", 
+                    fileMd5, chunkIndex, fileName, fileType, contentType, file.getSize(), totalSize, orgTag, isPublic, kbId);
         
         // 如果未指定组织标签，则获取用户的主组织标签
         if (orgTag == null || orgTag.isEmpty()) {
             try {
                     LogUtils.logBusiness("UPLOAD_CHUNK", userId, "组织标签未指定，尝试获取用户主组织标签: fileName=%s", fileName);
-                String primaryOrg = userService.getUserPrimaryOrg(userId);
-                orgTag = primaryOrg;
+                orgTag = userService.getUserPrimaryOrg(userId);
                     LogUtils.logBusiness("UPLOAD_CHUNK", userId, "成功获取用户主组织标签: fileName=%s, orgTag=%s", fileName, orgTag);
             } catch (Exception e) {
                     LogUtils.logBusinessError("UPLOAD_CHUNK", userId, "获取用户主组织标签失败: fileName=%s", e, fileName);
@@ -126,6 +124,21 @@ public class UploadController {
             LogUtils.logFileOperation(userId, "UPLOAD_CHUNK", fileName, fileMd5, "PROCESSING");
         
             uploadService.uploadChunk(fileMd5, chunkIndex, totalSize, fileName, file, orgTag, isPublic, userId);
+            
+            // 如果指定了知识库ID，仅在kbId为空或发生变化时更新，避免每个分片重复写入
+            if (kbId != null && !kbId.isEmpty()) {
+                Optional<FileUpload> fileOpt = fileUploadRepository.findByFileMd5AndUserId(fileMd5, userId);
+                if (fileOpt.isPresent()) {
+                    FileUpload fileUpload = fileOpt.get();
+                    String existingKbId = fileUpload.getKbId();
+                    // 只在kbId为null或与当前不同的情况下更新，减少重复写入与并发竞争
+                    if (!kbId.equals(existingKbId)) {
+                        fileUpload.setKbId(kbId);
+                        fileUploadRepository.save(fileUpload);
+                        LogUtils.logBusiness("UPLOAD_CHUNK", userId, "文件绑定知识库(更新kbId): fileMd5=%s, kbId=%s", fileMd5, kbId);
+                    }
+                }
+            }
             
             List<Integer> uploadedChunks = uploadService.getUploadedChunks(fileMd5, userId);
             int actualTotalChunks = uploadService.getTotalChunks(fileMd5, userId);
@@ -287,7 +300,8 @@ public class UploadController {
                     request.fileName(),
                     fileUpload.getUserId(),
                     fileUpload.getOrgTag(),
-                    fileUpload.isPublic()
+                    fileUpload.isPublic(),
+                    fileUpload.getKbId()
             );
             
             LogUtils.logBusiness("MERGE_FILE", userId, "发送文件处理任务到Kafka(事务): topic=%s, fileMd5=%s, fileName=%s", 
@@ -403,82 +417,42 @@ public class UploadController {
         String extension = fileName.substring(lastDotIndex + 1).toLowerCase();
         
         // 根据文件扩展名返回文件类型
-        switch (extension) {
-            case "pdf":
-                return "PDF文档";
-            case "doc":
-            case "docx":
-                return "Word文档";
-            case "xls":
-            case "xlsx":
-                return "Excel表格";
-            case "ppt":
-            case "pptx":
-                return "PowerPoint演示文稿";
-            case "txt":
-                return "文本文件";
-            case "md":
-                return "Markdown文档";
-            case "jpg":
-            case "jpeg":
-                return "JPEG图片";
-            case "png":
-                return "PNG图片";
-            case "gif":
-                return "GIF图片";
-            case "bmp":
-                return "BMP图片";
-            case "svg":
-                return "SVG图片";
-            case "mp4":
-                return "MP4视频";
-            case "avi":
-                return "AVI视频";
-            case "mov":
-                return "MOV视频";
-            case "wmv":
-                return "WMV视频";
-            case "mp3":
-                return "MP3音频";
-            case "wav":
-                return "WAV音频";
-            case "flac":
-                return "FLAC音频";
-            case "zip":
-                return "ZIP压缩包";
-            case "rar":
-                return "RAR压缩包";
-            case "7z":
-                return "7Z压缩包";
-            case "tar":
-                return "TAR压缩包";
-            case "gz":
-                return "GZ压缩包";
-            case "json":
-                return "JSON文件";
-            case "xml":
-                return "XML文件";
-            case "csv":
-                return "CSV文件";
-            case "html":
-            case "htm":
-                return "HTML文件";
-            case "css":
-                return "CSS文件";
-            case "js":
-                return "JavaScript文件";
-            case "java":
-                return "Java源码";
-            case "py":
-                return "Python源码";
-            case "cpp":
-            case "c":
-                return "C/C++源码";
-            case "sql":
-                return "SQL文件";
-            default:
-                return extension.toUpperCase() + "文件";
-        }
+        return switch (extension) {
+            case "pdf" -> "PDF文档";
+            case "doc", "docx" -> "Word文档";
+            case "xls", "xlsx" -> "Excel表格";
+            case "ppt", "pptx" -> "PowerPoint演示文稿";
+            case "txt" -> "文本文件";
+            case "md" -> "Markdown文档";
+            case "jpg", "jpeg" -> "JPEG图片";
+            case "png" -> "PNG图片";
+            case "gif" -> "GIF图片";
+            case "bmp" -> "BMP图片";
+            case "svg" -> "SVG图片";
+            case "mp4" -> "MP4视频";
+            case "avi" -> "AVI视频";
+            case "mov" -> "MOV视频";
+            case "wmv" -> "WMV视频";
+            case "mp3" -> "MP3音频";
+            case "wav" -> "WAV音频";
+            case "flac" -> "FLAC音频";
+            case "zip" -> "ZIP压缩包";
+            case "rar" -> "RAR压缩包";
+            case "7z" -> "7Z压缩包";
+            case "tar" -> "TAR压缩包";
+            case "gz" -> "GZ压缩包";
+            case "json" -> "JSON文件";
+            case "xml" -> "XML文件";
+            case "csv" -> "CSV文件";
+            case "html", "htm" -> "HTML文件";
+            case "css" -> "CSS文件";
+            case "js" -> "JavaScript文件";
+            case "java" -> "Java源码";
+            case "py" -> "Python源码";
+            case "cpp", "c" -> "C/C++源码";
+            case "sql" -> "SQL文件";
+            default -> extension.toUpperCase() + "文件";
+        };
     }
 }
 

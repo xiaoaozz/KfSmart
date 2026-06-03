@@ -1,17 +1,14 @@
 <script setup lang="tsx">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useThemeStore } from '@/store/modules/theme';
 import { useAuthStore } from '@/store/modules/auth';
 import { useRouterPush } from '@/hooks/common/router';
-import AnimatedButton from '@/components/modern/AnimatedButton.vue';
 
 defineOptions({
   name: 'ModernTopNav'
 });
 
 const router = useRouter();
-const themeStore = useThemeStore();
 const authStore = useAuthStore();
 const { toLogin } = useRouterPush();
 
@@ -143,12 +140,6 @@ function handleUserMenuSelect(key: string) {
             <span class="metric-value success">{{ performanceMetrics.successRate }}</span>
           </div>
         </div>
-
-        <!-- 主题切换 -->
-        <button class="icon-btn" title="切换主题" @click="themeStore.toggleThemeScheme">
-          <div v-if="themeStore.darkMode" class="i-carbon:moon text-lg" />
-          <div v-else class="i-carbon:sun text-lg" />
-        </button>
 
         <!-- 用户头像 -->
         <div class="user-avatar-section">
@@ -352,31 +343,6 @@ function handleUserMenuSelect(key: string) {
     .dark & {
       background: rgba(255, 255, 255, 0.1);
     }
-  }
-}
-
-/* 图标按钮 */
-.icon-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(102, 126, 234, 0.2);
-  background: rgba(102, 126, 234, 0.05);
-  color: #667eea;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: rgba(102, 126, 234, 0.15);
-    border-color: rgba(102, 126, 234, 0.4);
-    transform: scale(1.05);
-  }
-
-  &:active {
-    transform: scale(0.95);
   }
 }
 

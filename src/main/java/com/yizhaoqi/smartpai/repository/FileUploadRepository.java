@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,4 +58,22 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
      * 用于删除组织标签时重新分配文档归属
      */
     List<FileUpload> findByOrgTag(String orgTag);
+
+    /**
+     * 批量查找指定组织标签的所有文件
+     * 用于筛选选项等批量查询场景，避免 N+1 查询
+     */
+    List<FileUpload> findByOrgTagIn(Collection<String> orgTags);
+
+    /**
+     * 查找指定知识库的所有文件
+     * 用于按知识库检索文档
+     */
+    List<FileUpload> findByKbId(String kbId);
+
+    /**
+     * 批量查找指定知识库的所有文件
+     * 用于筛选选项等批量查询场景，避免 N+1 查询
+     */
+    List<FileUpload> findByKbIdIn(Collection<String> kbIds);
 }

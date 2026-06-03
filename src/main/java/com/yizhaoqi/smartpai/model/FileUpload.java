@@ -59,6 +59,13 @@ public class FileUpload {
     private String orgTag;
 
     /**
+     * 文件所属知识库ID
+     * 用于标识文件归属的知识库，支持按知识库检索文档
+     */
+    @Column(name = "kb_id")
+    private String kbId;
+
+    /**
      * 文件是否公开
      * true表示所有用户可访问，false表示仅组织内用户可访问
      */
