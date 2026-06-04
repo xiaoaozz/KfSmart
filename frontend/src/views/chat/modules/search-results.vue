@@ -1,57 +1,40 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import ChunkDetailModal from './chunk-detail-modal.vue';
 
 defineOptions({
   name: 'SearchResults'
 });
 
-interface SearchResult {
-  id: string;
-  title: string;
-  time: string;
-  status: 'success' | 'processing';
-  chunks?: number;
-  topK?: number;
-  totalCount?: number;
+const chatStore = useChatStore();
+const { searchResults, searchLoading } = storeToRefs(chatStore);
+
+/** 当前点击的卡片信息 */
+const selectedItem = ref<Api.Chat.SearchResultItem | null>(null);
+const detailVisible = ref(false);
+
+function openDetail(item: Api.Chat.SearchResultItem) {
+  // 先把 visible 设为 false，确保每次打开都触发 watch(visible) 或 onMounted 重新请求
+  detailVisible.value = false;
+  selectedItem.value = item;
+  nextTick(() => {
+    detailVisible.value = true;
+  });
 }
 
-const results = ref<SearchResult[]>([
-  {
-    id: '1',
-    title: '含中文档数',
-    time: '耗时 186 ms',
-    status: 'success',
-    chunks: 23,
-    topK: 50
-  },
-  {
-    id: '2',
-    title: '向量召回',
-    time: '耗时 50 篇 (Top-K=50)',
-    status: 'processing',
-    totalCount: 50
-  },
-  {
-    id: '3',
-    title: '重排序',
-    time: '耗时 142 ms',
-    status: 'success'
-  },
-  {
-    id: '4',
-    title: '生成结果',
-    time: '耗时 1.12 s',
-    status: 'success'
-  }
-]);
+/** 检索得分转为百分比，最高 100 */
+function scoreToPercent(score: number): number {
+  const clamped = Math.min(Math.max(score, 0), 1);
+  return Math.round(clamped * 100);
+}
 
-const queries = ref([
-  {
-    id: '1',
-    question: '如果入职不满3年假，有年假吗？',
-    answer: '员工入职满3个月以上不满一年的，可享受5天年假'
-  }
-]);
+/** 得分对应的颜色 */
+function scoreColor(score: number): string {
+  const pct = scoreToPercent(score);
+  if (pct >= 80) return '#22c55e';
+  if (pct >= 60) return '#3b82f6';
+  if (pct >= 40) return '#f59e0b';
+  return '#ef4444';
+}
 </script>
 
 <template>
@@ -60,154 +43,106 @@ const queries = ref([
     <div class="flex-shrink-0 p-6 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between mb-1">
         <h2 class="text-lg font-bold text-gray-900 dark:text-white">检索结果</h2>
-        <NButton text circle size="small">
-          <template #icon>
-            <icon-carbon:close class="text-lg text-gray-500" />
-          </template>
-        </NButton>
+        <span v-if="searchResults.length > 0" class="text-xs text-gray-400 dark:text-gray-500">
+          最匹配片段
+        </span>
       </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">展示与本次提问最匹配的知识库片段</p>
     </div>
 
     <!-- 内容区 -->
-    <div class="flex-1 overflow-y-auto p-6 space-y-6">
-      <!-- 含中文档数统计 -->
-      <div class="result-section">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">含中文档数</h3>
+    <div class="flex-1 overflow-y-auto p-6 space-y-4">
+
+      <!-- 加载中 -->
+      <div v-if="searchLoading" class="flex flex-col items-center justify-center py-16 gap-3">
+        <icon-eos-icons:three-dots-loading class="text-4xl text-blue-500" />
+        <span class="text-sm text-gray-500 dark:text-gray-400">检索知识库中…</span>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-else-if="searchResults.length === 0" class="flex flex-col items-center justify-center py-16 gap-3 text-center">
+        <icon-carbon:search class="text-4xl text-gray-300 dark:text-gray-600" />
+        <p class="text-sm text-gray-400 dark:text-gray-500">发送消息后，知识库命中的相关文档将在此展示</p>
+      </div>
+
+      <!-- 检索结果列表 -->
+      <template v-else>
         <div
-          v-for="result in results.filter(r => r.title === '含中文档数')"
-          :key="result.id"
-          class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4"
+          v-for="item in searchResults"
+          :key="item.referenceNumber"
+          class="result-card rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-4 space-y-3 hover:shadow-md transition-shadow cursor-pointer"
+          @click="openDetail(item)"
         >
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              <icon-carbon:document class="text-blue-500" />
-              <span class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ result.chunks }} 篇</span>
+          <!-- 标题行 -->
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">
+                {{ item.referenceNumber }}
+              </span>
+              <icon-carbon:document class="flex-shrink-0 text-blue-400 dark:text-blue-500 text-base" />
+              <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate" :title="item.fileName">
+                {{ item.fileName }}
+              </span>
             </div>
-            <span
-              v-if="result.status === 'success'"
-              class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
-            >
-              <icon-carbon:checkmark-filled />
-              <span>成功</span>
+            <!-- 相关性分数 -->
+            <span class="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" :style="{ color: scoreColor(item.score), background: `${scoreColor(item.score)}18` }">
+              {{ scoreToPercent(item.score) }}%
             </span>
           </div>
-          <div class="text-xs text-gray-600 dark:text-gray-400">
-            {{ result.time }}
-          </div>
-        </div>
-      </div>
 
-      <!-- 向量召回 -->
-      <div class="result-section">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">向量召回</h3>
-        <div
-          v-for="result in results.filter(r => r.title === '向量召回')"
-          :key="result.id"
-          class="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4"
-        >
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">{{ result.time }}</span>
-            <span
-              v-if="result.status === 'processing'"
-              class="flex items-center gap-1 text-xs text-yellow-600 dark:text-yellow-400"
-            >
-              <icon-carbon:in-progress />
-              <span>处理中</span>
+          <!-- 进度条（相关性可视化） -->
+          <NProgress
+            type="line"
+            :percentage="scoreToPercent(item.score)"
+            :show-indicator="false"
+            :color="scoreColor(item.score)"
+            :height="4"
+            :border-radius="2"
+          />
+
+          <!-- 文档片段（预览，3行截断，点击可查看完整内容） -->
+          <div class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-3">
+            {{ item.snippet }}
+          </div>
+
+          <!-- 元数据 -->
+          <div class="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+            <span class="flex items-center gap-1">
+              <icon-carbon:cube class="text-xs" />
+              Chunk #{{ item.chunkId }}
             </span>
-          </div>
-          <div class="mt-2">
-            <NProgress type="line" :percentage="100" :show-indicator="false" color="#8b5cf6" />
-          </div>
-        </div>
-      </div>
-
-      <!-- 重排序 -->
-      <div class="result-section">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">重排序</h3>
-        <div
-          v-for="result in results.filter(r => r.title === '重排序')"
-          :key="result.id"
-          class="bg-cyan-50 dark:bg-cyan-900/20 rounded-xl p-4"
-        >
-          <div class="flex items-center justify-between">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">{{ result.time }}</span>
-            <span
-              v-if="result.status === 'success'"
-              class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
-            >
-              <icon-carbon:checkmark-filled />
-              <span>成功</span>
+            <span class="flex items-center gap-1 font-mono truncate" :title="item.fileMd5">
+              <icon-carbon:fingerprint-recognition class="text-xs" />
+              {{ item.fileMd5?.substring(0, 8) }}…
             </span>
           </div>
         </div>
-      </div>
-
-      <!-- 生成结果 -->
-      <div class="result-section">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">生成结果</h3>
-        <div
-          v-for="result in results.filter(r => r.title === '生成结果')"
-          :key="result.id"
-          class="bg-green-50 dark:bg-green-900/20 rounded-xl p-4"
-        >
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-medium text-gray-900 dark:text-white">{{ result.time }}</span>
-            <span
-              v-if="result.status === 'success'"
-              class="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
-            >
-              <icon-carbon:checkmark-filled />
-              <span>成功</span>
-            </span>
-          </div>
-          <div class="text-xs text-gray-600 dark:text-gray-400">
-            模型：KnowFlow-Chat 3.5<br>
-            生成 Tokens：512
-          </div>
-        </div>
-      </div>
-
-      <!-- 查询改写 -->
-      <div class="result-section">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">查询改写</h3>
-        <div
-          v-for="query in queries"
-          :key="query.id"
-          class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-3"
-        >
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            原问题：{{ query.question }}
-          </div>
-          <div class="text-xs text-gray-600 dark:text-gray-300">
-            改写：{{ query.answer }}
-          </div>
-        </div>
-      </div>
-
-      <!-- 查看检索详情按钮 -->
-      <div class="pt-4">
-        <NButton text block class="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl py-3">
-          <template #icon>
-            <icon-carbon:arrow-right class="text-lg" />
-          </template>
-          查看检索详情
-        </NButton>
-      </div>
+      </template>
     </div>
+
+    <!-- 片段详情弹窗 -->
+    <ChunkDetailModal
+      v-if="selectedItem"
+      v-model:visible="detailVisible"
+      :file-md5="selectedItem.fileMd5"
+      :chunk-id="selectedItem.chunkId"
+      :file-name="selectedItem.fileName"
+      :reference-number="selectedItem.referenceNumber"
+    />
   </div>
 </template>
 
 <style scoped lang="scss">
 .search-results {
-  .result-section {
-    animation: slideIn 0.3s ease-out;
+  .result-card {
+    animation: slideIn 0.25s ease-out;
   }
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -230,16 +165,6 @@ const queries = ref([
 
   &:hover {
     background: #9ca3af;
-  }
-}
-
-:deep(.dark) {
-  ::-webkit-scrollbar-thumb {
-    background: #4b5563;
-
-    &:hover {
-      background: #6b7280;
-    }
   }
 }
 </style>

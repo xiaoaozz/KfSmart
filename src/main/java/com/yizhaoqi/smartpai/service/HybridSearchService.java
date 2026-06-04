@@ -40,9 +40,6 @@ public class HybridSearchService {
     private EmbeddingClient embeddingClient;
 
     @Autowired
-    private UserService userService;
-
-    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -93,9 +90,9 @@ public class HybridSearchService {
                                 .k(recallK)
                                 .numCandidates(recallK)
                         );
-                        // 必须命中关键词 + 权限过滤
+                        // 语义相关 + 权限过滤（should 宽松匹配，不强制关键词命中，允许语义召回）
                         s.query(q -> q.bool(b -> b
-                                .must(mst -> mst.match(m -> m.field("textContent").query(query)))
+                                .should(sh -> sh.match(m -> m.field("textContent").query(query)))
                                 .filter(f -> f.bool(bf -> bf
                                         // 条件1: 用户可访问自己的文档
                                         .should(s1 -> s1.term(t -> t.field("userId").value(userDbId)))
@@ -126,7 +123,7 @@ public class HybridSearchService {
                                         .query(rqq -> rqq.match(m -> m
                                                 .field("textContent")
                                                 .query(query)
-                                                .operator(Operator.And)
+                                                .operator(Operator.Or)
                                         ))
                                 )
                         );
@@ -135,7 +132,7 @@ public class HybridSearchService {
                     }, EsDocument.class);
 
             logger.debug("Elasticsearch查询执行完成，命中数量: {}, 最大分数: {}", 
-                response.hits().total().value(), response.hits().maxScore());
+                response.hits().total() != null ? response.hits().total().value() : 0, response.hits().maxScore());
 
             List<SearchResult> results = response.hits().hits().stream()
                     .map(hit -> {
@@ -182,11 +179,12 @@ public class HybridSearchService {
                     .index("knowledge_base")
                     .query(q -> q
                             .bool(b -> b
-                                    // 匹配内容相关性
-                                    .must(m -> m
+                                    // 匹配内容相关性（宽松匹配，不强制全词命中）
+                                    .should(sh -> sh
                                             .match(ma -> ma
                                                     .field("textContent")
                                                     .query(query)
+                                                    .operator(Operator.Or)
                                             )
                                     )
                                     // 权限过滤
@@ -239,7 +237,7 @@ public class HybridSearchService {
             );
 
             logger.debug("纯文本查询执行完成，命中数量: {}, 最大分数: {}", 
-                response.hits().total().value(), response.hits().maxScore());
+                response.hits().total() != null ? response.hits().total().value() : 0, response.hits().maxScore());
 
             List<SearchResult> results = response.hits().hits().stream()
                     .map(hit -> {

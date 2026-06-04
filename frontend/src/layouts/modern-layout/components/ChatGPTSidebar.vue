@@ -51,22 +51,7 @@ const mainMenus = [
 
 // 最近对话列表（模拟数据，实际应从API获取）
 const recentChats = ref([
-  { id: 1, title: 'New chat' },
-  { id: 2, title: 'KnowFlow 图标设计' },
-  { id: 3, title: 'AI知识库命名建议' },
-  { id: 4, title: '派聪明命名与图标设计' },
-  { id: 5, title: '风控测试人物总结' },
-  { id: 6, title: '快手15周年祝福' },
-  { id: 7, title: 'Mac 切换 Chrome 标签' },
-  { id: 8, title: 'UI设计需求解析' },
-  { id: 9, title: 'Podman启动docker-compose服务' },
-  { id: 10, title: '智能体网站UI设计' },
-  { id: 11, title: 'UI设计图生成请求' },
-  { id: 12, title: '登录页面设计提示' },
-  { id: 13, title: 'API Key 费用分析' },
-  { id: 14, title: 'GPT-5.5介绍' },
-  { id: 15, title: 'AgentScope 项目分析' },
-  { id: 16, title: '多Agent协作UI参考' }
+  { id: 1, title: 'New chat' }
 ]);
 
 const currentPath = computed(() => router.currentRoute.value.path);

@@ -59,13 +59,15 @@ public class SecurityConfig {
                             // 对话历史相关接口 - 用户只能查看自己的历史，管理员可以查看所有
                             .requestMatchers("/api/v1/users/conversation/**").hasAnyRole("USER", "ADMIN")
                             // 搜索接口 - 普通用户和管理员都可访问
-                            .requestMatchers("/api/search/**").hasAnyRole("USER", "ADMIN")
+                            .requestMatchers("/api/search/**", "/api/v1/search/**").hasAnyRole("USER", "ADMIN")
                             // 聊天相关接口 - WebSocket停止Token获取 (允许匿名访问)
                             .requestMatchers("/api/chat/websocket-token").permitAll()
                             // 管理员专属接口 - 知识库管理、系统状态、用户活动监控
                             .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                             // 知识库管理接口 - 用户和管理员都可访问（自己创建的或公开的知识库）
                             .requestMatchers("/api/v1/knowledge-bases/**").hasAnyRole("USER", "ADMIN")
+                            // 登录记录和统计接口 - 用户和管理员都可访问
+                            .requestMatchers("/api/v1/users/login-records", "/api/v1/users/login-stats").hasAnyRole("USER", "ADMIN")
                             // 用户组织标签管理接口 - 包括查看组织标签树、设置主组织等
                             .requestMatchers("/api/v1/users/org-tags/**", "/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
                             // 其他请求需要认证

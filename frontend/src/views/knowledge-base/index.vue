@@ -10,6 +10,7 @@ import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
 import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBaseDocuments } from '@/service/api/knowledge-base';
+import { getFileExt } from '@/utils/common';
 import debounce from 'lodash-es/debounce';
 
 const appStore = useAppStore();
@@ -27,6 +28,63 @@ const onKbSearchInput = () => {
 const previewVisible = ref(false);
 const previewFileName = ref('');
 const previewFileMd5 = ref('');
+
+// 获取预览文件图标
+function getPreviewFileIcon() {
+  const ext = getFileExt(previewFileName.value);
+  if (ext) {
+    const supportedIcons = ['pdf', 'doc', 'docx', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif'];
+    return supportedIcons.includes(ext.toLowerCase()) ? ext : 'dflt';
+  }
+  return 'dflt';
+}
+
+// 预览弹窗中下载文件
+async function handleDownloadPreview() {
+  if (!previewFileName.value) return;
+  try {
+    const token = localStorage.getItem('token');
+    if (previewFileMd5.value) {
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        downloadUrl: string;
+        fileSize: number;
+      }>({
+        url: '/documents/download-by-md5',
+        params: { fileMd5: previewFileMd5.value, token: token || undefined }
+      });
+      if (!requestError && data) {
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.$message?.success('开始下载文件');
+      }
+    } else {
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        downloadUrl: string;
+        fileSize: number;
+      }>({
+        url: '/documents/download',
+        params: { fileName: previewFileName.value, token: token || undefined }
+      });
+      if (!requestError && data) {
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.$message?.success('开始下载文件');
+      }
+    }
+  } catch (err: any) {
+    window.$message?.error('下载失败：' + (err.message || '网络错误'));
+  }
+}
 
 // 筛选器状态
 const selectedFileType = ref('全部');
@@ -106,6 +164,7 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'fileName',
       title: '文件名',
       minWidth: 300,
+      titleAlign: 'center',
       render: row => (
         <div class="flex items-center">
           {renderIcon(row.fileName)}
@@ -124,6 +183,8 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'fileMd5',
       title: 'MD5',
       width: 120,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (
         <NEllipsis tooltip>
           <span
@@ -143,36 +204,40 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'totalSize',
       title: '文件大小',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => fileSize(row.totalSize)
     },
     {
       key: 'status',
       title: '上传状态',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => renderStatus(row.status, row.progress)
-    },
-    {
-      key: 'orgTagName',
-      title: '组织标签',
-      width: 150,
-      ellipsis: { tooltip: true, lineClamp: 2 }
     },
     {
       key: 'isPublic',
       title: '是否公开',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (row.public || row.isPublic ? <NTag type="success">公开</NTag> : <NTag type="warning">私有</NTag>)
     },
     {
       key: 'createdAt',
       title: '上传时间',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => dayjs(row.createdAt).format('YYYY-MM-DD')
     },
     {
       key: 'operate',
       title: '操作',
       width: 180,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (
         <div class="flex gap-4">
           {renderResumeUploadButton(row)}
@@ -202,6 +267,17 @@ const { columns, columnChecks, data, getData, loading } = useTable({
 
 const store = useKnowledgeBaseStore();
 const { tasks } = storeToRefs(store);
+
+// 监听任务完成状态变化：当有任务从非完成状态变为完成状态时，自动刷新统计
+watch(
+  () => tasks.value.filter(t => t.status === UploadStatus.Completed).length,
+  (newCount, oldCount) => {
+    if (newCount > oldCount) {
+      refreshKnowledgeBaseStats();
+    }
+  }
+);
+
 onMounted(async () => {
   await getList();
   await refreshKnowledgeBaseStats();
@@ -409,12 +485,10 @@ const uploadVisible = ref(false);
 function handleUpload() {
   uploadVisible.value = true;
 }
-/** 文件上传完成后回调 */
+/** 文件上传提交后回调（仅关闭弹窗，真正的刷新在任务完成 watcher 中触发） */
 async function onUploadSubmitted() {
-  await refreshKnowledgeBaseStats();
-  if (activeKnowledgeBase.value) {
-    await loadKnowledgeBaseDocuments();
-  }
+  // 上传是异步的，此时文件尚未完成上传，不立即刷新统计
+  // 等待 watcher 监测到任务完成后自动刷新
 }
 // #endregion
 
@@ -506,37 +580,10 @@ async function onBeforeUpload(
 
 <template>
   <div class="knowledge-base-page flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-    <!-- 页面标题和操作栏 -->
-    <div class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
-      <div class="flex items-center justify-between">
-        <h1 class="text-base font-bold text-gray-900 dark:text-white">知识库管理</h1>
-        <div class="flex items-center gap-3">
-          <NButton type="primary" size="medium" @click="handleCreateKb">
-            <template #icon>
-              <icon-carbon:add class="text-base" />
-            </template>
-            新建知识库
-          </NButton>
-          <NButton type="primary" size="medium" ghost @click="handleUpload">
-            <template #icon>
-              <icon-carbon:cloud-upload class="text-base" />
-            </template>
-            上传文档
-          </NButton>
-          <NButton size="medium" tertiary @click="handleUpload">
-            <template #icon>
-              <icon-carbon:download class="text-base" />
-            </template>
-            批量导入
-          </NButton>
-        </div>
-      </div>
-    </div>
-
     <!-- 主体内容 -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex overflow-x-auto overflow-y-hidden">
       <!-- 左侧：知识库列表 -->
-      <div class="w-340px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+      <div class="w-260px min-w-260px max-w-260px flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <!-- 知识库列表标题 -->
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center justify-between mb-3">
@@ -551,7 +598,7 @@ async function onBeforeUpload(
         </div>
 
         <!-- 知识库卡片列表 -->
-        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="flex-1 overflow-y-scroll p-3 space-y-2 kb-list-scroll">
           <div
             v-for="kb in knowledgeBases"
             :key="kb.kbId"
@@ -590,10 +637,10 @@ async function onBeforeUpload(
                     {{ kb.name }}
                   </NTooltip>
                 </h3>
-                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>{{ kb.fileCount }} 文档</span>
+                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  <span class="whitespace-nowrap">{{ kb.fileCount }} 文档</span>
                   <span>·</span>
-                  <span>{{ kb.chunkCount.toLocaleString() }} Chunk</span>
+                  <span class="whitespace-nowrap">{{ kb.chunkCount.toLocaleString() }} Chunk</span>
                 </div>
               </div>
             </div>
@@ -625,7 +672,7 @@ async function onBeforeUpload(
       </div>
 
       <!-- 右侧：文件列表和筛选器 -->
-      <div class="flex-1 flex flex-col bg-white dark:bg-gray-800">
+      <div class="flex-1 min-w-400px flex flex-col bg-white dark:bg-gray-800">
         <!-- 筛选器 -->
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-4">
@@ -678,12 +725,49 @@ async function onBeforeUpload(
 
             <div class="flex-1"></div>
 
-            <!-- 刷新按钮 -->
-            <NButton circle size="small" tertiary @click="handleRefreshStats">
-              <template #icon>
-                <icon-carbon:renew class="text-lg" />
-              </template>
-            </NButton>
+            <!-- 操作图标按钮组 -->
+            <div class="flex items-center gap-2">
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" type="primary" @click="handleCreateKb">
+                    <template #icon>
+                      <icon-carbon:add class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                新建知识库
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" type="primary" ghost @click="handleUpload">
+                    <template #icon>
+                      <icon-carbon:cloud-upload class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                上传文档
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" tertiary @click="handleUpload">
+                    <template #icon>
+                      <icon-carbon:download class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                批量导入
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" tertiary @click="handleRefreshStats">
+                    <template #icon>
+                      <icon-carbon:renew class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                刷新统计
+              </NTooltip>
+            </div>
           </div>
         </div>
 
@@ -706,8 +790,8 @@ async function onBeforeUpload(
       </div>
 
       <!-- 右侧面板：知识库概览 -->
-      <div class="w-280px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
-        <div class="p-4">
+      <div class="overview-panel flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-4">
           <h2 class="text-base font-bold text-gray-900 dark:text-white mb-4">知识库概览</h2>
 
           <!-- 统计卡片 -->
@@ -837,13 +921,28 @@ async function onBeforeUpload(
     <SearchDialog v-model:visible="searchVisible" />
     
     <!-- 文件预览弹窗 -->
-    <NModal v-model:show="previewVisible" preset="card" title="文件预览" style="width: 80%; max-width: 1000px;">
-      <FilePreview
-        :file-name="previewFileName"
-        :file-md5="previewFileMd5"
-        :visible="previewVisible"
-        @close="closeFilePreview"
-      />
+    <NModal v-model:show="previewVisible" preset="card" style="width: 80%; max-width: 1000px;">
+      <template #header>
+        <div class="flex items-center justify-between w-full">
+          <div class="flex items-center gap-2">
+            <SvgIcon :local-icon="getPreviewFileIcon()" class="text-16" />
+            <span class="font-medium">{{ previewFileName }}</span>
+          </div>
+          <NButton size="small" @click="handleDownloadPreview">
+            <template #icon>
+              <icon-mdi-download />
+            </template>
+            下载
+          </NButton>
+        </div>
+      </template>
+      <div class="preview-modal-body">
+        <FilePreview
+          :file-name="previewFileName"
+          :file-md5="previewFileMd5"
+          :visible="previewVisible"
+        />
+      </div>
     </NModal>
   </div>
 </template>
@@ -871,6 +970,16 @@ async function onBeforeUpload(
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
   }
+}
+
+// 知识库列表滚动区域：强制滚动条始终占位，防止宽度跳动
+.kb-list-scroll {
+  scrollbar-gutter: stable;
+}
+
+// 右侧概览面板：固定 280px
+.overview-panel {
+  width: 280px;
 }
 
 // 滚动条样式

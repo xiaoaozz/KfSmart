@@ -17,15 +17,21 @@ const sendable = computed(
 );
 
 watch(wsData, val => {
-  const data = JSON.parse(val);
+  if (!val) return;
+  let data: any = {};
+  try {
+    data = JSON.parse(val);
+  } catch {
+    return;
+  }
   const assistant = list.value[list.value.length - 1];
 
-  if (data.type === 'completion' && data.status === 'finished' && assistant.status !== 'error')
+  if (data.type === 'completion' && data.status === 'finished' && assistant?.status !== 'error')
     assistant.status = 'finished';
-  if (data.error) assistant.status = 'error';
+  if (data.error) assistant && (assistant.status = 'error');
   else if (data.chunk) {
-    assistant.status = 'loading';
-    assistant.content += data.chunk;
+    assistant && (assistant.status = 'loading');
+    assistant && (assistant.content += data.chunk);
   }
 });
 
@@ -46,6 +52,7 @@ const handleSend = async () => {
     content: input.value.message,
     role: 'user'
   });
+  chatStore.startSearchLoading();
   chatStore.wsSend(input.value.message);
   list.value.push({
     content: '',

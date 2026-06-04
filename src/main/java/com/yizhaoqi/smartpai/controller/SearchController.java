@@ -1,5 +1,7 @@
 package com.yizhaoqi.smartpai.controller;
 
+import com.yizhaoqi.smartpai.entity.EsDocument;
+import com.yizhaoqi.smartpai.service.ElasticsearchService;
 import com.yizhaoqi.smartpai.service.HybridSearchService;
 import com.yizhaoqi.smartpai.utils.LogUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,18 +21,19 @@ public class SearchController {
     @Autowired
     private HybridSearchService hybridSearchService;
 
+    @Autowired
+    private ElasticsearchService elasticsearchService;
+
     /**
      * 混合检索接口
-     * 
+     * <p>
      * URL: /api/v1/search/hybrid
      * Method: GET
      * Parameters:
      *   - query: 搜索查询字符串（必需）
      *   - topK: 返回结果数量（可选，默认10）
-     * 
-     * 示例: /api/v1/search/hybrid?query=人工智能的发展&topK=10
-     * 
-     * Response:
+     * <p>示例: /api/v1/search/hybrid?query=人工智能的发展&topK=10
+     * <p>Response:
      * [
      *   {
      *     "fileMd5": "abc123...",
@@ -80,6 +83,63 @@ public class SearchController {
             monitor.end("混合检索失败: " + e.getMessage());
             
             // 构造错误响应结构，保持与前端解析一致
+            Map<String, Object> errorBody = new HashMap<>(4);
+            errorBody.put("code", 500);
+            errorBody.put("message", e.getMessage());
+            errorBody.put("data", Collections.emptyList());
+            return errorBody;
+        }
+    }
+
+    /**
+     * 查询指定 chunk 的前后文
+     * <p>
+     * URL: /api/v1/search/chunk-context
+     * Method: GET
+     * Parameters:
+     *   - fileMd5: 文件指纹（必需）
+     *   - chunkId: 当前分块序号（必需）
+     *   - contextSize: 前后各取几个 chunk（可选，默认 2）
+     * <p>示例: /api/v1/search/chunk-context?fileMd5=abc123&chunkId=5&contextSize=2
+     * <p>Response（按 chunkId 升序）:
+     * [
+     *   {
+     *     "chunkId": 3,
+     *     "textContent": "上文段落内容..."
+     *   },
+     *   {
+     *     "chunkId": 5,
+     *     "textContent": "命中的段落内容...",
+     *     "isCurrent": true
+     *   },
+     *   {
+     *     "chunkId": 7,
+     *     "textContent": "下文段落内容..."
+     *   }
+     * ]
+     */
+    @GetMapping("/chunk-context")
+    public Map<String, Object> getChunkContext(
+            @RequestParam String fileMd5,
+            @RequestParam int chunkId,
+            @RequestParam(defaultValue = "2") int contextSize) {
+        try {
+            List<EsDocument> docs = elasticsearchService.getChunkContext(fileMd5, chunkId, contextSize);
+            // 转为简洁的 DTO 格式
+            List<Map<String, Object>> contextList = docs.stream().map(doc -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("chunkId", doc.getChunkId());
+                m.put("textContent", doc.getTextContent());
+                m.put("isCurrent", doc.getChunkId().equals(chunkId));
+                return m;
+            }).toList();
+
+            Map<String, Object> responseBody = new HashMap<>(4);
+            responseBody.put("code", 200);
+            responseBody.put("message", "success");
+            responseBody.put("data", contextList);
+            return responseBody;
+        } catch (Exception e) {
             Map<String, Object> errorBody = new HashMap<>(4);
             errorBody.put("code", 500);
             errorBody.put("message", e.getMessage());

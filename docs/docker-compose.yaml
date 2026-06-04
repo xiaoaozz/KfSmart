@@ -133,20 +133,44 @@ services:
 
       # 内存配置 - 降低到512MB以适应有限资源
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
-      
+
       # 禁用 swapping 检查
       - bootstrap.memory_lock=false
     mem_limit: 1536m
     memswap_limit: 1536m
     command: >
       bash -c "
-      if [ ! -d '/usr/share/elasticsearch/plugins/analysis-ik' ]; then
+      IK_PLUGIN_DIR=/usr/share/elasticsearch/plugins/analysis-ik;
+      IK_CONFIG_DIR=\$IK_PLUGIN_DIR/config;
+      IK_VERSION=8.10.4;
+      IK_ZIP=/tmp/elasticsearch-analysis-ik-\$IK_VERSION.zip;
+
+      if [ ! -d \"\$IK_PLUGIN_DIR\" ]; then
         echo 'Installing analysis-ik plugin...';
-        /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v8.10.4/elasticsearch-analysis-ik-8.10.4.zip || 
-        /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.10.4.zip;
+        /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-\$IK_VERSION.zip ||
+        /usr/share/elasticsearch/bin/elasticsearch-plugin install --batch https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v\$IK_VERSION/elasticsearch-analysis-ik-\$IK_VERSION.zip;
+        echo 'Plugin installed.';
       else
         echo 'analysis-ik plugin already installed.';
       fi;
+
+      if [ ! -f \"\$IK_CONFIG_DIR/IKAnalyzer.cfg.xml\" ]; then
+        echo 'IK config/dict files missing, downloading and extracting...';
+        mkdir -p \"\$IK_CONFIG_DIR\";
+        curl -fsSL -o \"\$IK_ZIP\" https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-\$IK_VERSION.zip ||
+        curl -fsSL -o \"\$IK_ZIP\" https://github.com/medcl/elasticsearch-analysis-ik/releases/download/v\$IK_VERSION/elasticsearch-analysis-ik-\$IK_VERSION.zip;
+        if [ -f \"\$IK_ZIP\" ]; then
+          unzip -o -j \"\$IK_ZIP\" 'config/*' -d \"\$IK_CONFIG_DIR\" 2>/dev/null || true;
+          cp -n \"\$IK_CONFIG_DIR\"/*.dic \"\$IK_CONFIG_DIR\"/ 2>/dev/null || true;
+          rm -f \"\$IK_ZIP\";
+          echo 'IK dict files extracted.';
+        else
+          echo 'WARNING: Failed to download IK zip, dict files may be missing!';
+        fi;
+      else
+        echo 'IK config files already exist.';
+      fi;
+
       exec /usr/local/bin/docker-entrypoint.sh
       "
     healthcheck:
@@ -154,7 +178,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 90s
 
 volumes:
   redis-data:
