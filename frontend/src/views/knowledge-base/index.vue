@@ -10,6 +10,7 @@ import UploadDialog from './modules/upload-dialog.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import SearchDialog from './modules/search-dialog.vue';
 import { fetchGetKnowledgeBases, fetchRefreshKnowledgeBaseStats, fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBaseDocuments } from '@/service/api/knowledge-base';
+import { getFileExt } from '@/utils/common';
 import debounce from 'lodash-es/debounce';
 
 const appStore = useAppStore();
@@ -27,6 +28,63 @@ const onKbSearchInput = () => {
 const previewVisible = ref(false);
 const previewFileName = ref('');
 const previewFileMd5 = ref('');
+
+// 获取预览文件图标
+function getPreviewFileIcon() {
+  const ext = getFileExt(previewFileName.value);
+  if (ext) {
+    const supportedIcons = ['pdf', 'doc', 'docx', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif'];
+    return supportedIcons.includes(ext.toLowerCase()) ? ext : 'dflt';
+  }
+  return 'dflt';
+}
+
+// 预览弹窗中下载文件
+async function handleDownloadPreview() {
+  if (!previewFileName.value) return;
+  try {
+    const token = localStorage.getItem('token');
+    if (previewFileMd5.value) {
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        downloadUrl: string;
+        fileSize: number;
+      }>({
+        url: '/documents/download-by-md5',
+        params: { fileMd5: previewFileMd5.value, token: token || undefined }
+      });
+      if (!requestError && data) {
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.$message?.success('开始下载文件');
+      }
+    } else {
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        downloadUrl: string;
+        fileSize: number;
+      }>({
+        url: '/documents/download',
+        params: { fileName: previewFileName.value, token: token || undefined }
+      });
+      if (!requestError && data) {
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.$message?.success('开始下载文件');
+      }
+    }
+  } catch (err: any) {
+    window.$message?.error('下载失败：' + (err.message || '网络错误'));
+  }
+}
 
 // 筛选器状态
 const selectedFileType = ref('全部');
@@ -157,14 +215,6 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       align: 'center',
       titleAlign: 'center',
       render: row => renderStatus(row.status, row.progress)
-    },
-    {
-      key: 'orgTagName',
-      title: '组织标签',
-      width: 150,
-      align: 'center',
-      titleAlign: 'center',
-      ellipsis: { tooltip: true, lineClamp: 2 }
     },
     {
       key: 'isPublic',
@@ -861,13 +911,28 @@ async function onBeforeUpload(
     <SearchDialog v-model:visible="searchVisible" />
     
     <!-- 文件预览弹窗 -->
-    <NModal v-model:show="previewVisible" preset="card" title="文件预览" style="width: 80%; max-width: 1000px;">
-      <FilePreview
-        :file-name="previewFileName"
-        :file-md5="previewFileMd5"
-        :visible="previewVisible"
-        @close="closeFilePreview"
-      />
+    <NModal v-model:show="previewVisible" preset="card" style="width: 80%; max-width: 1000px;">
+      <template #header>
+        <div class="flex items-center justify-between w-full">
+          <div class="flex items-center gap-2">
+            <SvgIcon :local-icon="getPreviewFileIcon()" class="text-16" />
+            <span class="font-medium">{{ previewFileName }}</span>
+          </div>
+          <NButton size="small" @click="handleDownloadPreview">
+            <template #icon>
+              <icon-mdi-download />
+            </template>
+            下载
+          </NButton>
+        </div>
+      </template>
+      <div class="preview-modal-body">
+        <FilePreview
+          :file-name="previewFileName"
+          :file-md5="previewFileMd5"
+          :visible="previewVisible"
+        />
+      </div>
     </NModal>
   </div>
 </template>
