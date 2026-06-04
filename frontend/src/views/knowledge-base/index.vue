@@ -106,6 +106,7 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'fileName',
       title: '文件名',
       minWidth: 300,
+      titleAlign: 'center',
       render: row => (
         <div class="flex items-center">
           {renderIcon(row.fileName)}
@@ -124,6 +125,8 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'fileMd5',
       title: 'MD5',
       width: 120,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (
         <NEllipsis tooltip>
           <span
@@ -143,36 +146,48 @@ const { columns, columnChecks, data, getData, loading } = useTable({
       key: 'totalSize',
       title: '文件大小',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => fileSize(row.totalSize)
     },
     {
       key: 'status',
       title: '上传状态',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => renderStatus(row.status, row.progress)
     },
     {
       key: 'orgTagName',
       title: '组织标签',
       width: 150,
+      align: 'center',
+      titleAlign: 'center',
       ellipsis: { tooltip: true, lineClamp: 2 }
     },
     {
       key: 'isPublic',
       title: '是否公开',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (row.public || row.isPublic ? <NTag type="success">公开</NTag> : <NTag type="warning">私有</NTag>)
     },
     {
       key: 'createdAt',
       title: '上传时间',
       width: 100,
+      align: 'center',
+      titleAlign: 'center',
       render: row => dayjs(row.createdAt).format('YYYY-MM-DD')
     },
     {
       key: 'operate',
       title: '操作',
       width: 180,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (
         <div class="flex gap-4">
           {renderResumeUploadButton(row)}
@@ -202,6 +217,17 @@ const { columns, columnChecks, data, getData, loading } = useTable({
 
 const store = useKnowledgeBaseStore();
 const { tasks } = storeToRefs(store);
+
+// 监听任务完成状态变化：当有任务从非完成状态变为完成状态时，自动刷新统计
+watch(
+  () => tasks.value.filter(t => t.status === UploadStatus.Completed).length,
+  (newCount, oldCount) => {
+    if (newCount > oldCount) {
+      refreshKnowledgeBaseStats();
+    }
+  }
+);
+
 onMounted(async () => {
   await getList();
   await refreshKnowledgeBaseStats();
@@ -409,12 +435,10 @@ const uploadVisible = ref(false);
 function handleUpload() {
   uploadVisible.value = true;
 }
-/** 文件上传完成后回调 */
+/** 文件上传提交后回调（仅关闭弹窗，真正的刷新在任务完成 watcher 中触发） */
 async function onUploadSubmitted() {
-  await refreshKnowledgeBaseStats();
-  if (activeKnowledgeBase.value) {
-    await loadKnowledgeBaseDocuments();
-  }
+  // 上传是异步的，此时文件尚未完成上传，不立即刷新统计
+  // 等待 watcher 监测到任务完成后自动刷新
 }
 // #endregion
 
@@ -534,9 +558,9 @@ async function onBeforeUpload(
     </div>
 
     <!-- 主体内容 -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex overflow-x-auto overflow-y-hidden">
       <!-- 左侧：知识库列表 -->
-      <div class="w-340px border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
+      <div class="w-260px min-w-260px max-w-260px flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
         <!-- 知识库列表标题 -->
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center justify-between mb-3">
@@ -551,7 +575,7 @@ async function onBeforeUpload(
         </div>
 
         <!-- 知识库卡片列表 -->
-        <div class="flex-1 overflow-y-auto p-3 space-y-2">
+        <div class="flex-1 overflow-y-scroll p-3 space-y-2 kb-list-scroll">
           <div
             v-for="kb in knowledgeBases"
             :key="kb.kbId"
@@ -590,10 +614,10 @@ async function onBeforeUpload(
                     {{ kb.name }}
                   </NTooltip>
                 </h3>
-                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>{{ kb.fileCount }} 文档</span>
+                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  <span class="whitespace-nowrap">{{ kb.fileCount }} 文档</span>
                   <span>·</span>
-                  <span>{{ kb.chunkCount.toLocaleString() }} Chunk</span>
+                  <span class="whitespace-nowrap">{{ kb.chunkCount.toLocaleString() }} Chunk</span>
                 </div>
               </div>
             </div>
@@ -625,7 +649,7 @@ async function onBeforeUpload(
       </div>
 
       <!-- 右侧：文件列表和筛选器 -->
-      <div class="flex-1 flex flex-col bg-white dark:bg-gray-800">
+      <div class="flex-1 min-w-400px flex flex-col bg-white dark:bg-gray-800">
         <!-- 筛选器 -->
         <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-4">
@@ -706,8 +730,8 @@ async function onBeforeUpload(
       </div>
 
       <!-- 右侧面板：知识库概览 -->
-      <div class="w-280px border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col">
-        <div class="p-4">
+      <div class="overview-panel flex-shrink-0 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col overflow-hidden">
+        <div class="flex-1 overflow-y-auto p-4">
           <h2 class="text-base font-bold text-gray-900 dark:text-white mb-4">知识库概览</h2>
 
           <!-- 统计卡片 -->
@@ -871,6 +895,16 @@ async function onBeforeUpload(
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
   }
+}
+
+// 知识库列表滚动区域：强制滚动条始终占位，防止宽度跳动
+.kb-list-scroll {
+  scrollbar-gutter: stable;
+}
+
+// 右侧概览面板：固定 280px
+.overview-panel {
+  width: 280px;
 }
 
 // 滚动条样式

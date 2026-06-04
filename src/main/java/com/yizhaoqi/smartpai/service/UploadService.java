@@ -44,9 +44,6 @@ public class UploadService {
     @Autowired
     private ChunkInfoRepository chunkInfoRepository;
 
-    @Autowired
-    private String minioPublicUrl; // 注入 MinIO 的公共访问地址
-
     /**
      * 上传文件分片
      *
@@ -61,7 +58,7 @@ public class UploadService {
      * @throws IOException 如果文件读取失败
      */
     public void uploadChunk(String fileMd5, int chunkIndex, long totalSize, String fileName, 
-                           MultipartFile file, String orgTag, boolean isPublic, String userId) throws IOException {
+                           MultipartFile file, String orgTag, boolean isPublic, String userId, String kbId) throws IOException {
         // 获取文件类型信息
         String fileType = getFileType(fileName);
         String contentType = file.getContentType();
@@ -86,6 +83,9 @@ public class UploadService {
                 fileUpload.setUserId(userId); // 设置上传用户ID
                 fileUpload.setOrgTag(orgTag); // 设置组织标签
                 fileUpload.setPublic(isPublic); // 设置是否公开
+                if (kbId != null && !kbId.isEmpty()) {
+                    fileUpload.setKbId(kbId); // 设置所属知识库ID
+                }
                 try {
                     fileUploadRepository.save(fileUpload);
                     logger.info("文件记录创建成功 => fileMd5: {}, fileName: {}, fileType: {}", fileMd5, fileName, fileType);
@@ -101,7 +101,7 @@ public class UploadService {
                       fileMd5, fileName, chunkIndex, chunkUploaded);
                       
             // 检查数据库中是否存在分片信息
-            boolean chunkInfoExists = false;
+            boolean chunkInfoExists;
             try {
                 List<ChunkInfo> chunkInfos = chunkInfoRepository.findByFileMd5OrderByChunkIndexAsc(fileMd5);
                 chunkInfoExists = chunkInfos.stream()
@@ -186,8 +186,7 @@ public class UploadService {
                               fileMd5, fileName, fileType, chunkIndex, e.getClass().getName(), e.getMessage(), e);
                     
                     // 详细记录不同类型的MinIO错误
-                    if (e instanceof io.minio.errors.ErrorResponseException) {
-                        io.minio.errors.ErrorResponseException ere = (io.minio.errors.ErrorResponseException) e;
+                    if (e instanceof io.minio.errors.ErrorResponseException ere) {
                         logger.error("MinIO错误响应详情 => fileName: {}, code: {}, message: {}, resource: {}, requestId: {}", 
                                  fileName, ere.errorResponse().code(), ere.errorResponse().message(), 
                                  ere.errorResponse().resource(), ere.errorResponse().requestId());
@@ -209,7 +208,7 @@ public class UploadService {
             }
             
             // 不管分片是否已上传，都确保数据库中有分片信息
-            if (!chunkInfoExists && chunkMd5 != null && storagePath != null) {
+            if (!chunkInfoExists) {
                 try {
                     logger.debug("保存分片信息到数据库 => fileMd5: {}, fileName: {}, chunkIndex: {}, chunkMd5: {}, storagePath: {}", 
                               fileMd5, fileName, chunkIndex, chunkMd5, storagePath);
@@ -249,82 +248,42 @@ public class UploadService {
         String extension = fileName.substring(lastDotIndex + 1).toLowerCase();
         
         // 根据文件扩展名返回文件类型
-        switch (extension) {
-            case "pdf":
-                return "PDF文档";
-            case "doc":
-            case "docx":
-                return "Word文档";
-            case "xls":
-            case "xlsx":
-                return "Excel表格";
-            case "ppt":
-            case "pptx":
-                return "PowerPoint演示文稿";
-            case "txt":
-                return "文本文件";
-            case "md":
-                return "Markdown文档";
-            case "jpg":
-            case "jpeg":
-                return "JPEG图片";
-            case "png":
-                return "PNG图片";
-            case "gif":
-                return "GIF图片";
-            case "bmp":
-                return "BMP图片";
-            case "svg":
-                return "SVG图片";
-            case "mp4":
-                return "MP4视频";
-            case "avi":
-                return "AVI视频";
-            case "mov":
-                return "MOV视频";
-            case "wmv":
-                return "WMV视频";
-            case "mp3":
-                return "MP3音频";
-            case "wav":
-                return "WAV音频";
-            case "flac":
-                return "FLAC音频";
-            case "zip":
-                return "ZIP压缩包";
-            case "rar":
-                return "RAR压缩包";
-            case "7z":
-                return "7Z压缩包";
-            case "tar":
-                return "TAR压缩包";
-            case "gz":
-                return "GZ压缩包";
-            case "json":
-                return "JSON文件";
-            case "xml":
-                return "XML文件";
-            case "csv":
-                return "CSV文件";
-            case "html":
-            case "htm":
-                return "HTML文件";
-            case "css":
-                return "CSS文件";
-            case "js":
-                return "JavaScript文件";
-            case "java":
-                return "Java源码";
-            case "py":
-                return "Python源码";
-            case "cpp":
-            case "c":
-                return "C/C++源码";
-            case "sql":
-                return "SQL文件";
-            default:
-                return extension.toUpperCase() + "文件";
-        }
+        return switch (extension) {
+            case "pdf" -> "PDF文档";
+            case "doc", "docx" -> "Word文档";
+            case "xls", "xlsx" -> "Excel表格";
+            case "ppt", "pptx" -> "PowerPoint演示文稿";
+            case "txt" -> "文本文件";
+            case "md" -> "Markdown文档";
+            case "jpg", "jpeg" -> "JPEG图片";
+            case "png" -> "PNG图片";
+            case "gif" -> "GIF图片";
+            case "bmp" -> "BMP图片";
+            case "svg" -> "SVG图片";
+            case "mp4" -> "MP4视频";
+            case "avi" -> "AVI视频";
+            case "mov" -> "MOV视频";
+            case "wmv" -> "WMV视频";
+            case "mp3" -> "MP3音频";
+            case "wav" -> "WAV音频";
+            case "flac" -> "FLAC音频";
+            case "zip" -> "ZIP压缩包";
+            case "rar" -> "RAR压缩包";
+            case "7z" -> "7Z压缩包";
+            case "tar" -> "TAR压缩包";
+            case "gz" -> "GZ压缩包";
+            case "json" -> "JSON文件";
+            case "xml" -> "XML文件";
+            case "csv" -> "CSV文件";
+            case "html", "htm" -> "HTML文件";
+            case "css" -> "CSS文件";
+            case "js" -> "JavaScript文件";
+            case "java" -> "Java源码";
+            case "py" -> "Python源码";
+            case "cpp", "c" -> "C/C++源码";
+            case "sql" -> "SQL文件";
+            default -> extension.toUpperCase() + "文件";
+        };
     }
 
     /**
@@ -344,7 +303,8 @@ public class UploadService {
                 throw new IllegalArgumentException("chunkIndex must be non-negative");
             }
             String redisKey = "upload:" + userId + ":" + fileMd5;
-            boolean isUploaded = redisTemplate.opsForValue().getBit(redisKey, chunkIndex);
+            Boolean bitValue = redisTemplate.opsForValue().getBit(redisKey, chunkIndex);
+            boolean isUploaded = Boolean.TRUE.equals(bitValue);
             logger.debug("分片上传状态 => fileMd5: {}, chunkIndex: {}, userId: {}, isUploaded: {}", 
                       fileMd5, chunkIndex, userId, isUploaded);
             return isUploaded;
@@ -419,9 +379,7 @@ public class UploadService {
             
             // 优化：一次性获取所有分片状态
             String redisKey = "upload:" + userId + ":" + fileMd5;
-            byte[] bitmapData = redisTemplate.execute((RedisCallback<byte[]>) connection -> {
-                return connection.get(redisKey.getBytes());
-            });
+            byte[] bitmapData = redisTemplate.execute((RedisCallback<byte[]>) connection -> connection.stringCommands().get(redisKey.getBytes()));
             
             if (bitmapData == null) {
                 logger.info("Redis中无分片状态记录 => fileMd5: {}, userId: {}", fileMd5, userId);

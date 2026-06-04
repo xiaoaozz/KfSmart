@@ -212,15 +212,11 @@ public class KnowledgeBaseService {
         // 计算该知识库下的文档数和总大小
         long docCount = 0;
         long totalSize = 0;
-        // 优先使用kbId查询文档，如果没有kbId关联的文档则用orgTag查询
+        // 按kbId查询文档
         var filesByKbId = fileUploadRepository.findByKbId(kb.getKbId());
         if (!filesByKbId.isEmpty()) {
             docCount = filesByKbId.stream().filter(f -> f.getStatus() == 1).count();
             totalSize = filesByKbId.stream().filter(f -> f.getStatus() == 1).mapToLong(FileUpload::getTotalSize).sum();
-        } else if (kb.getOrgTag() != null) {
-            var files = fileUploadRepository.findByOrgTag(kb.getOrgTag());
-            docCount = files.stream().filter(f -> f.getStatus() == 1).count();
-            totalSize = files.stream().filter(f -> f.getStatus() == 1).mapToLong(FileUpload::getTotalSize).sum();
         }
         dto.put("fileCount", docCount);
         dto.put("totalSize", totalSize);
@@ -378,12 +374,8 @@ public class KnowledgeBaseService {
             throw new IllegalArgumentException("无权访问该知识库: " + kbId);
         }
         
-        // 优先按kbId检索文档
+        // 按kbId检索文档
         List<FileUpload> files = fileUploadRepository.findByKbId(kbId);
-        if (files.isEmpty() && kb.getOrgTag() != null) {
-            // 如果没有kbId关联的文档，按orgTag检索（兼容旧数据）
-            files = fileUploadRepository.findByOrgTag(kb.getOrgTag());
-        }
         
         return files.stream().map(file -> {
             Map<String, Object> dto = new HashMap<>();

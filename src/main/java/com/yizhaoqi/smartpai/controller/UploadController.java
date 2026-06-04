@@ -123,22 +123,7 @@ public class UploadController {
         
             LogUtils.logFileOperation(userId, "UPLOAD_CHUNK", fileName, fileMd5, "PROCESSING");
         
-            uploadService.uploadChunk(fileMd5, chunkIndex, totalSize, fileName, file, orgTag, isPublic, userId);
-            
-            // 如果指定了知识库ID，仅在kbId为空或发生变化时更新，避免每个分片重复写入
-            if (kbId != null && !kbId.isEmpty()) {
-                Optional<FileUpload> fileOpt = fileUploadRepository.findByFileMd5AndUserId(fileMd5, userId);
-                if (fileOpt.isPresent()) {
-                    FileUpload fileUpload = fileOpt.get();
-                    String existingKbId = fileUpload.getKbId();
-                    // 只在kbId为null或与当前不同的情况下更新，减少重复写入与并发竞争
-                    if (!kbId.equals(existingKbId)) {
-                        fileUpload.setKbId(kbId);
-                        fileUploadRepository.save(fileUpload);
-                        LogUtils.logBusiness("UPLOAD_CHUNK", userId, "文件绑定知识库(更新kbId): fileMd5=%s, kbId=%s", fileMd5, kbId);
-                    }
-                }
-            }
+            uploadService.uploadChunk(fileMd5, chunkIndex, totalSize, fileName, file, orgTag, isPublic, userId, kbId);
             
             List<Integer> uploadedChunks = uploadService.getUploadedChunks(fileMd5, userId);
             int actualTotalChunks = uploadService.getTotalChunks(fileMd5, userId);
