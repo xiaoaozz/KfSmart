@@ -580,33 +580,6 @@ async function onBeforeUpload(
 
 <template>
   <div class="knowledge-base-page flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-    <!-- 页面标题和操作栏 -->
-    <div class="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
-      <div class="flex items-center justify-between">
-        <h1 class="text-base font-bold text-gray-900 dark:text-white">知识库管理</h1>
-        <div class="flex items-center gap-3">
-          <NButton type="primary" size="medium" @click="handleCreateKb">
-            <template #icon>
-              <icon-carbon:add class="text-base" />
-            </template>
-            新建知识库
-          </NButton>
-          <NButton type="primary" size="medium" ghost @click="handleUpload">
-            <template #icon>
-              <icon-carbon:cloud-upload class="text-base" />
-            </template>
-            上传文档
-          </NButton>
-          <NButton size="medium" tertiary @click="handleUpload">
-            <template #icon>
-              <icon-carbon:download class="text-base" />
-            </template>
-            批量导入
-          </NButton>
-        </div>
-      </div>
-    </div>
-
     <!-- 主体内容 -->
     <div class="flex-1 flex overflow-x-auto overflow-y-hidden">
       <!-- 左侧：知识库列表 -->
@@ -752,12 +725,49 @@ async function onBeforeUpload(
 
             <div class="flex-1"></div>
 
-            <!-- 刷新按钮 -->
-            <NButton circle size="small" tertiary @click="handleRefreshStats">
-              <template #icon>
-                <icon-carbon:renew class="text-lg" />
-              </template>
-            </NButton>
+            <!-- 操作图标按钮组 -->
+            <div class="flex items-center gap-2">
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" type="primary" @click="handleCreateKb">
+                    <template #icon>
+                      <icon-carbon:add class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                新建知识库
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" type="primary" ghost @click="handleUpload">
+                    <template #icon>
+                      <icon-carbon:cloud-upload class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                上传文档
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" tertiary @click="handleUpload">
+                    <template #icon>
+                      <icon-carbon:download class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                批量导入
+              </NTooltip>
+              <NTooltip placement="bottom">
+                <template #trigger>
+                  <NButton circle size="small" tertiary @click="handleRefreshStats">
+                    <template #icon>
+                      <icon-carbon:renew class="text-base" />
+                    </template>
+                  </NButton>
+                </template>
+                刷新统计
+              </NTooltip>
+            </div>
           </div>
         </div>
 

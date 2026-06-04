@@ -241,6 +241,32 @@ declare namespace Api {
     interface Token {
       cmdToken: string;
     }
+
+    /** 单条检索结果 */
+    interface SearchResultItem {
+      referenceNumber: number;
+      fileName: string;
+      fileMd5: string;
+      score: number;
+      chunkId: number;
+      snippet: string;
+      /** 完整文本内容（可直接用于弹窗展示，不再发网络请求时使用） */
+      fullContent: string;
+    }
+
+    /** chunk 上下文中的一条 */
+    interface ChunkContextItem {
+      chunkId: number;
+      textContent: string;
+      isCurrent: boolean;
+    }
+
+    /** WebSocket 推送的检索结果消息 */
+    interface SearchResultsMessage {
+      type: 'search_results';
+      results: SearchResultItem[];
+      totalCount: number;
+    }
   }
 
   namespace Document {
@@ -282,6 +308,35 @@ declare namespace Api {
       action: string;
       timestamp: string;
       ip_address: string;
+    }
+  }
+
+  /** 登录记录 */
+  namespace LoginRecord {
+    interface Item {
+      id: number;
+      username: string;
+      loginTime: string;
+      ipAddress: string;
+      deviceInfo: string;
+      location: string;
+      status: 'SUCCESS' | 'FAILED';
+      failReason: string | null;
+    }
+
+    interface PaginatedResult {
+      content: Item[];
+      totalElements: number;
+      totalPages: number;
+      size: number;
+      number: number;
+    }
+
+    interface Statistics {
+      totalLogins: number;
+      successLogins: number;
+      failedLogins: number;
+      recentRecords: Item[];
     }
   }
 }

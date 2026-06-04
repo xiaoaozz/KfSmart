@@ -2,9 +2,11 @@ package com.yizhaoqi.smartpai.service;
 
 import com.yizhaoqi.smartpai.exception.CustomException;
 import com.yizhaoqi.smartpai.model.FileUpload;
+import com.yizhaoqi.smartpai.model.LoginRecord;
 import com.yizhaoqi.smartpai.model.OrganizationTag;
 import com.yizhaoqi.smartpai.model.User;
 import com.yizhaoqi.smartpai.repository.FileUploadRepository;
+import com.yizhaoqi.smartpai.repository.LoginRecordRepository;
 import com.yizhaoqi.smartpai.repository.OrganizationTagRepository;
 import com.yizhaoqi.smartpai.repository.UserRepository;
 import com.yizhaoqi.smartpai.utils.PasswordUtil;
@@ -58,6 +60,9 @@ public class UserService {
     
     @Autowired
     private OrgTagCacheService orgTagCacheService;
+
+    @Autowired
+    private LoginRecordRepository loginRecordRepository;
 
     /**
      * 注册新用户。
@@ -879,6 +884,193 @@ public class UserService {
         result.put("size", userPage.getSize());
         result.put("number", userPage.getNumber() + 1); // 转换为从1开始的页码
         
+        return result;
+    }
+
+    /**
+     * 解析 User-Agent 字符串为可读的设备信息
+     * 提取操作系统 + 浏览器信息
+     */
+    private String parseUserAgent(String userAgent) {
+        if (userAgent == null || userAgent.isBlank()) {
+            return "未知设备";
+        }
+
+        // 操作系统识别
+        String os;
+        if (userAgent.contains("Windows NT 10.0") || userAgent.contains("Windows NT 11.0")) {
+            os = "Windows 10/11";
+        } else if (userAgent.contains("Windows NT 6.1")) {
+            os = "Windows 7";
+        } else if (userAgent.contains("Windows")) {
+            os = "Windows";
+        } else if (userAgent.contains("Mac OS X")) {
+            os = "macOS";
+        } else if (userAgent.contains("Android")) {
+            // 尝试提取 Android 版本
+            int idx = userAgent.indexOf("Android ");
+            String ver = "";
+            if (idx >= 0) {
+                String sub = userAgent.substring(idx + 8);
+                int end = sub.indexOf(';');
+                if (end < 0) end = sub.indexOf(')');
+                if (end > 0) ver = " " + sub.substring(0, end).trim();
+            }
+            os = "Android" + ver;
+        } else if (userAgent.contains("iPhone") || userAgent.contains("iOS")) {
+            os = "iOS";
+        } else if (userAgent.contains("Linux")) {
+            os = "Linux";
+        } else {
+            os = "未知系统";
+        }
+
+        // 浏览器识别（顺序重要：Edge > Chrome > Safari > Firefox > Others）
+        String browser;
+        if (userAgent.contains("Edg/")) {
+            browser = "Edge";
+        } else if (userAgent.contains("Chrome/") && !userAgent.contains("Chromium")) {
+            browser = "Chrome";
+        } else if (userAgent.contains("Safari/") && !userAgent.contains("Chrome")) {
+            browser = "Safari";
+        } else if (userAgent.contains("Firefox/")) {
+            browser = "Firefox";
+        } else if (userAgent.contains("OPR/") || userAgent.contains("Opera/")) {
+            browser = "Opera";
+        } else if (userAgent.contains("MSIE") || userAgent.contains("Trident/")) {
+            browser = "IE";
+        } else if (userAgent.contains("okhttp") || userAgent.contains("Retrofit") || userAgent.contains("Java/")) {
+            browser = "客户端应用";
+        } else {
+            browser = "未知浏览器";
+        }
+
+        return os + " / " + browser;
+    }
+
+    /**
+     * 记录登录事件
+     * 
+     * @param username 用户名
+     * @param userId 用户ID（可为 null，会尝试通过用户名自动查询补全）
+     * @param ipAddress IP地址
+     * @param rawUserAgent 原始 User-Agent 字符串
+     * @param status 登录状态（SUCCESS / FAILED）
+     * @param failReason 失败原因（可选）
+     */
+    public void recordLogin(String username, Long userId, String ipAddress, 
+                            String rawUserAgent, String status, String failReason) {
+        // 如果 userId 未传入，尝试通过用户名查询
+        Long resolvedUserId = userId;
+        if (resolvedUserId == null && username != null && !username.isBlank()) {
+            try {
+                resolvedUserId = userRepository.findByUsername(username)
+                        .map(User::getId)
+                        .orElse(null);
+            } catch (Exception e) {
+                logger.warn("recordLogin: could not resolve userId for username={}", username);
+            }
+        }
+
+        // 解析 User-Agent 为可读设备描述
+        String deviceDesc = parseUserAgent(rawUserAgent);
+
+        LoginRecord record = new LoginRecord();
+        record.setUserId(resolvedUserId);
+        record.setUsername(username);
+        record.setLoginTime(java.time.LocalDateTime.now());
+        record.setIpAddress(ipAddress);
+        record.setDeviceInfo(deviceDesc);
+        record.setLocation(""); // 留空，可后续通过 IP 解析补充
+        record.setStatus(status);
+        record.setFailReason(failReason);
+
+        loginRecordRepository.save(record);
+        logger.info("Login record saved: user={}, status={}, ip={}, device={}", username, status, ipAddress, deviceDesc);
+    }
+
+    /**
+     * 获取用户登录记录（分页）
+     * 
+     * @param username 用户名
+     * @param page 页码（从1开始）
+     * @param size 每页条数
+     * @return 分页结果
+     */
+    public Map<String, Object> getLoginRecords(String username, int page, int size) {
+        userRepository.findByUsername(username)
+                .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
+
+        int pageIndex = page > 0 ? page - 1 : 0;
+        Pageable pageable = PageRequest.of(pageIndex, size, Sort.by("loginTime").descending());
+
+        Page<LoginRecord> recordPage = loginRecordRepository
+                .findByUsernameOrderByLoginTimeDesc(username, pageable);
+
+        List<Map<String, Object>> records = recordPage.getContent().stream()
+                .map(record -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", record.getId());
+                    map.put("username", record.getUsername());
+                    map.put("loginTime", record.getLoginTime());
+                    map.put("ipAddress", record.getIpAddress());
+                    map.put("deviceInfo", record.getDeviceInfo());
+                    map.put("location", record.getLocation());
+                    map.put("status", record.getStatus());
+                    map.put("failReason", record.getFailReason());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("content", records);
+        result.put("totalElements", recordPage.getTotalElements());
+        result.put("totalPages", recordPage.getTotalPages());
+        result.put("size", recordPage.getSize());
+        result.put("number", recordPage.getNumber() + 1);
+
+        return result;
+    }
+
+    /**
+     * 获取用户登录统计信息
+     * 
+     * @param username 用户名
+     * @return 统计信息
+     */
+    public Map<String, Object> getLoginStatistics(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
+
+        long totalLogins = loginRecordRepository.countByUserId(user.getId());
+        long successLogins = loginRecordRepository.countByUserIdAndStatus(user.getId(), "SUCCESS");
+        long failedLogins = loginRecordRepository.countByUserIdAndStatus(user.getId(), "FAILED");
+
+        // 最近10条记录
+        List<LoginRecord> recentRecords = loginRecordRepository
+                .findTop10ByUserIdOrderByLoginTimeDesc(user.getId());
+
+        List<Map<String, Object>> recentList = recentRecords.stream()
+                .map(record -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", record.getId());
+                    map.put("username", record.getUsername());
+                    map.put("loginTime", record.getLoginTime());
+                    map.put("ipAddress", record.getIpAddress());
+                    map.put("deviceInfo", record.getDeviceInfo());
+                    map.put("location", record.getLocation());
+                    map.put("status", record.getStatus());
+                    map.put("failReason", record.getFailReason());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("totalLogins", totalLogins);
+        result.put("successLogins", successLogins);
+        result.put("failedLogins", failedLogins);
+        result.put("recentRecords", recentList);
+
         return result;
     }
 }

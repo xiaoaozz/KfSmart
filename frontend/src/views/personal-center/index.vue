@@ -1,110 +1,78 @@
 <script setup lang="ts">
-const { userInfo } = storeToRefs(useAuthStore());
+import { ref } from 'vue';
+import PersonalProfile from './modules/profile.vue';
+import AccountSecurity from './modules/account-security.vue';
+import MessageNotification from './modules/message-notification.vue';
+import MyFavorites from './modules/my-favorites.vue';
+import UsageStatistics from './modules/usage-statistics.vue';
+import OperationRecord from './modules/operation-record.vue';
 
-const tags = ref<Api.OrgTag.Mine>({
-  orgTags: [],
-  primaryOrg: '',
-  orgTagDetails: []
-});
+defineOptions({ name: 'PersonalCenter' });
 
-const loading = ref(false);
-const getOrgTags = async () => {
-  loading.value = true;
-  const { error, data } = await request<Api.OrgTag.Mine>({
-    url: '/users/org-tags'
-  });
-  if (!error) {
-    tags.value = data;
-  }
-  loading.value = false;
-};
+const activeTab = ref('profile');
 
-onMounted(() => {
-  getOrgTags();
-});
+const tabs = [
+  { key: 'profile', label: '个人资料', icon: 'carbon:user-avatar' },
+  { key: 'security', label: '账号安全', icon: 'carbon:security' },
 
-const visible = ref(false);
-const currentTagId = ref('');
-const showModal = (tagId: string) => {
-  if (tagId === tags.value.primaryOrg) return;
-  visible.value = true;
-  currentTagId.value = tagId;
-};
-const submitLoading = ref(false);
-const setPrimaryOrg = async () => {
-  submitLoading.value = true;
-  const { error } = await request({
-    url: '/users/primary-org',
-    method: 'PUT',
-    data: { primaryOrg: currentTagId.value, userId: userInfo.value.id }
-  });
-  if (!error) {
-    visible.value = false;
-    getOrgTags();
-  }
-  submitLoading.value = false;
-};
+  { key: 'notification', label: '消息通知', icon: 'carbon:notification' },
+  { key: 'favorites', label: '我的收藏', icon: 'carbon:star' },
+  { key: 'statistics', label: '使用统计', icon: 'carbon:analytics' },
+  { key: 'records', label: '操作记录', icon: 'carbon:time' },
+];
 </script>
 
 <template>
-  <NSpin :show="loading">
-    <div class="flex-cc">
-      <NCard class="min-h-400px min-w-600px w-50vw card-wrapper" :segmented="{ content: true, footer: 'soft' }">
-        <template #header>
-          <div class="flex items-center gap-4">
-            <NAvatar size="large">
-              <icon-solar:user-circle-linear class="text-icon-large" />
-            </NAvatar>
-            <div>{{ userInfo.username }}</div>
-          </div>
-        </template>
-        <NScrollbar class="max-h-60vh">
-          <div class="flex flex-wrap gap-4 p-4">
-            <NCard
-              v-for="tag in tags.orgTagDetails"
-              :key="tag.tagId"
-              size="small"
-              embedded
-              hoverable
-              class="w-[calc((100%-32px)/3)]"
-              :segmented="{ content: true, footer: 'soft' }"
-              @click="showModal(tag.tagId)"
-            >
-              <div class="flex items-center justify-between">
-                <div>{{ tag.name }}</div>
-                <NTag v-if="tag.tagId === tags.primaryOrg" type="primary" size="small">
-                  主标签
-                  <template #icon>
-                    <icon-solar:verified-check-bold-duotone class="text-icon" />
-                  </template>
-                </NTag>
-              </div>
-              <template #footer>
-                <NEllipsis :line-clamp="3">{{ tag.description }}</NEllipsis>
-              </template>
-            </NCard>
-          </div>
-        </NScrollbar>
-      </NCard>
-
-      <NModal
-        v-model:show="visible"
-        :loading="submitLoading"
-        preset="dialog"
-        title="设置主标签"
-        content="确定将当前标签设置为主标签吗？"
-        positive-text="确认"
-        negative-text="取消"
-        @positive-click="setPrimaryOrg"
-        @negative-click="visible = false"
-      />
+  <div class="personal-center-page h-full flex flex-col overflow-hidden">
+    <!-- 顶部 Tab 导航栏 -->
+    <div class="flex-shrink-0 bg-layout border-b border-gray-200 dark:border-gray-700 px-4">
+      <div class="flex items-center">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="relative flex items-center gap-2 px-5 py-4 text-sm font-medium transition-all whitespace-nowrap cursor-pointer border-0 bg-transparent"
+          :class="activeTab === tab.key
+            ? 'text-blue-600 dark:text-blue-400'
+            : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'"
+          @click="activeTab = tab.key"
+        >
+          <component
+            :is="tab.icon"
+            class="text-base flex-shrink-0 transition-colors"
+            :class="activeTab === tab.key ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
+          />
+          <span>{{ tab.label }}</span>
+          <!-- 选中下划线 -->
+          <span
+            v-if="activeTab === tab.key"
+            class="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-500 dark:bg-blue-400"
+          />
+        </button>
+      </div>
     </div>
-  </NSpin>
+
+    <!-- 内容区（可滚动） -->
+    <div class="flex-1 overflow-y-auto px-6 py-6 bg-gray-50 dark:bg-gray-900">
+      <Transition name="fade-tab" mode="out-in">
+        <PersonalProfile v-if="activeTab === 'profile'" key="profile" />
+        <AccountSecurity v-else-if="activeTab === 'security'" key="security" />
+
+        <MessageNotification v-else-if="activeTab === 'notification'" key="notification" />
+        <MyFavorites v-else-if="activeTab === 'favorites'" key="favorites" />
+        <UsageStatistics v-else-if="activeTab === 'statistics'" key="statistics" />
+        <OperationRecord v-else-if="activeTab === 'records'" key="records" />
+      </Transition>
+    </div>
+  </div>
 </template>
 
 <style scoped lang="scss">
-:deep(.n-card__content) {
-  flex: none m !important;
-  height: fit-content;
+.fade-tab-enter-active,
+.fade-tab-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-tab-enter-from,
+.fade-tab-leave-to {
+  opacity: 0;
 }
 </style>

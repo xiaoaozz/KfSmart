@@ -14,7 +14,9 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +36,7 @@ public class ChatHandler {
     private final RedisTemplate<String, String> redisTemplate;
     private final HybridSearchService searchService;
     private final DeepSeekClient deepSeekClient;
+    private final ElasticsearchService elasticsearchService;
     private final ObjectMapper objectMapper;
     
     // 用于存储每个会话的完整响应
@@ -47,10 +50,12 @@ public class ChatHandler {
 
     public ChatHandler(RedisTemplate<String, String> redisTemplate,
                       HybridSearchService searchService,
-                      DeepSeekClient deepSeekClient) {
+                      DeepSeekClient deepSeekClient,
+                      ElasticsearchService elasticsearchService) {
         this.redisTemplate = redisTemplate;
         this.searchService = searchService;
         this.deepSeekClient = deepSeekClient;
+        this.elasticsearchService = elasticsearchService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -71,9 +76,31 @@ public class ChatHandler {
             List<Map<String, String>> history = getConversationHistory(conversationId);
             logger.debug("获取到 {} 条历史对话", history.size());
             
-            // 3. 执行带权限过滤的混合搜索
-            List<SearchResult> searchResults = searchService.searchWithPermission(userMessage, userId, 5);
-            logger.debug("搜索结果数量: {}", searchResults.size());
+            // 3. 执行带权限过滤的混合搜索：多召回后按 fileMd5 去重，保留得分最高的 chunk，最终只取 top 3
+            List<SearchResult> rawResults = searchService.searchWithPermission(userMessage, userId, 20);
+            // 每个文件只保留得分最高的 chunk，按分数降序排列，只取最匹配的 3 条
+            List<SearchResult> searchResults = rawResults.stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            SearchResult::getFileMd5,
+                            r -> r,
+                            (a, b) -> (a.getScore() != null && b.getScore() != null && a.getScore() >= b.getScore()) ? a : b,
+                            LinkedHashMap::new
+                    ))
+                    .values().stream()
+                    .sorted(Comparator.comparingDouble(r -> -(r.getScore() != null ? r.getScore() : 0.0)))
+                    .limit(3)
+                    .collect(java.util.stream.Collectors.toList());
+            logger.info("[流程] 搜索完成，原始结果数={}，取最高分3条", rawResults.size());
+
+            // 3.5 通过 WebSocket 将检索结果推送到前端（在 DeepSeek 流式调用之前同步发送）
+            sendSearchResults(session, searchResults);
+
+            // 等待足够时间让前端收到并处理 search_results 消息，再开始流式输出
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
             
             // 4. 构建上下文
             String context = buildContext(searchResults, session.getId());
@@ -84,9 +111,7 @@ public class ChatHandler {
                 chunk -> {
                     // 累积响应内容
                     StringBuilder responseBuilder = responseBuilders.get(session.getId());
-                    if (responseBuilder != null) {
-                        responseBuilder.append(chunk);
-                    }
+                    responseBuilder.append(chunk);
                     sendResponseChunk(session, chunk);
                 },
                 error -> {
@@ -144,31 +169,29 @@ public class ChatHandler {
                             // 再等待最多25秒
                             for (int i = 0; i < 5; i++) {
                                 Thread.sleep(5000);
-                                if (responseBuilder != null) {
-                                    lastLength = responseBuilder.length();
-                                    // 再次检查2秒内是否有新内容
-                                    Thread.sleep(2000);
-                                    if (responseBuilder.length() == lastLength) {
-                                        // 没有新内容，可以认为响应已完成
-                                        responseFuture.complete(responseBuilder.toString());
-                                        
-                                        // 发送响应完成通知
-                                        sendCompletionNotification(session);
-                                        
-                                        // 更新对话历史
-                                        String completeResponse = responseBuilder.toString();
-                                        updateConversationHistory(conversationId, userMessage, completeResponse);
-                                        
-                                        // 输出对话存储信息以便调试
-                                        String redisKey = "user:" + userId + ":current_conversation";
-                                        logger.info("对话存储信息 - Redis键: {}, 值: {}", redisKey, conversationId);
-                                        
-                                        // 清理会话响应构建器
-                                        responseBuilders.remove(session.getId());
-                                        responseFutures.remove(session.getId());
-                                        logger.info("消息处理完成，用户ID: {}", userId);
-                                        return;
-                                    }
+                                lastLength = responseBuilder.length();
+                                // 再次检查2秒内是否有新内容
+                                Thread.sleep(2000);
+                                if (responseBuilder.length() == lastLength) {
+                                    // 没有新内容，可以认为响应已完成
+                                    responseFuture.complete(responseBuilder.toString());
+                                    
+                                    // 发送响应完成通知
+                                    sendCompletionNotification(session);
+                                    
+                                    // 更新对话历史
+                                    String completeResponse = responseBuilder.toString();
+                                    updateConversationHistory(conversationId, userMessage, completeResponse);
+                                    
+                                    // 输出对话存储信息以便调试
+                                    String redisKey = "user:" + userId + ":current_conversation";
+                                    logger.info("对话存储信息 - Redis键: {}, 值: {}", redisKey, conversationId);
+                                    
+                                    // 清理会话响应构建器
+                                    responseBuilders.remove(session.getId());
+                                    responseFutures.remove(session.getId());
+                                    logger.info("消息处理完成，用户ID: {}", userId);
+                                    return;
                                 }
                             }
                             
@@ -247,7 +270,7 @@ public class ChatHandler {
                 return new ArrayList<>();
             }
             
-            List<Map<String, String>> history = objectMapper.readValue(json, new TypeReference<List<Map<String, String>>>() {});
+            List<Map<String, String>> history = objectMapper.readValue(json, new TypeReference<>() {});
             logger.debug("读取到会话 {} 的 {} 条历史记录", conversationId, history.size());
             return history;
         } catch (JsonProcessingException e) {
@@ -300,16 +323,18 @@ public class ChatHandler {
         // 创建当前会话的引用映射
         Map<Integer, String> referenceMapping = new HashMap<>();
 
-        final int MAX_SNIPPET_LEN = 300; // 单段最长字符数，超出截断
+        final int MAX_SNIPPET_LEN = 2000; // 单段最长字符数（含相邻chunk扩展后）
         StringBuilder context = new StringBuilder();
         for (int i = 0; i < searchResults.size(); i++) {
             SearchResult result = searchResults.get(i);
-            String snippet = result.getTextContent();
+            String fileLabel = result.getFileName() != null ? result.getFileName() : "unknown";
+            String fileMd5 = result.getFileMd5();
+
+            // 扩展相邻 chunk：前后各取 1 个，将内容拼接后作为上下文
+            String snippet = buildExpandedSnippet(result, 1);
             if (snippet.length() > MAX_SNIPPET_LEN) {
                 snippet = snippet.substring(0, MAX_SNIPPET_LEN) + "…";
             }
-            String fileLabel = result.getFileName() != null ? result.getFileName() : "unknown";
-            String fileMd5 = result.getFileMd5();
 
             // 格式：[1] (test1.txt | MD5:abc123def456) 文件内容...
             // 这样AI和用户都能通过MD5区分同名文件
@@ -319,7 +344,7 @@ public class ChatHandler {
             if (fileMd5 != null) {
                 referenceMapping.put(i + 1, fileMd5);
                 // 详细日志：记录每个引用编号的映射关系
-                logger.info("引用映射: sessionId={}, 引用编号#{}={}, 文件名={}, MD5={}",
+                logger.info("引用映射: sessionId={}, 引用编号#{} 文件名={}, MD5={}",
                     sessionId, i + 1, fileLabel, fileMd5);
             }
         }
@@ -331,6 +356,80 @@ public class ChatHandler {
         return context.toString();
     }
 
+    /**
+     * 扩展命中 chunk 的上下文：从 ES 取前后相邻 chunk 并拼接，
+     * 确保标题行和正文不因分片边界而分离。
+     */
+    private String buildExpandedSnippet(SearchResult result, int expandCount) {
+        String fileMd5 = result.getFileMd5();
+        int chunkId = result.getChunkId() != null ? result.getChunkId() : 0;
+        if (fileMd5 == null || fileMd5.isEmpty()) {
+            return result.getTextContent() != null ? result.getTextContent() : "";
+        }
+        try {
+            List<com.yizhaoqi.smartpai.entity.EsDocument> contextChunks =
+                    elasticsearchService.getChunkContext(fileMd5, chunkId, expandCount);
+            if (contextChunks == null || contextChunks.isEmpty()) {
+                return result.getTextContent() != null ? result.getTextContent() : "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (com.yizhaoqi.smartpai.entity.EsDocument chunk : contextChunks) {
+                if (chunk.getTextContent() != null) {
+                    if (!sb.isEmpty()) sb.append("\n");
+                    sb.append(chunk.getTextContent());
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            logger.warn("扩展 chunk 上下文失败，fileMd5={}, chunkId={}: {}", fileMd5, chunkId, e.getMessage());
+            return result.getTextContent() != null ? result.getTextContent() : "";
+        }
+    }
+
+    // 用于给每个会话的 sendMessage 加锁，Spring WebSocket session 不支持并发写
+    private final Map<String, Object> sessionSendLocks = new ConcurrentHashMap<>();
+
+    private Object getSessionLock(String sessionId) {
+        return sessionSendLocks.computeIfAbsent(sessionId, k -> new Object());
+    }
+
+    private void safeSend(WebSocketSession session, String json) throws Exception {
+        if (session.isOpen()) {
+            session.sendMessage(new TextMessage(json));
+        }
+    }
+
+    private void sendSearchResults(WebSocketSession session, List<SearchResult> searchResults) {
+        try {
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (int i = 0; i < searchResults.size(); i++) {
+                SearchResult sr = searchResults.get(i);
+                Map<String, Object> item = new HashMap<>();
+                item.put("referenceNumber", i + 1);
+                item.put("fileName", sr.getFileName() != null ? sr.getFileName() : "unknown");
+                item.put("fileMd5", sr.getFileMd5());
+                item.put("score", sr.getScore());
+                item.put("chunkId", sr.getChunkId());
+                // 完整文本内容，供弹窗查看
+                item.put("fullContent", sr.getTextContent() != null ? sr.getTextContent() : "");
+                // snippet 不截断，前端直接展示完整内容
+                String snippet = sr.getTextContent() != null ? sr.getTextContent() : "";
+                item.put("snippet", snippet);
+                results.add(item);
+            }
+            Map<String, Object> message = new HashMap<>();
+            message.put("type", "search_results");
+            message.put("results", results);
+            message.put("totalCount", searchResults.size());
+            String json = objectMapper.writeValueAsString(message);
+            logger.info("[搜索结果推送] 准备发送，会话={}, 结果数={}, JSON长度={}", session.getId(), results.size(), json.length());
+            safeSend(session, json);
+            logger.info("[搜索结果推送] 发送成功，会话={}, 共 {} 条", session.getId(), results.size());
+        } catch (Exception e) {
+            logger.error("[搜索结果推送] 发送失败，会话={}, 错误={}", session.getId(), e.getMessage(), e);
+        }
+    }
+
     private void sendResponseChunk(WebSocketSession session, String chunk) {
         try {
             // 检查是否需要停止发送
@@ -339,11 +438,18 @@ public class ChatHandler {
                 return;
             }
             
-            // 将chunk包装成JSON格式，匹配前端期望的数据结构
             Map<String, String> chunkResponse = Map.of("chunk", chunk);
             String jsonChunk = objectMapper.writeValueAsString(chunkResponse);
             logger.debug("发送响应块到会话 {}: {}", session.getId(), jsonChunk);
-            session.sendMessage(new TextMessage(jsonChunk));
+            // 注意：Reactive WebClient 的 onChunk 回调是在 reactor 线程池里调用的，
+            // StandardWebSocketSession.sendMessage 底层是同步的 ConcurrentWebSocketSessionDecorator，
+            // 多个 reactor 线程并发调用会抛 IllegalStateException: previous message not sent yet
+            // 因此这里用 synchronized 序列化写入
+            synchronized (getSessionLock(session.getId())) {
+                if (session.isOpen()) {
+                    session.sendMessage(new TextMessage(jsonChunk));
+                }
+            }
         } catch (Exception e) {
             logger.error("发送响应块失败: {}", e.getMessage(), e);
         }
@@ -361,7 +467,7 @@ public class ChatHandler {
             );
             String notificationJson = objectMapper.writeValueAsString(notification);
             logger.info("发送完成通知到会话 {}: {}", session.getId(), notificationJson);
-            session.sendMessage(new TextMessage(notificationJson));
+            safeSend(session, notificationJson);
             logger.info("已发送响应完成通知到会话: {}", session.getId());
         } catch (Exception e) {
             logger.error("发送完成通知失败: {}", e.getMessage(), e);
@@ -374,7 +480,7 @@ public class ChatHandler {
             Map<String, String> errorResponse = Map.of("error", "AI服务暂时不可用，请稍后重试");
             String errorJson = objectMapper.writeValueAsString(errorResponse);
             logger.error("发送错误消息到会话 {}: {}", session.getId(), errorJson);
-            session.sendMessage(new TextMessage(errorJson));
+            safeSend(session, errorJson);
             logger.error("已发送错误消息到会话: {}", session.getId());
         } catch (Exception e) {
             logger.error("发送错误消息失败: {}", e.getMessage(), e);
@@ -402,7 +508,7 @@ public class ChatHandler {
             );
             String stopJson = objectMapper.writeValueAsString(response);
             logger.info("发送停止确认到会话 {}: {}", sessionId, stopJson);
-            session.sendMessage(new TextMessage(stopJson));
+            safeSend(session, stopJson);
             logger.info("已发送停止确认，会话ID: {}", sessionId);
         } catch (Exception e) {
             logger.error("发送停止确认失败: {}", e.getMessage(), e);
@@ -418,34 +524,6 @@ public class ChatHandler {
                 Thread.currentThread().interrupt();
             }
         }).start();
-    }
-
-    /**
-     * 根据会话ID和引用编号获取文件MD5
-     *
-     * @param sessionId WebSocket会话ID
-     * @param referenceNumber 引用编号
-     * @return 文件MD5，如果找不到则返回null
-     */
-    public String getReferenceMd5(String sessionId, int referenceNumber) {
-        logger.info("查询引用MD5: sessionId={}, referenceNumber=#{}", sessionId, referenceNumber);
-
-        Map<Integer, String> referenceMapping = sessionReferenceMappings.get(sessionId);
-        if (referenceMapping == null) {
-            logger.error("未找到会话 {} 的引用映射，当前所有会话: {}", sessionId, sessionReferenceMappings.keySet());
-            return null;
-        }
-
-        logger.info("会话 {} 的引用映射内容: {}", sessionId, referenceMapping);
-
-        String fileMd5 = referenceMapping.get(referenceNumber);
-        if (fileMd5 == null) {
-            logger.error("会话 {} 中未找到引用编号 #{}, 可用的引用编号: {}", sessionId, referenceNumber, referenceMapping.keySet());
-            return null;
-        }
-
-        logger.info("成功找到引用映射: sessionId={}, referenceNumber=#{}, fileMd5={}", sessionId, referenceNumber, fileMd5);
-        return fileMd5;
     }
 
     /**

@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryRequest;
 import co.elastic.clients.elasticsearch.core.bulk.BulkOperation;
 import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.yizhaoqi.smartpai.entity.EsDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +66,39 @@ public class ElasticsearchService {
             logger.error("批量索引失败，文档数量: {}", documents.size(), e);
             // 如果发生异常，抛出运行时异常，表明批量索引失败
             throw new RuntimeException("批量索引失败", e);
+        }
+    }
+
+    /**
+     * 查询某个 chunk 的上下文（前后几个 chunk）
+     * @param fileMd5 文件指纹
+     * @param chunkId 当前 chunk 序号
+     * @param contextSize 前后各取几个 chunk（默认 2）
+     * @return 按 chunkId 升序排列的文档列表（空列表表示无结果）
+     */
+    public List<EsDocument> getChunkContext(String fileMd5, int chunkId, int contextSize) {
+        try {
+            int from = Math.max(chunkId - contextSize, 0);
+            int to = chunkId + contextSize;
+            co.elastic.clients.elasticsearch.core.SearchResponse<EsDocument> response = esClient.search(s -> s
+                    .index("knowledge_base")
+                    .query(q -> q
+                            .bool(b -> b
+                                    .must(m -> m.term(t -> t.field("fileMd5").value(fileMd5)))
+                                    .must(m2 -> m2.range(r -> r.field("chunkId").gte(co.elastic.clients.json.JsonData.of(from)).lte(co.elastic.clients.json.JsonData.of(to))))
+                            )
+                    )
+                    .sort(sort -> sort.field(f -> f.field("chunkId").order(co.elastic.clients.elasticsearch._types.SortOrder.Asc)))
+                    .size(100),
+                    EsDocument.class
+            );
+            return response.hits().hits().stream()
+                    .map(Hit::source)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        } catch (Exception e) {
+            logger.error("查询chunk上下文失败，fileMd5={}, chunkId={}", fileMd5, chunkId, e);
+            return java.util.Collections.emptyList();
         }
     }
 

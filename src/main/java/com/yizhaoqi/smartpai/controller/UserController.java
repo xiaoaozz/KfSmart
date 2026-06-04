@@ -6,6 +6,7 @@ import com.yizhaoqi.smartpai.repository.UserRepository;
 import com.yizhaoqi.smartpai.service.UserService;
 import com.yizhaoqi.smartpai.utils.JwtUtils;
 import com.yizhaoqi.smartpai.utils.LogUtils;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -62,21 +63,39 @@ public class UserController {
     // 用户登录接口
     // 验证用户身份并生成JWT令牌
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody UserRequest request) {
+    public ResponseEntity<?> login(@RequestBody UserRequest request, HttpServletRequest httpRequest) {
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("USER_LOGIN");
+        String clientIp = httpRequest.getRemoteAddr();
+        String userAgent = httpRequest.getHeader("User-Agent");
         try {
             if (request.username() == null || request.username().isEmpty() ||
                     request.password() == null || request.password().isEmpty()) {
                 LogUtils.logUserOperation("anonymous", "LOGIN", "validation", "FAILED_EMPTY_PARAMS");
+                // 记录登录失败
+                try {
+                    userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", "用户名或密码为空");
+                } catch (Exception ignored) {}
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "Username and password cannot be empty"));
             }
             
             String username = userService.authenticateUser(request.username(), request.password());
             if (username == null) {
                 LogUtils.logUserOperation(request.username(), "LOGIN", "authentication", "FAILED_INVALID_CREDENTIALS");
+                // 记录登录失败
+                try {
+                    userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", "用户名或密码错误");
+                } catch (Exception ignored) {}
                 return ResponseEntity.status(401).body(Map.of("code", 401, "message", "Invalid credentials"));
             }
             
+            // 记录登录成功
+            User loginUser = userRepository.findByUsername(username).orElse(null);
+            if (loginUser != null) {
+                try {
+                    userService.recordLogin(username, loginUser.getId(), clientIp, userAgent, "SUCCESS", null);
+                } catch (Exception ignored) {}
+            }
+
             String token = jwtUtils.generateToken(username);
             String refreshToken = jwtUtils.generateRefreshToken(username);
             LogUtils.logUserOperation(username, "LOGIN", "token_generation", "SUCCESS");
@@ -88,10 +107,18 @@ public class UserController {
             )));
         } catch (CustomException e) {
             LogUtils.logBusinessError("USER_LOGIN", request.username(), "登录失败: %s", e, e.getMessage());
+            // 记录登录失败
+            try {
+                userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", e.getMessage());
+            } catch (Exception ignored) {}
             monitor.end("登录失败: " + e.getMessage());
             return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
         } catch (Exception e) {
             LogUtils.logBusinessError("USER_LOGIN", request.username(), "登录异常: %s", e, e.getMessage());
+            // 记录登录失败
+            try {
+                userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", "系统异常: " + e.getMessage());
+            } catch (Exception ignored) {}
             monitor.end("登录异常: " + e.getMessage());
             return ResponseEntity.status(500).body(Map.of("code", 500, "message", "Internal server error"));
         }
@@ -371,4 +398,81 @@ public class UserController {
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
+
+    // ==================== 登录记录相关接口 ====================
+
+    /**
+     * 获取当前用户的登录记录（分页）
+     */
+    @GetMapping("/login-records")
+    public ResponseEntity<?> getLoginRecords(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_LOGIN_RECORDS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                monitor.end("获取登录记录失败：无效token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+
+            Map<String, Object> records = userService.getLoginRecords(username, page, size);
+            LogUtils.logUserOperation(username, "GET_LOGIN_RECORDS", "query", "SUCCESS");
+            monitor.end("获取登录记录成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "Get login records successful",
+                "data", records
+            ));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("GET_LOGIN_RECORDS", username, "获取登录记录失败: %s", e, e.getMessage());
+            monitor.end("获取登录记录失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_LOGIN_RECORDS", username, "获取登录记录异常: %s", e, e.getMessage());
+            monitor.end("获取登录记录异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    /**
+     * 获取当前用户的登录统计 + 最近记录
+     */
+    @GetMapping("/login-stats")
+    public ResponseEntity<?> getLoginStatistics(@RequestHeader("Authorization") String token) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_LOGIN_STATS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                monitor.end("获取登录统计失败：无效token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+
+            Map<String, Object> stats = userService.getLoginStatistics(username);
+            LogUtils.logUserOperation(username, "GET_LOGIN_STATS", "query", "SUCCESS");
+            monitor.end("获取登录统计成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "Get login statistics successful",
+                "data", stats
+            ));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("GET_LOGIN_STATS", username, "获取登录统计失败: %s", e, e.getMessage());
+            monitor.end("获取登录统计失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_LOGIN_STATS", username, "获取登录统计异常: %s", e, e.getMessage());
+            monitor.end("获取登录统计异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
 }
