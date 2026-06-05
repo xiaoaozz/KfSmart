@@ -69,8 +69,11 @@ const handleSend = async () => {
 
     chatStore.wsSend(JSON.stringify({ type: 'stop', _internal_cmd_token: data.cmdToken }));
 
-    assistant.status = 'stopped';
-    if (!latestMessage.value.content) list.value.pop();
+    const assistant = list.value[list.value.length - 1];
+    if (assistant) {
+      assistant.status = 'stopped';
+      if (!assistant.content) list.value.pop();
+    }
     return;
   }
 
