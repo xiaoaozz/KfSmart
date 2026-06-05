@@ -8,12 +8,16 @@ defineOptions({
 });
 
 const chatStore = useChatStore();
-const { list, sessionId } = storeToRefs(chatStore);
-
-const loading = ref(false);
+const { list, sessionId, conversationId, conversationLoading } = storeToRefs(chatStore);
 const scrollbarRef = ref<InstanceType<typeof NScrollbar>>();
 
 watch(() => [...list.value], scrollToBottom);
+watch(
+  () => conversationId.value,
+  () => {
+    scrollToBottom();
+  }
+);
 
 function scrollToBottom() {
   setTimeout(() => {
@@ -24,39 +28,19 @@ function scrollToBottom() {
   }, 100);
 }
 
-const range = ref<[number, number]>([dayjs().subtract(7, 'day').valueOf(), dayjs().add(1, 'day').valueOf()]);
-
-const params = computed(() => {
-  return {
-    start_date: dayjs(range.value[0]).format('YYYY-MM-DD'),
-    end_date: dayjs(range.value[1]).format('YYYY-MM-DD')
-  };
-});
-
-watchEffect(() => {
-  getList();
-});
-
-async function getList() {
-  loading.value = true;
-  const { error, data } = await request<Api.Chat.Message[]>({
-    url: 'users/conversation',
-    params: params.value
-  });
-  if (!error) {
-    list.value = data;
-  }
-  loading.value = false;
-}
-
-onMounted(() => {
+onMounted(async () => {
   chatStore.scrollToBottom = scrollToBottom;
+
+  await chatStore.fetchSessions();
+
+  if (conversationId.value) {
+    await chatStore.fetchConversation(conversationId.value);
+  }
 });
 </script>
 
 <template>
   <div class="chat-list-container flex-1 flex flex-col bg-white dark:bg-gray-800 min-h-0 overflow-hidden">
-    <!-- 顶部信息栏 -->
     <div class="flex-shrink-0 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
@@ -71,26 +55,23 @@ onMounted(() => {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <NButton circle size="small" tertiary>
-            <template #icon>
-              <icon-carbon:bookmark class="text-lg" />
-            </template>
-          </NButton>
-          <NButton circle size="small" tertiary>
-            <template #icon>
-              <icon-carbon:overflow-menu-horizontal class="text-lg" />
-            </template>
-          </NButton>
+          <NTag size="small" type="info" round>
+            {{ conversationId ? '当前会话已连接' : '未选择会话' }}
+          </NTag>
         </div>
       </div>
     </div>
 
-    <!-- 消息列表 -->
     <Suspense>
       <NScrollbar ref="scrollbarRef" class="flex-1 h-0">
         <div class="px-6 py-4">
-          <NSpin :show="loading">
-            <VueMarkdownItProvider>
+          <NSpin :show="conversationLoading">
+            <div v-if="!conversationLoading && list.length === 0" class="py-16 text-center text-gray-400 dark:text-gray-500">
+              <icon-carbon:chat-off class="text-4xl mb-3" />
+              <p class="text-sm">当前会话还没有消息</p>
+              <p class="text-xs mt-1">发送第一条消息后将开始记录该轮对话</p>
+            </div>
+            <VueMarkdownItProvider v-else>
               <ChatMessage v-for="(item, index) in list" :key="index" :msg="item" :session-id="sessionId" />
             </VueMarkdownItProvider>
           </NSpin>
@@ -113,7 +94,6 @@ onMounted(() => {
   }
 }
 
-// 滚动条样式
 :deep(.n-scrollbar-rail) {
   right: 4px !important;
 }

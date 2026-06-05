@@ -35,7 +35,7 @@ public class ChatController extends TextWebSocketHandler {
             LogUtils.logChat(userId, session.getId(), "USER_MESSAGE", userMessage.length());
             LogUtils.logBusiness("WEBSOCKET_CHAT", userId, "处理WebSocket聊天消息: messageLength=%d", userMessage.length());
             
-            chatHandler.processMessage(userId, userMessage, session);
+            chatHandler.processMessage(userId, userMessage, null, session);
             
             LogUtils.logUserOperation(userId, "WEBSOCKET_CHAT", "message_processing", "SUCCESS");
             monitor.end("WebSocket消息处理成功");

@@ -1,19 +1,17 @@
 <script setup lang="ts">
 const chatStore = useChatStore();
-const { input, list, wsStatus, wsData } = storeToRefs(chatStore);
+const { input, list, wsStatus, wsData, conversationId } = storeToRefs(chatStore);
 
 const latestMessage = computed(() => {
   return list.value[list.value.length - 1] ?? {};
 });
 
 const isSending = computed(() => {
-  return (
-    latestMessage.value?.role === 'assistant' && ['loading', 'pending'].includes(latestMessage.value?.status || '')
-  );
+  return latestMessage.value?.role === 'assistant' && ['loading', 'pending'].includes(latestMessage.value?.status || '');
 });
 
 const sendable = computed(
-  () => (!input.value.message && !isSending) || ['CLOSED', 'CONNECTING'].includes(wsStatus.value)
+  () => (!input.value.message && !isSending.value) || ['CLOSED', 'CONNECTING'].includes(wsStatus.value)
 );
 
 watch(wsData, val => {
@@ -26,34 +24,70 @@ watch(wsData, val => {
   }
   const assistant = list.value[list.value.length - 1];
 
-  if (data.type === 'completion' && data.status === 'finished' && assistant?.status !== 'error')
-    assistant.status = 'finished';
-  if (data.error) assistant && (assistant.status = 'error');
-  else if (data.chunk) {
+  if (data.type === 'completion') {
+    if (data.status === 'finished' && assistant?.status !== 'error') {
+      assistant.status = 'finished';
+      if (assistant?.content) {
+        chatStore.syncSessionPreview(assistant.content, 'assistant');
+      }
+    } else if (data.status === 'stopped' && assistant) {
+      assistant.status = 'stopped';
+      if (typeof data.message === 'string' && !assistant.content) {
+        assistant.content = data.message;
+      }
+    } else if (data.status === 'failed' && assistant) {
+      assistant.status = 'error';
+    }
+    return;
+  }
+
+  if (data.type === 'stop') {
+    if (assistant) {
+      assistant.status = 'stopped';
+      if (typeof data.partialContent === 'string') {
+        assistant.content = data.partialContent;
+      }
+      if (!assistant.content && typeof data.message === 'string') {
+        assistant.content = data.message;
+      }
+    }
+    return;
+  }
+
+  if (data.error) {
+    assistant && (assistant.status = 'error');
+  } else if (data.chunk) {
     assistant && (assistant.status = 'loading');
     assistant && (assistant.content += data.chunk);
   }
 });
 
 const handleSend = async () => {
-  //  判断是否正在发送, 如果发送中，则停止ai继续响应
   if (isSending.value) {
     const { error, data } = await request<Api.Chat.Token>({ url: 'chat/websocket-token', baseURL: 'proxy-api' });
     if (error) return;
 
     chatStore.wsSend(JSON.stringify({ type: 'stop', _internal_cmd_token: data.cmdToken }));
 
-    list.value[list.value.length - 1].status = 'finished';
+    assistant.status = 'stopped';
     if (!latestMessage.value.content) list.value.pop();
     return;
   }
 
+  const message = input.value.message;
+  if (!message) return;
+
+  const readyConversationId = await chatStore.ensureConversationReady();
+  if (!readyConversationId) return;
+
   list.value.push({
-    content: input.value.message,
-    role: 'user'
+    content: message,
+    role: 'user',
+    timestamp: new Date().toISOString()
   });
+  chatStore.syncSessionPreview(message, 'user');
   chatStore.startSearchLoading();
-  chatStore.wsSend(input.value.message);
+  chatStore.sendChatMessage(message);
   list.value.push({
     content: '',
     role: 'assistant',
@@ -63,25 +97,20 @@ const handleSend = async () => {
 };
 
 const inputRef = ref();
-// 手动插入换行符（确保所有浏览器兼容）
 const insertNewline = () => {
   const textarea = inputRef.value;
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
 
-  // 在光标位置插入换行符
   input.value.message = `${input.value.message.substring(0, start)}\n${input.value.message.substring(end)}`;
 
-  // 更新光标位置（在插入的换行符之后）
   nextTick(() => {
     textarea.selectionStart = start + 1;
     textarea.selectionEnd = start + 1;
-    textarea.focus(); // 确保保持焦点
+    textarea.focus();
   });
 };
 
-// ctrl + enter 换行
-// enter 发送
 const handShortcut = (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -92,7 +121,6 @@ const handShortcut = (e: KeyboardEvent) => {
   }
 };
 
-// 知识库选择器 - 从后端独立的知识库API动态获取
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 
 const selectedKnowledgeBase = ref('');
@@ -118,25 +146,21 @@ onMounted(() => {
 
 <template>
   <div class="input-box-container flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-    <!-- 顶部工具栏 -->
     <div class="px-6 py-3 border-b border-gray-100 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <!-- 附件按钮 -->
           <NButton text class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <template #icon>
               <icon-carbon:attachment class="text-gray-500 text-lg" />
             </template>
           </NButton>
 
-          <!-- 上传文件按钮 -->
           <NButton text class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
             <template #icon>
               <icon-carbon:cloud-upload class="text-gray-500 text-lg" />
             </template>
           </NButton>
 
-          <!-- 知识库选择 -->
           <div class="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <icon-carbon:data-base class="text-blue-500 text-sm" />
             <NSelect
@@ -150,7 +174,6 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- 模型选择 -->
         <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
           <span>模型：</span>
           <NButton text class="flex items-center gap-1 hover:text-blue-600">
@@ -161,8 +184,10 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 输入区域 -->
     <div class="px-6 py-4">
+      <div class="mb-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <span>当前会话：{{ conversationId || '未创建，会在首次发送时自动创建' }}</span>
+      </div>
       <div class="input-wrapper relative">
         <textarea
           ref="inputRef"
@@ -174,7 +199,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 底部操作栏 -->
     <div class="px-6 pb-4 flex items-center justify-between">
       <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span>连接状态：</span>
@@ -190,12 +214,10 @@ onMounted(() => {
       </div>
 
       <div class="flex items-center gap-2">
-        <!-- 发送快捷键提示 -->
         <span class="text-xs text-gray-400 dark:text-gray-500 mr-2">
           Enter 发送 / Shift+Enter 换行
         </span>
-        
-        <!-- 发送按钮 -->
+
         <NButton
           :disabled="sendable"
           type="primary"
@@ -212,10 +234,9 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 底部提示 -->
     <div class="px-6 pb-3 text-center">
       <p class="text-xs text-gray-400 dark:text-gray-500">
-        内容由 AI 生成，请合参考并核实准确性
+        内容由 AI 生成，请结合参考资料核实准确性
       </p>
     </div>
   </div>
@@ -228,7 +249,7 @@ onMounted(() => {
       background: transparent !important;
       border: none !important;
       padding: 0 !important;
-      
+
       .n-base-selection__border,
       .n-base-selection__state-border {
         display: none !important;
@@ -239,23 +260,23 @@ onMounted(() => {
   .input-textarea {
     font-family: inherit;
     line-height: 1.6;
-    
+
     &::placeholder {
       color: #9ca3af;
     }
-    
+
     &::-webkit-scrollbar {
       width: 6px;
     }
-    
+
     &::-webkit-scrollbar-track {
       background: transparent;
     }
-    
+
     &::-webkit-scrollbar-thumb {
       background: #d1d5db;
       border-radius: 3px;
-      
+
       &:hover {
         background: #9ca3af;
       }
@@ -266,12 +287,12 @@ onMounted(() => {
     border-radius: 10px;
     font-weight: 600;
     transition: all 0.3s ease;
-    
+
     &:hover:not(:disabled) {
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
     }
-    
+
     &:active:not(:disabled) {
       transform: translateY(0);
     }
@@ -283,10 +304,10 @@ onMounted(() => {
     &::placeholder {
       color: #6b7280;
     }
-    
+
     &::-webkit-scrollbar-thumb {
       background: #4b5563;
-      
+
       &:hover {
         background: #6b7280;
       }

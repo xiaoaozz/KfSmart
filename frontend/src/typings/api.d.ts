@@ -236,6 +236,24 @@ declare namespace Api {
       lastRole: string;
       time: string;
       messageCount: number;
+      createdAt?: string;
+      updatedAt?: string;
+      keywords?: string[];
+      searchText?: string;
+      isPinned?: boolean;
+      pinnedAt?: string;
+    }
+
+    interface DeleteSessionResult {
+      deletedConversationId: string;
+      currentConversationId: string;
+      remainingCount: number;
+    }
+
+    interface PinSessionResult {
+      conversationId: string;
+      isPinned: boolean;
+      pinnedAt: string;
     }
 
     interface Token {
