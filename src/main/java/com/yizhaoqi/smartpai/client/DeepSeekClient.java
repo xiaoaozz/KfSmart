@@ -5,6 +5,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.Disposable;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -19,7 +20,6 @@ import com.yizhaoqi.smartpai.config.AiProperties;
 public class DeepSeekClient {
 
     private final WebClient webClient;
-    private final String apiKey;
     private final String model;
     private final AiProperties aiProperties;
     private static final Logger logger = LoggerFactory.getLogger(DeepSeekClient.class);
@@ -36,20 +36,20 @@ public class DeepSeekClient {
         }
         
         this.webClient = builder.build();
-        this.apiKey = apiKey;
         this.model = model;
         this.aiProperties = aiProperties;
     }
     
-    public void streamResponse(String userMessage, 
+    public Disposable streamResponse(String userMessage,
                              String context,
                              List<Map<String, String>> history,
                              Consumer<String> onChunk,
-                             Consumer<Throwable> onError) {
-        
+                             Consumer<Throwable> onError,
+                             Runnable onComplete) {
+
         Map<String, Object> request = buildRequest(userMessage, context, history);
-        
-        webClient.post()
+
+        return webClient.post()
                 .uri("/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -57,7 +57,8 @@ public class DeepSeekClient {
                 .bodyToFlux(String.class)
                 .subscribe(
                     chunk -> processChunk(chunk, onChunk),
-                    onError
+                    onError,
+                    onComplete
                 );
     }
     

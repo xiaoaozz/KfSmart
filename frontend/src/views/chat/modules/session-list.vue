@@ -3,42 +3,98 @@ defineOptions({
   name: 'SessionList'
 });
 
-const sessions = ref<Api.Chat.Session[]>([]);
-const loading = ref(false);
+const chatStore = useChatStore();
+const { sessions, sessionsLoading, conversationId, deletingSessionIds, pinningSessionIds } = storeToRefs(chatStore);
 const searchKeyword = ref('');
+const creating = ref(false);
+
+function normalizeSearchText(text: string) {
+  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function buildSessionSearchIndex(session: Api.Chat.Session) {
+  const title = session.title || '';
+  const lastMessage = session.lastMessage || '';
+  const keywords = [title, lastMessage, ...(session.keywords || [])]
+    .join(' ')
+    .toLowerCase();
+  return normalizeSearchText(keywords);
+}
 
 const filteredSessions = computed(() => {
-  if (!searchKeyword.value) return sessions.value;
-  return sessions.value.filter(s =>
-    s.title.includes(searchKeyword.value) || s.lastMessage.includes(searchKeyword.value)
-  );
+  const sortedSessions = [...sessions.value].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
+
+    if (a.isPinned && b.isPinned) {
+      const bPinnedAt = b.pinnedAt || '';
+      const aPinnedAt = a.pinnedAt || '';
+      if (bPinnedAt !== aPinnedAt) {
+        return bPinnedAt.localeCompare(aPinnedAt);
+      }
+    }
+
+    const bTime = b.updatedAt || b.time || '';
+    const aTime = a.updatedAt || a.time || '';
+    return bTime.localeCompare(aTime);
+  });
+
+  const keyword = normalizeSearchText(searchKeyword.value);
+  if (!keyword) return sortedSessions;
+
+  return sortedSessions.filter(session => {
+    const searchText = session.searchText || buildSessionSearchIndex(session);
+    return searchText.includes(keyword);
+  });
 });
 
-const activeSessionId = ref('');
-
 async function fetchSessions() {
-  loading.value = true;
-  const { error, data } = await request<Api.Chat.Session[]>({
-    url: 'users/conversation/sessions'
-  });
-  if (!error && data) {
-    sessions.value = data;
-    if (data.length > 0 && !activeSessionId.value) {
-      activeSessionId.value = data[0].id;
+  await chatStore.fetchSessions();
+}
+
+async function selectSession(id: string) {
+  await chatStore.selectSession(id);
+}
+
+async function createNewSession() {
+  creating.value = true;
+  const { error, data } = await chatStore.createSession(true);
+  creating.value = false;
+
+  if (error || !data) return;
+
+  window.$message?.success('已创建新会话');
+}
+
+async function deleteSession(id: string) {
+  const deleting = deletingSessionIds.value.includes(id);
+  if (deleting) return;
+
+  window.$dialog?.warning({
+    title: '删除会话',
+    content: '删除后将清空该会话的历史消息，确认继续吗？',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const { error } = await chatStore.deleteSession(id);
+      if (!error) {
+        window.$message?.success('会话已删除');
+      }
     }
+  });
+}
+
+async function togglePin(session: Api.Chat.Session) {
+  if (pinningSessionIds.value.includes(session.id)) return;
+
+  const nextPinned = !session.isPinned;
+  const { error } = await chatStore.toggleSessionPin(session.id, nextPinned);
+  if (!error) {
+    window.$message?.success(nextPinned ? '已置顶会话' : '已取消置顶');
   }
-  loading.value = false;
 }
 
-function selectSession(id: string) {
-  activeSessionId.value = id;
-}
-
-function createNewSession() {
-  window.$message?.info('暂不支持创建新会话，当前每位用户默认使用同一会话');
-}
-
-/** 格式化时间：今天显示时间，其他显示日期 */
 function formatTime(timeStr: string) {
   if (!timeStr) return '';
   try {
@@ -57,28 +113,31 @@ function formatTime(timeStr: string) {
   }
 }
 
-onMounted(() => {
-  fetchSessions();
-});
+function renderHighlightedText(text: string) {
+  if (!searchKeyword.value) return text || '暂无消息';
+  const keyword = searchKeyword.value.trim();
+  if (!keyword) return text || '暂无消息';
+
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (text || '暂无消息').replace(new RegExp(`(${escapedKeyword})`, 'ig'), '<mark>$1</mark>');
+}
 </script>
 
 <template>
   <div class="session-list flex flex-col h-full">
-    <!-- 头部 -->
     <div class="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold text-gray-900 dark:text-white">会话列表</h2>
-        <NButton circle type="primary" size="small" @click="createNewSession">
+        <NButton circle type="primary" size="small" :loading="creating" @click="createNewSession">
           <template #icon>
             <icon-carbon:add class="text-lg" />
           </template>
         </NButton>
       </div>
 
-      <!-- 搜索框 -->
       <NInput
         v-model:value="searchKeyword"
-        placeholder="搜索会话"
+        placeholder="搜索标题、最近消息、关键词"
         size="medium"
         class="search-input"
         clearable
@@ -89,64 +148,97 @@ onMounted(() => {
       </NInput>
     </div>
 
-    <!-- 会话列表 -->
     <div class="flex-1 overflow-y-auto min-h-0 px-2 py-2">
-      <NSpin :show="loading">
-        <!-- 空状态 -->
-        <div v-if="!loading && filteredSessions.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
+      <NSpin :show="sessionsLoading">
+        <div
+          v-if="!sessionsLoading && filteredSessions.length === 0"
+          class="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500"
+        >
           <icon-carbon:chat-off class="text-4xl mb-3" />
           <p class="text-sm">{{ searchKeyword ? '未找到相关会话' : '暂无会话记录' }}</p>
-          <p class="text-xs mt-1">{{ searchKeyword ? '' : '开始对话后将在此显示' }}</p>
+          <p class="text-xs mt-1">{{ searchKeyword ? '可以尝试使用标题或最近消息关键词搜索' : '点击右上角可创建新的对话会话' }}</p>
         </div>
 
-        <!-- 会话项 -->
         <div
           v-for="session in filteredSessions"
           :key="session.id"
           :class="[
             'session-item p-3 mb-2 rounded-xl cursor-pointer transition-all',
-            activeSessionId === session.id
-              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+            conversationId === session.id
+              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 shadow-sm'
               : 'hover:bg-gray-50 dark:hover:bg-gray-700 border border-transparent'
           ]"
           @click="selectSession(session.id)"
         >
           <div class="flex items-start gap-3">
-            <!-- 图标 -->
             <div :class="[
               'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
-              activeSessionId === session.id
+              conversationId === session.id
                 ? 'bg-blue-100 dark:bg-blue-800/40'
                 : 'bg-gray-100 dark:bg-gray-700'
             ]">
               <icon-carbon:chat :class="[
                 'text-base',
-                activeSessionId === session.id ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'
+                conversationId === session.id ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'
               ]" />
             </div>
 
-            <!-- 内容 -->
             <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between mb-0.5">
-                <h3 :class="[
-                  'text-sm font-medium truncate flex-1 mr-2',
-                  activeSessionId === session.id
-                    ? 'text-blue-600 dark:text-blue-400'
-                    : 'text-gray-900 dark:text-white'
-                ]">
-                  {{ session.title || '新会话' }}
-                </h3>
+              <div class="flex items-center justify-between gap-2 mb-0.5">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                  <h3
+                    :class="[
+                      'text-sm font-medium truncate flex-1',
+                      conversationId === session.id
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-gray-900 dark:text-white'
+                    ]"
+                    v-html="renderHighlightedText(session.title || '新会话')"
+                  />
+                  <NTag v-if="session.isPinned" size="tiny" type="warning" round>置顶</NTag>
+                  <NTag v-else size="tiny" type="success" round>最近</NTag>
+                </div>
                 <span class="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
                   {{ formatTime(session.time) }}
                 </span>
               </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
-                {{ session.lastMessage || '暂无消息' }}
-              </p>
-              <div class="flex items-center gap-1 mt-1">
+
+              <p
+                class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                v-html="renderHighlightedText(session.lastMessage || '暂无消息')"
+              />
+
+              <div class="flex items-center justify-between gap-2 mt-1">
                 <span class="text-xs text-gray-400 dark:text-gray-500">
                   {{ session.messageCount }} 条消息
                 </span>
+
+                <div class="flex items-center gap-1">
+                  <NButton
+                    text
+                    size="tiny"
+                    :loading="pinningSessionIds.includes(session.id)"
+                    @click.stop="togglePin(session)"
+                  >
+                    <template #icon>
+                      <icon-carbon:bookmark class="text-sm" />
+                    </template>
+                    {{ session.isPinned ? '取消置顶' : '置顶' }}
+                  </NButton>
+
+                  <NButton
+                    text
+                    size="tiny"
+                    :loading="deletingSessionIds.includes(session.id)"
+                    class="text-red-500"
+                    @click.stop="deleteSession(session.id)"
+                  >
+                    <template #icon>
+                      <icon-carbon:trash-can class="text-sm" />
+                    </template>
+                    删除
+                  </NButton>
+                </div>
               </div>
             </div>
           </div>
@@ -154,7 +246,6 @@ onMounted(() => {
       </NSpin>
     </div>
 
-    <!-- 底部信息 -->
     <div class="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <span class="text-xs text-gray-500 dark:text-gray-400">共 {{ sessions.length }} 个会话</span>
@@ -180,7 +271,8 @@ onMounted(() => {
         border-color: #3b82f6;
       }
 
-      &:focus, &:focus-within {
+      &:focus,
+      &:focus-within {
         border-color: #3b82f6;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
@@ -191,10 +283,16 @@ onMounted(() => {
     &:active {
       transform: scale(0.98);
     }
+
+    :deep(mark) {
+      background: rgba(250, 204, 21, 0.35);
+      color: inherit;
+      border-radius: 4px;
+      padding: 0 2px;
+    }
   }
 }
 
-// 滚动条样式
 ::-webkit-scrollbar {
   width: 6px;
 }
