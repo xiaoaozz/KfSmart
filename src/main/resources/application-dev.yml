@@ -17,6 +17,7 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: 123456
   servlet:
     multipart:
       enabled: true
@@ -53,11 +54,11 @@ spring:
 
 
 minio:
-    endpoint: http://localhost:9000
-    accessKey: minioadmin
-    secretKey: minioadmin
+    endpoint: http://localhost:19000
+    accessKey: admin
+    secretKey: 123456789
     bucketName: uploads
-    publicUrl: http://localhost:9000
+    publicUrl: http://localhost:19000
 jwt:
   secret-key: "PXrQbuCwXwOZzkML/Vm2S5rSwt1iybvmKtGDzVEu+Hc="
 
@@ -82,7 +83,7 @@ logging:
     org.springframework.web: DEBUG
     org.springframework.boot.autoconfigure.web.servlet: DEBUG
     org.springframework.security: DEBUG
-    com.yizhaoqi.smartpai.service: DEBUG
+    com.smart.kf.service: DEBUG
     io.minio: DEBUG
 
 log4j:
