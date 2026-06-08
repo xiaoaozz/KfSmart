@@ -92,11 +92,11 @@ log4j:
       apache:
         tika=DEBUG:
 
-deepseek:
-  api:
-    url: https://api.deepseek.com/v1
-    key:
-    # DeepSeek API Key
+ai:
+  default:
+    url: https://api.deepseek.com/v1  # 兼容 OpenAI 协议的任意模型服务地址
+    model: deepseek-chat              # 默认模型，实际使用时优先以数据库配置为准
+    key:                              # 兜底 API Key，留空表示纯走数据库配置
 
 embedding:
   api:

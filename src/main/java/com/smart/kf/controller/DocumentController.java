@@ -138,43 +138,59 @@ public class DocumentController {
     }
     
     /**
-     * 获取用户上传的所有文件列表
-     * 
-     * @param userId 当前用户ID
-     * @return 用户上传的文件列表
+     * 获取用户上传的所有文件列表（支持关键词搜索、类型筛选、知识库筛选、tab 切换）
+     *
+     * @param userId    当前用户ID
+     * @param keyword   文件名关键词搜索（模糊匹配）
+     * @param fileType  文件类型筛选（扩展名，如 pdf/doc 等）
+     * @param orgTag    组织标签筛选
+     * @param timeRange 时间范围筛选
+     * @param isPublic  公开状态筛选
+     * @param kbId      所属知识库筛选
+     * @param mine      仅返回当前用户自己的文件（true=仅自己，false/null=全部）
+     * @param sort      排序方式（updatedAt=按更新时间倒序）
+     * @return 文件列表
      */
     @GetMapping("/uploads")
     public ResponseEntity<?> getUserUploadedFiles(
             @RequestAttribute("userId") String userId,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) String orgTag,
             @RequestParam(required = false) String timeRange,
             @RequestParam(required = false) Boolean isPublic,
-            @RequestParam(required = false) String kbId) {
-        
+            @RequestParam(required = false) String kbId,
+            @RequestParam(required = false) Boolean mine,
+            @RequestParam(required = false) String sort) {
+
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
         try {
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求: fileType=%s, orgTag=%s, timeRange=%s, isPublic=%s, kbId=%s", 
-                fileType, orgTag, timeRange, isPublic, kbId);
-            
-            List<FileUpload> files = documentService.getUserUploadedFiles(userId);
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId,
+                "接收到获取用户上传文件请求: keyword=%s, fileType=%s, orgTag=%s, timeRange=%s, isPublic=%s, kbId=%s, mine=%s, sort=%s",
+                keyword, fileType, orgTag, timeRange, isPublic, kbId, mine, sort);
 
-            // 添加详细日志：追踪每个文件的MD5
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "开始处理文件列表，总数: %d", files.size());
-            for (int i = 0; i < files.size(); i++) {
-                FileUpload file = files.get(i);
-                LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId,
-                    "文件[%d]: fileName=%s, fileMd5=%s, totalSize=%d",
-                    i, file.getFileName(), file.getFileMd5(), file.getTotalSize());
+            // 根据 keyword + kbId 决定从哪个方法取基础列表
+            List<FileUpload> files;
+            boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
+            boolean hasKbId = kbId != null && !kbId.isEmpty();
+
+            if (hasKeyword && hasKbId) {
+                files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCaseAndKbId(userId, keyword.trim(), kbId);
+            } else if (hasKeyword) {
+                files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCase(userId, keyword.trim());
+            } else {
+                files = documentService.getUserUploadedFiles(userId);
             }
 
-            // 应用筛选条件
+            // 应用其余筛选条件
             List<FileUpload> filteredFiles = files.stream().filter(file -> {
-                // 知识库筛选
-                if (kbId != null && !kbId.isEmpty()) {
-                    if (!kbId.equals(file.getKbId())) {
-                        return false;
-                    }
+                // mine=true 时只展示当前用户自己的文件（默认已是，该分支保持语义清晰）
+                if (Boolean.TRUE.equals(mine) && !userId.equals(file.getUserId())) {
+                    return false;
+                }
+                // 知识库筛选（仅当未在 SQL 层面过滤时才在内存再过滤）
+                if (!hasKeyword && hasKbId && !kbId.equals(file.getKbId())) {
+                    return false;
                 }
                 // 文件类型筛选（根据文件扩展名）
                 if (fileType != null && !fileType.isEmpty() && !"全部".equals(fileType) && !"全部类型".equals(fileType)) {
@@ -198,9 +214,21 @@ public class DocumentController {
                 }
                 // 公开状态筛选
                 return isPublic == null || isPublic == file.isPublic();
-            }).toList();
+            }).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
 
-            // 将FileUpload转换为包含tagName的DTO
+            // 排序：sort=updatedAt 按 mergedAt/createdAt 倒序
+            if ("updatedAt".equals(sort)) {
+                filteredFiles.sort((a, b) -> {
+                    java.time.LocalDateTime ta = a.getMergedAt() != null ? a.getMergedAt() : a.getCreatedAt();
+                    java.time.LocalDateTime tb = b.getMergedAt() != null ? b.getMergedAt() : b.getCreatedAt();
+                    if (ta == null && tb == null) return 0;
+                    if (ta == null) return 1;
+                    if (tb == null) return -1;
+                    return tb.compareTo(ta); // 倒序
+                });
+            }
+
+            // 将 FileUpload 转换为包含 tagName 的 DTO
             List<Map<String, Object>> fileData = filteredFiles.stream().map(file -> {
                 Map<String, Object> dto = new HashMap<>();
                 dto.put("fileMd5", file.getFileMd5());
@@ -214,18 +242,18 @@ public class DocumentController {
                 dto.put("mergedAt", file.getMergedAt());
                 dto.put("orgTag", file.getOrgTag());
                 dto.put("kbId", file.getKbId());
-                
-                // 将orgTag从tagId转换为tagName
-                String orgTagName = getOrgTagName(file.getOrgTag());
-                dto.put("orgTagName", orgTagName);
-                
+
+                // 将 orgTag 从 tagId 转换为 tagName
+                dto.put("orgTagName", getOrgTagName(file.getOrgTag()));
                 return dto;
             }).toList();
-            
+
             LogUtils.logUserOperation(userId, "GET_USER_UPLOADED_FILES", "file_list", "SUCCESS");
-            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "成功获取用户上传文件: fileCount=%d, filteredCount=%d, kbId=%s", files.size(), fileData.size(), kbId);
+            LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId,
+                "成功获取用户上传文件: totalCount=%d, filteredCount=%d, keyword=%s, kbId=%s",
+                files.size(), fileData.size(), keyword, kbId);
             monitor.end("获取用户上传文件成功");
-            
+
             Map<String, Object> response = new HashMap<>();
             response.put("code", 200);
             response.put("message", "获取用户上传文件列表成功");
@@ -572,6 +600,126 @@ public class DocumentController {
         }
     }
     
+    /**
+     * 根据文件 MD5 下载文件（精确定位，避免同名文件歧义）
+     *
+     * @param fileMd5 文件 MD5
+     * @param token   JWT token（可选，用于 URL 直接访问场景）
+     * @return 预签名下载链接
+     */
+    @GetMapping("/download-by-md5")
+    public ResponseEntity<?> downloadFileByMd5(
+            @RequestParam String fileMd5,
+            @RequestParam(required = false) String token) {
+
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DOWNLOAD_FILE_BY_MD5");
+        try {
+            // 从 Security 上下文或 token 参数中解析用户ID和组织标签
+            String userId = null;
+            String orgTags = null;
+
+            // 优先从 Spring Security 上下文获取已认证的用户信息
+            try {
+                var authentication = org.springframework.security.core.context.SecurityContextHolder
+                        .getContext().getAuthentication();
+                if (authentication != null && authentication.isAuthenticated()
+                        && authentication.getPrincipal() instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
+                    userId = userDetails.getUsername();
+                    // 从 userDetails 中获取组织标签信息
+                    orgTags = userDetails.getAuthorities().stream()
+                            .map(auth -> auth.getAuthority().replace("ROLE_", ""))
+                            .findFirst()
+                            .orElse(null);
+                }
+            } catch (Exception ignored) {}
+
+            // 如果 Security 上下文中没有用户信息，尝试从 URL 参数 token 中获取
+            if (userId == null && token != null && !token.trim().isEmpty()) {
+                try {
+                    userId = jwtUtils.extractUsernameFromToken(token);
+                    orgTags = jwtUtils.extractOrgTagsFromToken(token);
+                } catch (Exception ignored) {}
+            }
+
+            LogUtils.logBusiness("DOWNLOAD_FILE_BY_MD5", userId != null ? userId : "anonymous",
+                    "接收到按MD5下载文件请求: fileMd5=%s", fileMd5);
+
+            // 未登录用户：只允许下载公开文件
+            if (userId == null) {
+                Optional<FileUpload> publicFile = fileUploadRepository.findByFileMd5AndIsPublicTrue(fileMd5);
+                if (publicFile.isEmpty()) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.NOT_FOUND.value());
+                    response.put("message", "文件不存在或需要登录访问");
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+                }
+                FileUpload file = publicFile.get();
+                String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+                if (downloadUrl == null) {
+                    Map<String, Object> response = new HashMap<>();
+                    response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+                    response.put("message", "无法生成下载链接");
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+                LogUtils.logFileOperation("anonymous", "DOWNLOAD_BY_MD5", file.getFileName(), fileMd5, "SUCCESS");
+                monitor.end("匿名用户按MD5生成公开文件下载链接成功");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", 200);
+                response.put("message", "文件下载链接生成成功");
+                response.put("data", Map.of(
+                        "fileName", file.getFileName(),
+                        "downloadUrl", downloadUrl,
+                        "fileSize", file.getTotalSize()
+                ));
+                return ResponseEntity.ok(response);
+            }
+
+            // 已登录用户：通过权限校验确认该用户有权访问此文件
+            List<FileUpload> accessibleFiles = documentService.getAccessibleFiles(userId, orgTags);
+            Optional<FileUpload> targetFile = accessibleFiles.stream()
+                    .filter(f -> f.getFileMd5().equals(fileMd5))
+                    .findFirst();
+
+            if (targetFile.isEmpty()) {
+                LogUtils.logUserOperation(userId, "DOWNLOAD_BY_MD5", fileMd5, "FAILED_NOT_FOUND");
+                monitor.end("下载失败：文件不存在或无权限访问");
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文件不存在或无权限访问");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            FileUpload file = targetFile.get();
+            String downloadUrl = documentService.generateDownloadUrl(file.getFileMd5());
+            if (downloadUrl == null) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("code", HttpStatus.NOT_FOUND.value());
+                response.put("message", "文件不存在或无法生成下载链接");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            LogUtils.logFileOperation(userId, "DOWNLOAD_BY_MD5", file.getFileName(), fileMd5, "SUCCESS");
+            monitor.end("按MD5生成下载链接成功");
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", 200);
+            response.put("message", "文件下载链接生成成功");
+            response.put("data", Map.of(
+                    "fileName", file.getFileName(),
+                    "downloadUrl", downloadUrl,
+                    "fileSize", file.getTotalSize()
+            ));
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            LogUtils.logBusinessError("DOWNLOAD_FILE_BY_MD5", "unknown", "按MD5下载文件失败: fileMd5=%s", e, fileMd5);
+            monitor.end("下载失败: " + e.getMessage());
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            response.put("message", "文件下载失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     /**
      * 根据tagId获取tagName
      *

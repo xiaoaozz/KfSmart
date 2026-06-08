@@ -63,6 +63,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'document-management',
+    path: '/document-management',
+    component: 'layout.base$view.document-management',
+    meta: {
+      title: 'document-management',
+      i18nKey: 'route.document-management'
+    }
+  },
+  {
     name: 'iframe-page',
     path: '/iframe-page/:url',
     component: 'layout.base$view.iframe-page',
@@ -84,6 +93,17 @@ export const generatedRoutes: GeneratedRoute[] = [
       i18nKey: 'route.knowledge-base',
       icon: 'solar:folder-line-duotone',
       order: 3
+    }
+  },
+  {
+    name: 'document-management',
+    path: '/document-management',
+    component: 'layout.base$view.document-management',
+    meta: {
+      title: 'document-management',
+      i18nKey: 'route.document-management',
+      icon: 'carbon:document',
+      order: 3.1
     }
   },
   {

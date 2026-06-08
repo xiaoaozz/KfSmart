@@ -168,6 +168,7 @@ const routeMap: RouteMap = {
   "500": "/500",
   "api-key-management": "/api-key-management",
   "chat": "/chat",
+  "document-management": "/document-management",
   "iframe-page": "/iframe-page/:url",
   "knowledge-base": "/knowledge-base",
   "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",

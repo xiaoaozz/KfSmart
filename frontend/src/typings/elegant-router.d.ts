@@ -22,6 +22,7 @@ declare module "@elegant-router/types" {
     "500": "/500";
     "api-key-management": "/api-key-management";
     "chat": "/chat";
+    "document-management": "/document-management";
     "iframe-page": "/iframe-page/:url";
     "knowledge-base": "/knowledge-base";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
@@ -66,6 +67,7 @@ declare module "@elegant-router/types" {
     | "500"
     | "api-key-management"
     | "chat"
+    | "document-management"
     | "iframe-page"
     | "knowledge-base"
     | "login"
@@ -97,6 +99,7 @@ declare module "@elegant-router/types" {
     | "login"
     | "api-key-management"
     | "chat"
+    | "document-management"
     | "knowledge-base"
     | "mcp-tools"
     | "org-tag"

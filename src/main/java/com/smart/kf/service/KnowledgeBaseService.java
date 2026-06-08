@@ -8,6 +8,7 @@ import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.utils.LogUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,10 @@ public class KnowledgeBaseService {
 
     @Autowired
     private OrgTagCacheService orgTagCacheService;
+
+    @Autowired
+    @Lazy
+    private DocumentService documentService;
 
     private static final int CHUNK_SIZE_BYTES = 4096;
 
@@ -277,7 +282,7 @@ public class KnowledgeBaseService {
     
     /**
      * 删除知识库（带权限校验）
-     * 注意：删除知识库不会删除其中的文件，文件仍然保留在系统中
+     * 会级联删除知识库下所有文档（包括 Elasticsearch 索引、MinIO 文件、向量记录和数据库记录）
      */
     @Transactional
     public void deleteKnowledgeBase(String kbId, String operatorUsername, String operatorOrgTags) {
@@ -294,7 +299,25 @@ public class KnowledgeBaseService {
             throw new SecurityException("无权删除该知识库: " + kbId);
         }
         
+        // 级联删除知识库下的所有文档
+        List<FileUpload> files = fileUploadRepository.findByKbId(kbId);
+        if (!files.isEmpty()) {
+            LogUtils.logBusiness("DELETE_KB", operatorUsername, 
+                "开始级联删除知识库下的 %d 个文档: kbId=%s", files.size(), kbId);
+            for (FileUpload file : files) {
+                try {
+                    documentService.deleteDocument(file.getFileMd5(), file.getUserId());
+                    LogUtils.logBusiness("DELETE_KB", operatorUsername, 
+                        "级联删除文档成功: fileMd5=%s, fileName=%s", file.getFileMd5(), file.getFileName());
+                } catch (Exception e) {
+                    LogUtils.logBusiness("DELETE_KB", operatorUsername, 
+                        "级联删除文档失败（跳过）: fileMd5=%s, error=%s", file.getFileMd5(), e.getMessage());
+                }
+            }
+        }
+        
         knowledgeBaseRepository.delete(kb);
+        LogUtils.logBusiness("DELETE_KB", operatorUsername, "知识库删除完成: kbId=%s", kbId);
     }
     
     /**

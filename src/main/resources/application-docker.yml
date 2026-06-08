@@ -97,12 +97,6 @@ log4j:
       apache:
         tika=DEBUG:
 
-deepseek:
-  api:
-    url: https://api.deepseek.com/v1  # 本地是 http://localhost:11434/v1 官方：https://api.deepseek.com/v1
-    model: deepseek-chat  # 本地: deepseek-r1:7b, 官方: deepseek-chat
-    key:  # DeepSeek API Key 如果是本地就为空
-
 embedding:
   api:
     url: https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -112,6 +106,10 @@ embedding:
     dimension: 2048  # 指定向量维度
 
 ai:
+  default:
+    url: https://api.deepseek.com/v1  # 兼容 OpenAI 协议的任意模型服务地址，本地 Ollama 填 http://localhost:11434/v1
+    model: deepseek-chat              # 默认模型，实际使用时优先以数据库配置为准
+    key:                              # 兜底 API Key，留空表示纯走数据库配置
   prompt:
     rules: |
       你是KnowFlow知识助手，须遵守：
