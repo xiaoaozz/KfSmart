@@ -1,19 +1,19 @@
 {
-  "name": "pi-smart",
+  "name": "kf-smart",
   "type": "module",
   "version": "1.3.13",
-  "description": "PaiSmart",
+  "description": "SmartKf",
   "author": {
-    "name": "PaiSmart",
-    "url": "https://github.com/itwanger/PaiSmart.git"
+    "name": "SmartKf",
+    "url": ""
   },
   "license": "MIT",
-  "homepage": "https://github.com/itwanger/PaiSmart.git",
+  "homepage": "",
   "repository": {
-    "url": "https://github.com/itwanger/PaiSmart.git"
+    "url": ""
   },
   "bugs": {
-    "url": "https://github.com/itwanger/PaiSmart/issues"
+    "url": ""
   },
   "keywords": [
     "ai",
@@ -21,7 +21,7 @@
     "llm",
     "chat",
     "itwanger",
-    "pai-smart"
+    "kf-smart"
   ],
   "engines": {
     "node": ">=18.20.0",
@@ -120,5 +120,5 @@
     "commit-msg": "pnpm sa git-commit-verify",
     "pre-commit": "cd frontend && pnpm typecheck && pnpm lint && git diff --exit-code"
   },
-  "website": "https://github.com/itwanger/PaiSmart.git"
+  "website": ""
 }

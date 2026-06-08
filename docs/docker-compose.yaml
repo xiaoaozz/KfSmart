@@ -1,4 +1,4 @@
-name: pai_smart
+name: smart_kf
 
 services:
   mysql:
@@ -123,7 +123,7 @@ services:
       - es-plugins:/usr/share/elasticsearch/plugins
     environment:
       - ELASTIC_PASSWORD=123456
-      - node.name=pai-smart-es01
+      - node.name=kf-smart-es01
       - discovery.type=single-node
       - xpack.license.self_generated.type=basic
       - xpack.security.enabled=true
