@@ -1,4 +1,4 @@
-派聪明（PaiSmart）是一个企业级的 AI 知识库管理系统，采用检索增强生成（RAG）技术，提供智能文档处理和检索能力。
+KnowFlow是一个企业级的 AI 知识库管理系统，采用检索增强生成（RAG）技术，提供智能文档处理和检索能力。
 
 核心技术栈包括 ElasticSearch、Kafka、WebSocket、Spring Security、Docker、MySQL 和 Redis。
 
@@ -32,8 +32,8 @@
 后端的整体项目结构：
 
 ```bash
-src/main/java/com/yizhaoqi/smartpai/
-├── SmartPaiApplication.java      # 主应用程序入口
+src/main/java/com/smart/kf/
+├── SmartKfApplication.java      # 主应用程序入口
 ├── client/                       # 外部API客户端
 ├── config/                       # 配置类
 ├── consumer/                     # Kafka消费者

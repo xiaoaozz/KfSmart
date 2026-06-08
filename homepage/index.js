@@ -153,10 +153,10 @@ function closeNavDropdown(event) {
 
 if (Typed) {
     new Typed('#prompts-sample', {
-    strings: ["派聪明RAG知识库是什么？",
-        "派聪明能让大家学到什么？",
-        "派聪明如何写到简历上？",
-        "派聪明包含哪些功能模块？"],
+    strings: ["KnowFlowRAG知识库是什么？",
+        "KnowFlow能让大家学到什么？",
+        "KnowFlow如何写到简历上？",
+        "KnowFlow包含哪些功能模块？"],
     typeSpeed: 80,
     smartBackspace: true,
     loop: true,
