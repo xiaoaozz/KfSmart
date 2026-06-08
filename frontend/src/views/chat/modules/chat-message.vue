@@ -17,6 +17,40 @@ function handleCopy(content: string) {
   window.$message?.success('已复制');
 }
 
+/**
+ * 将原始错误信息转换为友好的提示文案
+ */
+function formatErrorMessage(raw?: string): string {
+  if (!raw) return '服务器繁忙，请稍后再试';
+  const msg = raw.toUpperCase();
+  // 认证 / API Key 相关
+  if (msg.includes('401') || msg.includes('UNAUTHORIZED') || msg.includes('API_KEY') || msg.includes('APIKEY') || msg.includes('INVALID_KEY')) {
+    return '模型暂不可用，请检查 API Key 是否正确或已过期';
+  }
+  // 资源不存在 / 模型不存在
+  if (msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('MODEL_NOT_FOUND')) {
+    return '模型暂不可用，请确认模型名称是否正确或 API 地址是否有效';
+  }
+  // 限流
+  if (msg.includes('429') || msg.includes('RATE_LIMIT') || msg.includes('TOO_MANY')) {
+    return '请求过于频繁，请稍后再试';
+  }
+  // 服务端错误
+  if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('INTERNAL_SERVER') || msg.includes('SERVICE_UNAVAILABLE')) {
+    return '模型服务暂时不可用，请稍后重试';
+  }
+  // 超时
+  if (msg.includes('TIMEOUT') || msg.includes('TIMED_OUT')) {
+    return '请求超时，请检查网络连接后重试';
+  }
+  // 余额不足
+  if (msg.includes('INSUFFICIENT') || msg.includes('QUOTA') || msg.includes('BALANCE')) {
+    return '账户余额不足或配额已用尽，请检查 API Key 对应账户';
+  }
+  // 默认降级提示
+  return '模型请求失败，请检查 API Key 配置或稍后重试';
+}
+
 const chatStore = useChatStore();
 
 // 存储文件名和对应的事件处理
@@ -247,12 +281,15 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
           
           <!-- 错误状态 -->
           <div v-else-if="msg.status === 'error'" class="assistant-content bg-red-50 dark:bg-red-900/20 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-red-200 dark:border-red-800">
-            <div class="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
-              <icon-carbon:warning class="text-base flex-shrink-0" />
-              <span>服务器繁忙，请稍后再试</span>
+            <div class="text-sm text-red-600 dark:text-red-400 flex items-start gap-1.5">
+              <icon-carbon:warning class="text-base flex-shrink-0 mt-0.5" />
+              <div class="flex-1 min-w-0">
+                <div class="font-medium mb-0.5">请求失败</div>
+                <div class="text-red-500/80 break-words">{{ formatErrorMessage(msg.errorMessage) }}</div>
+              </div>
             </div>
           </div>
-          
+
           <!-- 正常内容 -->
           <div v-else class="assistant-content bg-gray-50 dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-100 dark:border-gray-700" @click="handleContentClick">
             <div class="prose prose-sm dark:prose-invert max-w-none">

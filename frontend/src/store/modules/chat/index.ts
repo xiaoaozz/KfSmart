@@ -259,15 +259,17 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     return data.id;
   }
 
-  function sendChatMessage(message: string) {
+  function sendChatMessage(message: string, apiKeyConfigId?: number | null) {
     if (!conversationId.value) return;
-    wsSend(
-      JSON.stringify({
-        type: 'chat',
-        message,
-        conversationId: conversationId.value
-      })
-    );
+    const payload: Record<string, unknown> = {
+      type: 'chat',
+      message,
+      conversationId: conversationId.value
+    };
+    if (apiKeyConfigId != null) {
+      payload.apiKeyConfigId = apiKeyConfigId;
+    }
+    wsSend(JSON.stringify(payload));
   }
 
   return {

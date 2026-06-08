@@ -7,7 +7,7 @@ spring:
     resources:
       add-mappings: true  # 保持默认静态资源映射（Spring Boot自动配置）
   datasource:
-    url: jdbc:mysql://localhost:3306/PaiSmart?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/knowflow?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -115,7 +115,6 @@ embedding:
     model: text-embedding-v4
     batch-size: 10  # 单次请求最大行数（DashScope限制为10）
     dimension: 2048  # 指定向量维度
-
 ai:
   prompt:
     rules: |

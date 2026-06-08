@@ -61,6 +61,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
             String messageText = payload;
             String conversationId = null;
+            Long apiKeyConfigId = null;
 
             if (payload.trim().startsWith("{")) {
                 try {
@@ -83,7 +84,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         messageText = rawMessage == null ? "" : String.valueOf(rawMessage);
                         Object rawConversationId = jsonMessage.get("conversationId");
                         conversationId = rawConversationId == null ? null : String.valueOf(rawConversationId);
-                        logger.debug("收到JSON格式聊天消息，conversationId={}", conversationId);
+                        Object rawApiKeyConfigId = jsonMessage.get("apiKeyConfigId");
+                        if (rawApiKeyConfigId != null) {
+                            try {
+                                apiKeyConfigId = Long.parseLong(String.valueOf(rawApiKeyConfigId));
+                            } catch (NumberFormatException nfe) {
+                                logger.warn("无效的 apiKeyConfigId: {}", rawApiKeyConfigId);
+                            }
+                        }
+                        logger.debug("收到JSON格式聊天消息，conversationId={}, apiKeyConfigId={}", conversationId, apiKeyConfigId);
                     } else {
                         logger.debug("收到JSON格式的非聊天消息，当作普通消息处理");
                     }
@@ -92,7 +101,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 }
             }
 
-            chatHandler.processMessage(userId, messageText, conversationId, session);
+            chatHandler.processMessage(userId, messageText, conversationId, apiKeyConfigId, session);
 
         } catch (Exception e) {
             logger.error("处理消息出错，用户ID: {}，会话ID: {}，错误: {}",

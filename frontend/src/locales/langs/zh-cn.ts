@@ -168,7 +168,8 @@ const local: App.I18n.Schema = {
     'mcp-tools': 'MCP工具',
     'org-tag': '组织标签',
     user: '用户管理',
-    'personal-center': '个人中心'
+    'personal-center': '个人中心',
+    'api-key-management': 'API Key 管理'
   },
   page: {
     login: {

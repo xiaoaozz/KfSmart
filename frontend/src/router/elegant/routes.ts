@@ -40,6 +40,18 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'api-key-management',
+    path: '/api-key-management',
+    component: 'layout.base$view.api-key-management',
+    meta: {
+      title: 'api-key-management',
+      i18nKey: 'route.api-key-management',
+      icon: 'solar:key-minimalistic-square-line-duotone',
+      roles: ['ADMIN'],
+      order: 5.5
+    }
+  },
+  {
     name: 'chat',
     path: '/chat',
     component: 'layout.base$view.chat',

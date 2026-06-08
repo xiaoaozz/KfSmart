@@ -3,10 +3,11 @@ package com.smart.kf.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.smart.kf.client.DeepSeekClient;
+import com.smart.kf.client.ModelClient;
 import com.smart.kf.entity.EsDocument;
 import com.smart.kf.entity.SearchResult;
 import com.smart.kf.exception.CustomException;
+import com.smart.kf.model.ApiKeyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -29,6 +30,7 @@ import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 聊天处理服务
@@ -53,8 +55,9 @@ public class ChatHandler {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final HybridSearchService searchService;
-    private final DeepSeekClient deepSeekClient;
+    private final ModelClient modelClient;
     private final ElasticsearchService elasticsearchService;
+    private final ApiKeyConfigService apiKeyConfigService;
     private final ObjectMapper objectMapper;
 
     // 用于存储每个会话的完整响应
@@ -69,23 +72,39 @@ public class ChatHandler {
     private final Map<String, Map<Integer, String>> sessionReferenceMappings = new ConcurrentHashMap<>();
     // 用于给每个会话的 sendMessage 加锁，Spring WebSocket session 不支持并发写
     private final Map<String, Object> sessionSendLocks = new ConcurrentHashMap<>();
+    // 用于标记每个会话是否已经发送过错误消息，防止 completion 覆盖
+    private final Map<String, AtomicBoolean> sessionErrorSent = new ConcurrentHashMap<>();
 
     public ChatHandler(RedisTemplate<String, String> redisTemplate,
                       HybridSearchService searchService,
-                      DeepSeekClient deepSeekClient,
-                      ElasticsearchService elasticsearchService) {
+                      ModelClient modelClient,
+                      ElasticsearchService elasticsearchService,
+                      ApiKeyConfigService apiKeyConfigService) {
         this.redisTemplate = redisTemplate;
         this.searchService = searchService;
-        this.deepSeekClient = deepSeekClient;
+        this.modelClient = modelClient;
         this.elasticsearchService = elasticsearchService;
+        this.apiKeyConfigService = apiKeyConfigService;
         this.objectMapper = new ObjectMapper();
     }
 
     public void processMessage(String userId, String userMessage, String requestedConversationId, WebSocketSession session) {
+        processMessage(userId, userMessage, requestedConversationId, null, session);
+    }
+
+    /**
+     * 处理聊天消息，支持指定 API Key 配置 ID。
+     *
+     * @param apiKeyConfigId 指定要使用的 API Key 配置 ID（null 时优先使用激活配置，最终降级到 YAML 配置）
+     */
+    public void processMessage(String userId, String userMessage, String requestedConversationId,
+                               Long apiKeyConfigId, WebSocketSession session) {
         String sessionId = session.getId();
-        logger.info("开始处理消息，用户ID: {}, WebSocket会话ID: {}, 目标会话ID: {}", userId, sessionId, requestedConversationId);
+        logger.info("开始处理消息，用户ID: {}, WebSocket会话ID: {}, 目标会话ID: {}, apiKeyConfigId: {}",
+                userId, sessionId, requestedConversationId, apiKeyConfigId);
         try {
             streamTerminalStates.put(sessionId, StreamTerminalState.ACTIVE);
+            sessionErrorSent.put(sessionId, new AtomicBoolean(false));
 
             // 1. 获取或创建业务会话 ID
             String conversationId = resolveConversationId(userId, requestedConversationId);
@@ -115,7 +134,7 @@ public class ChatHandler {
                     .collect(java.util.stream.Collectors.toList());
             logger.info("[流程] 搜索完成，原始结果数={}，取最高分3条", rawResults.size());
 
-            // 3.5 通过 WebSocket 将检索结果推送到前端（在 DeepSeek 流式调用之前同步发送）
+            // 3.5 通过 WebSocket 将检索结果推送到前端（在 AI 流式调用之前同步发送）
             sendSearchResults(session, searchResults);
 
             try {
@@ -127,9 +146,17 @@ public class ChatHandler {
             // 4. 构建上下文
             String context = buildContext(searchResults, sessionId);
 
-            // 5. 调用 DeepSeek API 并处理流式响应
-            logger.info("调用DeepSeek API生成回复，业务会话ID: {}", conversationId);
-            Disposable streamSubscription = deepSeekClient.streamResponse(userMessage, context, history,
+            // 5. 解析要使用的 API Key 配置（指定 ID > 激活配置 > YAML 默认配置）
+            ApiKeyConfig apiKeyConfig = resolveApiKeyConfig(apiKeyConfigId);
+
+            // 6. 调用 AI API 并处理流式响应
+            if (apiKeyConfig != null) {
+                logger.info("调用 AI API 生成回复，使用配置：id={}, name={}, model={}，业务会话ID: {}",
+                        apiKeyConfig.getId(), apiKeyConfig.getName(), apiKeyConfig.getModelName(), conversationId);
+            } else {
+                logger.info("调用 AI API 生成回复（使用 YAML 默认配置），业务会话ID: {}", conversationId);
+            }
+            Disposable streamSubscription = modelClient.streamResponse(userMessage, context, history, apiKeyConfig,
                 chunk -> {
                     if (isStreamInactive(sessionId)) {
                         logger.debug("忽略非活跃会话的响应块，会话ID: {}", sessionId);
@@ -142,7 +169,10 @@ public class ChatHandler {
                     }
                     sendResponseChunk(session, chunk);
                 },
-                error -> handleStreamError(session, responseFuture, error),
+                error -> {
+                    logger.error("流式响应出错，会话ID: {}", sessionId, error);
+                    handleStreamError(session, responseFuture, error, conversationId, userId, userMessage);
+                },
                 () -> finalizeStreamResponse(session, responseFuture, conversationId, userId, userMessage));
             streamSubscriptions.put(sessionId, streamSubscription);
 
@@ -150,6 +180,7 @@ public class ChatHandler {
             logger.error("处理消息错误: {}", e.getMessage(), e);
             handleError(session, e);
             streamTerminalStates.remove(sessionId);
+            sessionErrorSent.remove(sessionId);
             cancelStreamSubscription(sessionId);
             responseBuilders.remove(sessionId);
             CompletableFuture<String> future = responseFutures.remove(sessionId);
@@ -157,6 +188,26 @@ public class ChatHandler {
                 future.completeExceptionally(e);
             }
         }
+    }
+
+    /**
+     * 解析要使用的 API Key 配置：
+     * 1. 若指定了 apiKeyConfigId，则查询该 ID 对应的配置
+     * 2. 否则，查找当前激活的配置
+     * 3. 若数据库中无任何配置，则返回 null（由 ModelClient 降级到 YAML 默认配置）
+     */
+    private ApiKeyConfig resolveApiKeyConfig(Long apiKeyConfigId) {
+        if (apiKeyConfigId != null) {
+            try {
+                ApiKeyConfig config = apiKeyConfigService.getEntityById(apiKeyConfigId);
+                if (config != null) {
+                    return config;
+                }
+            } catch (Exception e) {
+                logger.warn("指定的 API Key 配置 id={} 不存在，将尝试使用激活配置: {}", apiKeyConfigId, e.getMessage());
+            }
+        }
+        return apiKeyConfigService.getActiveConfig().orElse(null);
     }
 
     public void ensureLegacyConversationIndex(String userId, List<String> legacyUserIds) {
@@ -234,6 +285,13 @@ public class ChatHandler {
             formattedMessage.put("role", message.get("role"));
             formattedMessage.put("content", message.get("content"));
             formattedMessage.put("timestamp", message.get("timestamp"));
+            // 返回 status 和 errorMessage 字段，供前端正确渲染错误状态
+            if (message.containsKey("status")) {
+                formattedMessage.put("status", message.get("status"));
+            }
+            if (message.containsKey("errorMessage")) {
+                formattedMessage.put("errorMessage", message.get("errorMessage"));
+            }
             messages.add(formattedMessage);
         }
         return messages;
@@ -508,6 +566,44 @@ public class ChatHandler {
         }
     }
 
+    /**
+     * 发生错误时保存消息历史，assistant 消息携带 status=error 和 errorMessage 字段
+     */
+    private void saveErrorMessage(String conversationId, String userId, String userMessage, String errorMessage) {
+        String key = conversationHistoryKey(conversationId);
+        List<Map<String, String>> history = getConversationHistory(conversationId);
+
+        String currentTimestamp = currentTimestamp();
+
+        Map<String, String> userMsgMap = new HashMap<>();
+        userMsgMap.put("role", "user");
+        userMsgMap.put("content", userMessage);
+        userMsgMap.put("timestamp", currentTimestamp);
+        history.add(userMsgMap);
+
+        Map<String, String> assistantMsgMap = new HashMap<>();
+        assistantMsgMap.put("role", "assistant");
+        assistantMsgMap.put("content", "");
+        assistantMsgMap.put("status", "error");
+        assistantMsgMap.put("errorMessage", errorMessage);
+        assistantMsgMap.put("timestamp", currentTimestamp);
+        history.add(assistantMsgMap);
+
+        if (history.size() > 20) {
+            history = new ArrayList<>(history.subList(history.size() - 20, history.size()));
+        }
+
+        try {
+            String json = objectMapper.writeValueAsString(history);
+            redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
+            saveConversationMeta(conversationId, buildConversationMetaFromHistory(userId, conversationId, history));
+            attachConversationToUser(userId, conversationId);
+            logger.info("已保存错误消息到会话历史，会话ID: {}", conversationId);
+        } catch (JsonProcessingException e) {
+            logger.error("序列化错误消息历史出错: {}, 会话ID: {}", e.getMessage(), conversationId, e);
+        }
+    }
+
     private void updateConversationHistory(String conversationId, String userId, String userMessage, String response) {
         String key = conversationHistoryKey(conversationId);
         List<Map<String, String>> history = getConversationHistory(conversationId);
@@ -710,14 +806,24 @@ public class ChatHandler {
 
     private void handleError(WebSocketSession session, Throwable error) {
         logger.error("AI服务错误: {}", error.getMessage(), error);
-        try {
-            Map<String, String> errorResponse = Map.of("error", "AI服务暂时不可用，请稍后重试");
-            String errorJson = objectMapper.writeValueAsString(errorResponse);
-            logger.error("发送错误消息到会话 {}: {}", session.getId(), errorJson);
-            safeSend(session, errorJson);
-            logger.error("已发送错误消息到会话: {}", session.getId());
-        } catch (Exception e) {
-            logger.error("发送错误消息失败: {}", e.getMessage(), e);
+        String sessionId = session.getId();
+        AtomicBoolean errorSent = sessionErrorSent.get(sessionId);
+        if (errorSent != null && errorSent.compareAndSet(false, true)) {
+            try {
+                String message = error.getMessage();
+                if (message == null || message.isEmpty()) {
+                    message = "AI服务暂时不可用，请稍后重试";
+                }
+                Map<String, String> errorResponse = Map.of("error", "true", "message", message);
+                String errorJson = objectMapper.writeValueAsString(errorResponse);
+                logger.error("发送错误消息到会话 {}: {}", session.getId(), errorJson);
+                safeSend(session, errorJson);
+                logger.error("已发送错误消息到会话: {}", session.getId());
+            } catch (Exception e) {
+                logger.error("发送错误消息失败: {}", e.getMessage(), e);
+            }
+        } else {
+            logger.info("会话 {} 的错误消息已发送过，跳过重复发送", sessionId);
         }
     }
 
@@ -732,6 +838,15 @@ public class ChatHandler {
     private void handleStreamError(WebSocketSession session,
                                    CompletableFuture<String> responseFuture,
                                    Throwable error) {
+        handleStreamError(session, responseFuture, error, null, null, null);
+    }
+
+    private void handleStreamError(WebSocketSession session,
+                                   CompletableFuture<String> responseFuture,
+                                   Throwable error,
+                                   String conversationId,
+                                   String userId,
+                                   String userMessage) {
         String sessionId = session.getId();
         StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
         if (terminalState == StreamTerminalState.STOPPED) {
@@ -741,11 +856,27 @@ public class ChatHandler {
 
         streamTerminalStates.put(sessionId, StreamTerminalState.FAILED);
         handleError(session, error);
-        sendCompletionNotification(session, "failed", "响应处理失败");
+        // 持久化错误消息，以便刷新后仍可展示
+        String failedMessage = error.getMessage() != null ? error.getMessage() : "响应处理失败";
+        if (conversationId != null && userId != null && userMessage != null) {
+            saveErrorMessage(conversationId, userId, userMessage, failedMessage);
+        }
+        // 延迟发送 completion failed，确保 error 消息先到达前端
+        CompletableFuture.delayedExecutor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .execute(() -> {
+                    try {
+                        if (session.isOpen()) {
+                            sendCompletionNotification(session, "failed", failedMessage);
+                        }
+                    } catch (Exception e) {
+                        logger.warn("延迟发送 completion failed 通知失败: {}", e.getMessage());
+                    }
+                });
         completeResponseFutureExceptionally(sessionId, responseFuture, error);
         cancelStreamSubscription(sessionId);
         responseBuilders.remove(sessionId);
         streamTerminalStates.remove(sessionId);
+        sessionErrorSent.remove(sessionId);
         logger.warn("流式响应异常结束，会话ID: {}", sessionId, error);
     }
 
@@ -778,6 +909,7 @@ public class ChatHandler {
         logger.info("对话存储信息 - Redis键: {}, 值: {}", redisKey, conversationId);
 
         streamTerminalStates.remove(sessionId);
+        sessionErrorSent.remove(sessionId);
         logger.info("消息处理完成，用户ID: {}，会话ID: {}", userId, sessionId);
     }
 
