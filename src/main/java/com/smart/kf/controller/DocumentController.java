@@ -51,45 +51,38 @@ public class DocumentController {
     public ResponseEntity<?> deleteDocument(
             @PathVariable String fileMd5,
             @RequestAttribute("userId") String userId,
+            @RequestAttribute(value = "username", required = false) String username,
             @RequestAttribute("role") String role) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DELETE_DOCUMENT");
         try {
             LogUtils.logBusiness("DELETE_DOCUMENT", userId, "接收到删除文档请求: fileMd5=%s, role=%s", fileMd5, role);
             
-            // 获取文件信息
-            Optional<FileUpload> fileOpt = fileUploadRepository.findByFileMd5AndUserId(fileMd5, userId);
-            if (fileOpt.isEmpty()) {
-                LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_NOT_FOUND");
-                monitor.end("删除失败：文档不存在");
-                Map<String, Object> response = new HashMap<>();
-                response.put("code", HttpStatus.NOT_FOUND.value());
-                response.put("message", "文档不存在");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-            }
+            // 使用权限感知的删除方法（admin 可删除任意文档，普通用户只能删除自己的）
+            // operatorUsername 必须是真实用户名（JWT sub 字段），而非数字 userId
+            String operatorUsername = (username != null && !username.isEmpty()) ? username : userId;
+            documentService.deleteDocumentWithPermission(fileMd5, operatorUsername);
             
-            FileUpload file = fileOpt.get();
-            
-            // 权限检查：只有文件所有者或管理员可以删除
-            if (!file.getUserId().equals(userId) && !"ADMIN".equals(role)) {
-                LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_PERMISSION_DENIED");
-                LogUtils.logBusiness("DELETE_DOCUMENT", userId, "用户无权删除文档: fileMd5=%s, fileOwner=%s", fileMd5, file.getUserId());
-                monitor.end("删除失败：权限不足");
-                Map<String, Object> response = new HashMap<>();
-                response.put("code", HttpStatus.FORBIDDEN.value());
-                response.put("message", "没有权限删除此文档");
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
-            }
-            
-            // 执行删除操作
-            documentService.deleteDocument(fileMd5, userId);
-            
-            LogUtils.logFileOperation(userId, "DELETE", file.getFileName(), fileMd5, "SUCCESS");
+            LogUtils.logFileOperation(userId, "DELETE", fileMd5, fileMd5, "SUCCESS");
             monitor.end("文档删除成功");
             Map<String, Object> response = new HashMap<>();
             response.put("code", 200);
             response.put("message", "文档删除成功");
             return ResponseEntity.ok(response);
+        } catch (SecurityException e) {
+            LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_PERMISSION_DENIED");
+            monitor.end("删除失败：权限不足");
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.FORBIDDEN.value());
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        } catch (IllegalArgumentException e) {
+            LogUtils.logUserOperation(userId, "DELETE_DOCUMENT", fileMd5, "FAILED_NOT_FOUND");
+            monitor.end("删除失败：文档不存在");
+            Map<String, Object> response = new HashMap<>();
+            response.put("code", HttpStatus.NOT_FOUND.value());
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         } catch (Exception e) {
             LogUtils.logBusinessError("DELETE_DOCUMENT", userId, "删除文档失败: fileMd5=%s", e, fileMd5);
             monitor.end("删除失败: " + e.getMessage());
@@ -154,6 +147,7 @@ public class DocumentController {
     @GetMapping("/uploads")
     public ResponseEntity<?> getUserUploadedFiles(
             @RequestAttribute("userId") String userId,
+            @RequestAttribute(value = "username", required = false) String username,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) String orgTag,
@@ -174,12 +168,15 @@ public class DocumentController {
             boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
             boolean hasKbId = kbId != null && !kbId.isEmpty();
 
+            // operatorUsername 用于管理员判断（必须是用户名），userId 用于数据库查询
+            String operatorUsername = (username != null && !username.isEmpty()) ? username : userId;
+
             if (hasKeyword && hasKbId) {
                 files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCaseAndKbId(userId, keyword.trim(), kbId);
             } else if (hasKeyword) {
                 files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCase(userId, keyword.trim());
             } else {
-                files = documentService.getUserUploadedFiles(userId);
+                files = documentService.getUserUploadedFiles(userId, operatorUsername);
             }
 
             // 应用其余筛选条件

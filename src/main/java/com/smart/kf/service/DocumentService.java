@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -48,6 +49,18 @@ public class DocumentService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    /**
+     * 判断用户是否为系统管理员（ADMIN 角色）
+     */
+    public boolean isAdminUser(String username) {
+        return userRepository.findByUsername(username)
+            .map(u -> u.getRole() == User.Role.ADMIN)
+            .orElse(false);
+    }
 
     /**
      * 删除文档及其相关数据
@@ -124,6 +137,66 @@ public class DocumentService {
             throw new RuntimeException("删除文档失败: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * 管理员删除任意文档（带权限校验 + 通知）
+     * admin 可以删除任何用户的文档；普通用户只能删除自己的文档。
+     *
+     * @param fileMd5          文件 MD5
+     * @param operatorUsername 操作者用户名（JWT 中提取的真实用户名）
+     * @throws SecurityException      当普通用户尝试删除他人文档时抛出
+     * @throws IllegalArgumentException 当文件不存在时抛出
+     */
+    @Transactional
+    public void deleteDocumentWithPermission(String fileMd5, String operatorUsername) {
+        FileUpload fileUpload = fileUploadRepository.findByFileMd5(fileMd5)
+            .orElseThrow(() -> new IllegalArgumentException("文件不存在: " + fileMd5));
+
+        // fileUpload.getUserId() 存储的是用户数字 ID 字符串（如 "1"），需转换为 username 进行权限和通知
+        String fileOwnerUserId = fileUpload.getUserId();
+        String fileOwnerUsername = resolveUsernameByUserId(fileOwnerUserId);
+
+        // 权限检查：操作者是文档所有者或管理员
+        boolean isAdmin = isAdminUser(operatorUsername);
+        boolean isOwner = operatorUsername.equals(fileOwnerUsername);
+
+        if (!isOwner && !isAdmin) {
+            throw new SecurityException("无权删除此文档: " + fileMd5);
+        }
+
+        // 如果是 admin 删除他人的文档，发送通知给文档拥有者（在删除前记录文件名）
+        if (isAdmin && !isOwner && fileOwnerUsername != null) {
+            String fileName = fileUpload.getFileName();
+            notificationService.sendNotification(fileOwnerUsername, operatorUsername,
+                "DELETE_DOCUMENT", fileMd5, fileName);
+        }
+
+        // 执行删除（使用原始 userId 字段查询数据库）
+        deleteDocument(fileMd5, fileOwnerUserId);
+    }
+
+    /**
+     * 根据用户 ID（数字字符串）查找对应的用户名
+     * fileUpload.userId 存储的是数字 ID（来自 JWT 的 userId claim），需转换为 username
+     *
+     * @param userId 用户数字 ID 字符串（如 "1"）；如果已是 username 格式则直接验证
+     * @return 用户名，找不到时返回 userId 原值（向后兼容）
+     */
+    private String resolveUsernameByUserId(String userId) {
+        if (userId == null) {
+            return null;
+        }
+        // 尝试按数字 ID 查找
+        try {
+            long id = Long.parseLong(userId);
+            return userRepository.findById(id)
+                .map(User::getUsername)
+                .orElse(userId); // 找不到时返回原值（兼容旧数据）
+        } catch (NumberFormatException e) {
+            // userId 本身就是 username 格式，直接返回
+            return userId;
+        }
+    }
     
     /**
      * 获取用户可访问的所有文件列表
@@ -133,7 +206,7 @@ public class DocumentService {
      * @param orgTags 用户所属的组织标签（逗号分隔的字符串，仅供兼容性使用）
      * @return 用户可访问的文件列表
      */
-    public List<FileUpload> getAccessibleFiles(String userId, String orgTags) {
+    public List<FileUpload> getAccessibleFiles(String userId, @SuppressWarnings("unused") String orgTags) {
         logger.info("获取用户可访问文件列表: userId={}", userId);
         
         try {
@@ -165,15 +238,22 @@ public class DocumentService {
     }
     
     /**
-     * 获取用户上传的所有文件列表
+     * 获取用户上传的所有文件列表（admin 可获取全量列表）
      *
-     * @param userId 用户ID
+     * @param userId           用户数字 ID（用于数据库查询，来自 JWT userId claim）
+     * @param operatorUsername 操作者用户名（用于管理员身份判断，来自 JWT sub 字段）
      * @return 用户上传的文件列表
      */
-    public List<FileUpload> getUserUploadedFiles(String userId) {
-        logger.info("获取用户上传的文件列表: userId={}", userId);
+    public List<FileUpload> getUserUploadedFiles(String userId, String operatorUsername) {
+        logger.info("获取用户上传的文件列表: userId={}, operatorUsername={}", userId, operatorUsername);
         
         try {
+            // 如果是 admin，返回所有文件（使用真实用户名进行判断，避免数字 ID 被误当用户名）
+            if (isAdminUser(operatorUsername)) {
+                List<FileUpload> files = fileUploadRepository.findAll();
+                logger.info("Admin 获取全量文件列表: fileCount={}", files.size());
+                return files;
+            }
             List<FileUpload> files = fileUploadRepository.findByUserId(userId);
             logger.info("成功获取用户上传的文件列表: userId={}, fileCount={}", userId, files.size());
             return files;
@@ -252,7 +332,7 @@ public class DocumentService {
 
             // 优先使用新的MD5路径
             String objectName = "merged/" + fileMd5;
-            InputStream inputStream = null;
+            InputStream inputStream;
             boolean usedNewPath = false;
 
             try {
@@ -282,7 +362,7 @@ public class DocumentService {
 
             if (isTextFile) {
                 // 对于文本文件，读取前10KB内容
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"))) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
                     StringBuilder content = new StringBuilder();
                     String line;
                     int bytesRead = 0;
@@ -290,7 +370,7 @@ public class DocumentService {
 
                     while ((line = reader.readLine()) != null && bytesRead < maxBytes) {
                         content.append(line).append("\n");
-                        bytesRead += line.getBytes("UTF-8").length + 1;
+                        bytesRead += line.getBytes(StandardCharsets.UTF_8).length + 1;
                     }
 
                     String result = content.toString();
@@ -304,12 +384,13 @@ public class DocumentService {
                 }
             } else {
                 // 对于非文本文件，返回文件信息
-                String fileInfo = String.format(
-                    "文件名: %s\n" +
-                    "文件大小: %s\n" +
-                    "文件类型: %s\n" +
-                    "上传时间: %s\n\n" +
-                    "此文件类型不支持预览，请下载后查看。",
+                String fileInfo = String.format("""
+                    文件名: %s
+                    文件大小: %s
+                    文件类型: %s
+                    上传时间: %s
+
+                    此文件类型不支持预览，请下载后查看。""",
                     fileName,
                     formatFileSize(fileUpload.getTotalSize()),
                     fileExtension.toUpperCase(),

@@ -1,6 +1,7 @@
 package com.smart.kf.controller;
 
 import com.smart.kf.handler.ChatWebSocketHandler;
+import com.smart.kf.service.ApiKeyConfigService;
 import com.smart.kf.service.ChatHandler;
 import com.smart.kf.utils.LogUtils;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -20,13 +22,15 @@ import java.util.Map;
 public class ChatController extends TextWebSocketHandler {
 
     private final ChatHandler chatHandler;
+    private final ApiKeyConfigService apiKeyConfigService;
 
-    public ChatController(ChatHandler chatHandler) {
+    public ChatController(ChatHandler chatHandler, ApiKeyConfigService apiKeyConfigService) {
         this.chatHandler = chatHandler;
+        this.apiKeyConfigService = apiKeyConfigService;
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String userMessage = message.getPayload();
         String userId = session.getId(); // Use session ID as userId for simplicity
         
@@ -70,6 +74,28 @@ public class ChatController extends TextWebSocketHandler {
             
         } catch (Exception e) {
             LogUtils.logBusinessError("GET_WEBSOCKET_TOKEN", "system", "获取WebSocket Token失败", e);
+            return ResponseEntity.status(500).body(Map.of(
+                "code", 500,
+                "message", "服务器内部错误：" + e.getMessage()
+            ));
+        }
+    }
+
+    /**
+     * 获取所有 AI 模型配置列表（脱敏，普通用户和管理员都可访问）
+     * 仅返回 id、name、modelName、active 字段，不含敏感的 API Key 信息
+     */
+    @GetMapping("/model-configs")
+    public ResponseEntity<?> getModelConfigs() {
+        try {
+            List<Map<String, Object>> list = apiKeyConfigService.listAll();
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "获取模型配置列表成功",
+                "data", list
+            ));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_MODEL_CONFIGS", "system", "获取模型配置列表失败", e);
             return ResponseEntity.status(500).body(Map.of(
                 "code", 500,
                 "message", "服务器内部错误：" + e.getMessage()

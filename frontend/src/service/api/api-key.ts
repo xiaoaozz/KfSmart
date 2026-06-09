@@ -16,7 +16,12 @@ export interface ApiKeyConfig {
   updatedAt?: string;
 }
 
-/** 获取所有 API Key 配置（脱敏） */
+/** 获取所有 API Key 配置（脱敏，普通用户可访问） */
+export function fetchGetModelConfigs() {
+  return request<ApiKeyConfig[]>({ url: '/chat/model-configs' });
+}
+
+/** 获取所有 API Key 配置（脱敏，仅管理员） */
 export function fetchGetApiKeyList() {
   return request<ApiKeyConfig[]>({ url: '/admin/api-keys' });
 }

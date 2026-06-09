@@ -5,7 +5,8 @@ export enum SetupStoreId {
   Route = 'route-store',
   Tab = 'tab-store',
   KnowledgeBase = 'knowledge-base-store',
-  Chat = 'chat-store'
+  Chat = 'chat-store',
+  Notification = 'notification-store'
 }
 export enum UploadStatus {
   Uploading = 0,

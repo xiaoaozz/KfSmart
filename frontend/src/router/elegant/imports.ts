@@ -24,7 +24,6 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   chat: () => import("@/views/chat/index.vue"),
   "document-management": () => import("@/views/document-management/index.vue"),
   "knowledge-base": () => import("@/views/knowledge-base/index.vue"),
-  "document-management": () => import("@/views/document-management/index.vue"),
   "mcp-tools": () => import("@/views/mcp-tools/index.vue"),
   "org-tag": () => import("@/views/org-tag/index.vue"),
   "personal-center": () => import("@/views/personal-center/index.vue"),
