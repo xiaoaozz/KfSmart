@@ -51,6 +51,7 @@ public class DocumentController {
     public ResponseEntity<?> deleteDocument(
             @PathVariable String fileMd5,
             @RequestAttribute("userId") String userId,
+            @RequestAttribute(value = "username", required = false) String username,
             @RequestAttribute("role") String role) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("DELETE_DOCUMENT");
@@ -58,7 +59,9 @@ public class DocumentController {
             LogUtils.logBusiness("DELETE_DOCUMENT", userId, "接收到删除文档请求: fileMd5=%s, role=%s", fileMd5, role);
             
             // 使用权限感知的删除方法（admin 可删除任意文档，普通用户只能删除自己的）
-            documentService.deleteDocumentWithPermission(fileMd5, userId);
+            // operatorUsername 必须是真实用户名（JWT sub 字段），而非数字 userId
+            String operatorUsername = (username != null && !username.isEmpty()) ? username : userId;
+            documentService.deleteDocumentWithPermission(fileMd5, operatorUsername);
             
             LogUtils.logFileOperation(userId, "DELETE", fileMd5, fileMd5, "SUCCESS");
             monitor.end("文档删除成功");
@@ -144,6 +147,7 @@ public class DocumentController {
     @GetMapping("/uploads")
     public ResponseEntity<?> getUserUploadedFiles(
             @RequestAttribute("userId") String userId,
+            @RequestAttribute(value = "username", required = false) String username,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) String orgTag,
@@ -164,12 +168,15 @@ public class DocumentController {
             boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
             boolean hasKbId = kbId != null && !kbId.isEmpty();
 
+            // operatorUsername 用于管理员判断（必须是用户名），userId 用于数据库查询
+            String operatorUsername = (username != null && !username.isEmpty()) ? username : userId;
+
             if (hasKeyword && hasKbId) {
                 files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCaseAndKbId(userId, keyword.trim(), kbId);
             } else if (hasKeyword) {
                 files = fileUploadRepository.findByUserIdAndFileNameContainingIgnoreCase(userId, keyword.trim());
             } else {
-                files = documentService.getUserUploadedFiles(userId);
+                files = documentService.getUserUploadedFiles(userId, operatorUsername);
             }
 
             // 应用其余筛选条件

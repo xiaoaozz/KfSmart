@@ -240,15 +240,16 @@ public class DocumentService {
     /**
      * 获取用户上传的所有文件列表（admin 可获取全量列表）
      *
-     * @param userId 用户ID（当 isAdmin=true 时可为 null 以获取全量）
+     * @param userId           用户数字 ID（用于数据库查询，来自 JWT userId claim）
+     * @param operatorUsername 操作者用户名（用于管理员身份判断，来自 JWT sub 字段）
      * @return 用户上传的文件列表
      */
-    public List<FileUpload> getUserUploadedFiles(String userId) {
-        logger.info("获取用户上传的文件列表: userId={}", userId);
+    public List<FileUpload> getUserUploadedFiles(String userId, String operatorUsername) {
+        logger.info("获取用户上传的文件列表: userId={}, operatorUsername={}", userId, operatorUsername);
         
         try {
-            // 如果是 admin，返回所有文件
-            if (isAdminUser(userId)) {
+            // 如果是 admin，返回所有文件（使用真实用户名进行判断，避免数字 ID 被误当用户名）
+            if (isAdminUser(operatorUsername)) {
                 List<FileUpload> files = fileUploadRepository.findAll();
                 logger.info("Admin 获取全量文件列表: fileCount={}", files.size());
                 return files;

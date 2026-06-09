@@ -4,7 +4,6 @@ import com.smart.kf.model.FileUpload;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.utils.JwtUtils;
 import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.Getter;
@@ -15,7 +14,6 @@ import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
@@ -50,8 +48,7 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
     private FileUploadRepository fileUploadRepository;
 
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) {
         try {
             String path = request.getRequestURI();
             
@@ -79,15 +76,17 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
                 
                 logger.info("处理{}请求: {}", operation, path);
                 
-                // 将用户ID和角色设置为请求属性，供控制器方法使用
+                // 将用户ID、用户名和角色设置为请求属性，供控制器方法使用
                 String token = extractToken(request);
                 if (token != null) {
                     String userId = jwtUtils.extractUserIdFromToken(token);
+                    String username = jwtUtils.extractUsernameFromToken(token);
                     String role = jwtUtils.extractRoleFromToken(token);
                     if (userId != null) {
                         request.setAttribute("userId", userId);
+                        request.setAttribute("username", username);
                         request.setAttribute("role", role);
-                        logger.debug("为{}请求设置userId属性: {}, role: {}", operation, userId, role);
+                        logger.debug("为{}请求设置userId属性: {}, username: {}, role: {}", operation, userId, username, role);
                     } else {
                         logger.warn("{}请求中无法从token提取userId", operation);
                     }
