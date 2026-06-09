@@ -20,6 +20,7 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "api-key-management": "/api-key-management";
     "chat": "/chat";
     "iframe-page": "/iframe-page/:url";
     "knowledge-base": "/knowledge-base";
@@ -63,6 +64,7 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "api-key-management"
     | "chat"
     | "iframe-page"
     | "knowledge-base"
@@ -93,6 +95,7 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "api-key-management"
     | "chat"
     | "knowledge-base"
     | "mcp-tools"

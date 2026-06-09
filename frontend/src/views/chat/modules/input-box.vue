@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { fetchGetApiKeyList, type ApiKeyConfig } from '@/service/api/api-key';
+
 const chatStore = useChatStore();
 const { input, list, wsStatus, wsData, conversationId } = storeToRefs(chatStore);
 
@@ -25,37 +27,54 @@ watch(wsData, val => {
   const assistant = list.value[list.value.length - 1];
 
   if (data.type === 'completion') {
-    if (data.status === 'finished' && assistant?.status !== 'error') {
-      assistant.status = 'finished';
-      if (assistant?.content) {
-        chatStore.syncSessionPreview(assistant.content, 'assistant');
+    if (data.status === 'finished') {
+      if (assistant && assistant.status !== 'error') {
+        assistant.status = 'finished';
+        if (assistant.content) {
+          chatStore.syncSessionPreview(assistant.content, 'assistant');
+        }
       }
     } else if (data.status === 'stopped' && assistant) {
-      assistant.status = 'stopped';
-      if (typeof data.message === 'string' && !assistant.content) {
-        assistant.content = data.message;
+      if (assistant.status !== 'error') {
+        assistant.status = 'stopped';
+        if (typeof data.message === 'string' && !assistant.content) {
+          assistant.content = data.message;
+        }
       }
     } else if (data.status === 'failed' && assistant) {
-      assistant.status = 'error';
+      // completion failed 仅在当前不是 error 状态时才设置
+      if (assistant.status !== 'error') {
+        assistant.status = 'error';
+        if (typeof data.message === 'string') {
+          assistant.errorMessage = data.message;
+        }
+      }
     }
     return;
   }
 
   if (data.type === 'stop') {
     if (assistant) {
-      assistant.status = 'stopped';
-      if (typeof data.partialContent === 'string') {
-        assistant.content = data.partialContent;
-      }
-      if (!assistant.content && typeof data.message === 'string') {
-        assistant.content = data.message;
+      if (assistant.status !== 'error') {
+        assistant.status = 'stopped';
+        if (typeof data.partialContent === 'string') {
+          assistant.content = data.partialContent;
+        }
+        if (!assistant.content && typeof data.message === 'string') {
+          assistant.content = data.message;
+        }
       }
     }
     return;
   }
 
   if (data.error) {
-    assistant && (assistant.status = 'error');
+    if (assistant) {
+      assistant.status = 'error';
+      assistant.errorMessage = data.message || '模型服务暂时不可用，请稍后重试';
+    }
+    // 确保搜索加载状态被关闭
+    chatStore.handleWsMessage(JSON.stringify({ type: 'completion', status: 'failed' }));
   } else if (data.chunk) {
     assistant && (assistant.status = 'loading');
     assistant && (assistant.content += data.chunk);
@@ -90,7 +109,7 @@ const handleSend = async () => {
   });
   chatStore.syncSessionPreview(message, 'user');
   chatStore.startSearchLoading();
-  chatStore.sendChatMessage(message);
+  chatStore.sendChatMessage(message, selectedApiKeyConfigId.value);
   list.value.push({
     content: '',
     role: 'assistant',
@@ -124,26 +143,42 @@ const handShortcut = (e: KeyboardEvent) => {
   }
 };
 
-import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
+// ===== API Key 配置选择 =====
+const apiKeyConfigs = ref<ApiKeyConfig[]>([]);
+/** 当前选中的 API Key 配置 ID（null 表示使用系统激活配置） */
+const selectedApiKeyConfigId = ref<number | null>(null);
 
-const selectedKnowledgeBase = ref('');
-const knowledgeBaseOptions = ref<{ label: string; value: string }[]>([]);
+const apiKeyConfigOptions = computed(() => {
+  const opts = [{ label: '系统默认配置', value: null as number | null }];
+  for (const cfg of apiKeyConfigs.value) {
+    const label = `${cfg.name} (${cfg.modelName})${cfg.active ? ' ✓' : ''}`;
+    opts.push({ label, value: cfg.id ?? null });
+  }
+  return opts;
+});
 
-async function loadKnowledgeBaseOptions() {
-  const { error, data } = await fetchGetKnowledgeBases();
+/** 当前选中配置的展示名称 */
+const selectedModelLabel = computed(() => {
+  if (selectedApiKeyConfigId.value == null) {
+    // 显示激活配置名称，如果有的话
+    const active = apiKeyConfigs.value.find(c => c.active);
+    return active ? `${active.modelName} (激活)` : '系统默认配置';
+  }
+  const cfg = apiKeyConfigs.value.find(c => c.id === selectedApiKeyConfigId.value);
+  return cfg ? `${cfg.modelName}` : '未知配置';
+});
+
+async function loadApiKeyConfigs() {
+  const { error, data } = await fetchGetApiKeyList();
   if (!error && data) {
-    knowledgeBaseOptions.value = data.map(kb => ({
-      label: `${kb.name}（${kb.fileCount}）`,
-      value: kb.kbId
-    }));
-    if (knowledgeBaseOptions.value.length > 0 && !selectedKnowledgeBase.value) {
-      selectedKnowledgeBase.value = knowledgeBaseOptions.value[0].value;
-    }
+    apiKeyConfigs.value = data;
+    // 默认选中激活的配置（用 null 代表"系统会自动使用激活配置"）
+    selectedApiKeyConfigId.value = null;
   }
 }
 
 onMounted(() => {
-  loadKnowledgeBaseOptions();
+  loadApiKeyConfigs();
 });
 </script>
 
@@ -164,25 +199,21 @@ onMounted(() => {
             </template>
           </NButton>
 
-          <div class="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <icon-carbon:data-base class="text-blue-500 text-sm" />
-            <NSelect
-              v-model:value="selectedKnowledgeBase"
-              :options="knowledgeBaseOptions"
-              size="small"
-              class="knowledge-base-select w-180px"
-              :bordered="false"
-            />
-            <icon-carbon:chevron-down class="text-gray-400 text-xs" />
-          </div>
         </div>
-
         <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <span>模型：</span>
-          <NButton text class="flex items-center gap-1 hover:text-blue-600">
-            <span class="font-medium">KnowFlow-Chat 3.5</span>
-            <icon-carbon:chevron-down class="text-xs" />
-          </NButton>
+          <icon-carbon:machine-learning-model class="text-blue-500 text-sm" />
+          <span class="whitespace-nowrap">模型：</span>
+          <NPopselect
+            v-model:value="selectedApiKeyConfigId"
+            :options="apiKeyConfigOptions"
+            size="small"
+            trigger="click"
+          >
+            <NButton text class="flex items-center gap-1 hover:text-blue-600 max-w-200px">
+              <span class="font-medium truncate">{{ selectedModelLabel }}</span>
+              <icon-carbon:chevron-down class="text-xs flex-shrink-0" />
+            </NButton>
+          </NPopselect>
         </div>
       </div>
     </div>
@@ -247,19 +278,6 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .input-box-container {
-  .knowledge-base-select {
-    :deep(.n-base-selection) {
-      background: transparent !important;
-      border: none !important;
-      padding: 0 !important;
-
-      .n-base-selection__border,
-      .n-base-selection__state-border {
-        display: none !important;
-      }
-    }
-  }
-
   .input-textarea {
     font-family: inherit;
     line-height: 1.6;

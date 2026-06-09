@@ -226,6 +226,7 @@ declare namespace Api {
       role: 'user' | 'assistant';
       content: string;
       status?: 'pending' | 'loading' | 'finished' | 'error';
+      errorMessage?: string;
       timestamp?: string;
     }
 

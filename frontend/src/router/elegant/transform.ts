@@ -166,6 +166,7 @@ const routeMap: RouteMap = {
   "403": "/403",
   "404": "/404",
   "500": "/500",
+  "api-key-management": "/api-key-management",
   "chat": "/chat",
   "iframe-page": "/iframe-page/:url",
   "knowledge-base": "/knowledge-base",
