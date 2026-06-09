@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import { useNotificationStore } from '@/store/modules/notification';
 import PersonalProfile from './modules/profile.vue';
 import AccountSecurity from './modules/account-security.vue';
 import MessageNotification from './modules/message-notification.vue';
@@ -9,17 +11,35 @@ import OperationRecord from './modules/operation-record.vue';
 
 defineOptions({ name: 'PersonalCenter' });
 
+const route = useRoute();
+const notificationStore = useNotificationStore();
+
 const activeTab = ref('profile');
 
 const tabs = [
   { key: 'profile', label: '个人资料', icon: 'carbon:user-avatar' },
   { key: 'security', label: '账号安全', icon: 'carbon:security' },
-
   { key: 'notification', label: '消息通知', icon: 'carbon:notification' },
   { key: 'favorites', label: '我的收藏', icon: 'carbon:star' },
   { key: 'statistics', label: '使用统计', icon: 'carbon:analytics' },
   { key: 'records', label: '操作记录', icon: 'carbon:time' },
 ];
+
+onMounted(() => {
+  // 支持 ?tab=xxx 跳转到指定 tab
+  if (route.query.tab) {
+    activeTab.value = route.query.tab as string;
+  }
+  // 加载未读数
+  notificationStore.fetchUnreadCount();
+});
+
+watch(
+  () => route.query.tab,
+  (val) => {
+    if (val) activeTab.value = val as string;
+  }
+);
 </script>
 
 <template>
@@ -42,6 +62,13 @@ const tabs = [
             :class="activeTab === tab.key ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'"
           />
           <span>{{ tab.label }}</span>
+          <!-- 消息通知未读角标 -->
+          <span
+            v-if="tab.key === 'notification' && notificationStore.unreadCount > 0"
+            class="inline-flex items-center justify-center min-w-16px h-16px bg-red-500 text-white text-9px font-bold rounded-full px-1 ml-0.5"
+          >
+            {{ notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount }}
+          </span>
           <!-- 选中下划线 -->
           <span
             v-if="activeTab === tab.key"
@@ -56,7 +83,6 @@ const tabs = [
       <Transition name="fade-tab" mode="out-in">
         <PersonalProfile v-if="activeTab === 'profile'" key="profile" />
         <AccountSecurity v-else-if="activeTab === 'security'" key="security" />
-
         <MessageNotification v-else-if="activeTab === 'notification'" key="notification" />
         <MyFavorites v-else-if="activeTab === 'favorites'" key="favorites" />
         <UsageStatistics v-else-if="activeTab === 'statistics'" key="statistics" />

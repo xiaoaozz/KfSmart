@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
+import { useNotificationStore } from '@/store/modules/notification';
 
 defineOptions({ name: 'MessageNotification' });
 
+const notificationStore = useNotificationStore();
 const saving = ref(false);
 
 const settings = reactive({
@@ -64,83 +66,125 @@ async function saveSettings() {
   window.$message?.success('通知设置已保存');
 }
 
-const msgList = ref([
-  { id: 1, type: 'system', title: '系统维护通知', content: '系统将于今晚 22:00 进行例行维护，预计持续 30 分钟', time: '10分钟前', read: false },
-  { id: 2, type: 'upload', title: '文件上传完成', content: '「技术文档v2.pdf」已成功上传并完成向量化处理', time: '1小时前', read: false },
-  { id: 3, type: 'chat', title: '新消息', content: '管理员：请查看最新的知识库使用规范文档', time: '2小时前', read: true },
-  { id: 4, type: 'update', title: '知识库更新', content: '「公共知识库」新增了 3 份文档', time: '昨天', read: true },
-  { id: 5, type: 'system', title: '账号安全提醒', content: '检测到新设备登录，如非本人操作请及时修改密码', time: '3天前', read: true },
-]);
+onMounted(() => {
+  notificationStore.fetchNotifications();
+});
 
-const unreadCount = computed(() => msgList.value.filter(m => !m.read).length);
-
-function markAllRead() {
-  msgList.value.forEach(m => (m.read = true));
+async function handleMarkAllRead() {
+  await notificationStore.markAllAsRead();
   window.$message?.success('已全部标为已读');
 }
 
-const typeIconMap: Record<string, string> = {
-  system: 'carbon:warning',
-  upload: 'carbon:upload',
-  chat: 'carbon:chat',
-  update: 'carbon:renew'
-};
-const typeBgMap: Record<string, string> = {
-  system: 'bg-blue-50 dark:bg-blue-900/20',
-  upload: 'bg-green-50 dark:bg-green-900/20',
-  chat: 'bg-purple-50 dark:bg-purple-900/20',
-  update: 'bg-orange-50 dark:bg-orange-900/20'
-};
-const typeIconColorMap: Record<string, string> = {
-  system: 'text-blue-500',
-  upload: 'text-green-500',
-  chat: 'text-purple-500',
-  update: 'text-orange-500'
+async function handleMarkRead(id: number) {
+  await notificationStore.markAsRead(id);
+}
+
+// 操作类型的中文标签
+const actionTypeLabel: Record<string, string> = {
+  UPDATE_KB: '知识库修改',
+  DELETE_KB: '知识库删除',
+  UPDATE_DOCUMENT: '文档修改',
+  DELETE_DOCUMENT: '文档删除'
 };
 </script>
 
 <template>
   <div class="notification-module space-y-6">
-    <!-- 消息列表 -->
+    <!-- ── 消息中心 ── -->
     <div>
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-2">
           <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">消息中心</h3>
-          <NTag v-if="unreadCount > 0" type="error" size="small" round>{{ unreadCount }}</NTag>
+          <NTag v-if="notificationStore.unreadCount > 0" type="error" size="small" round>
+            {{ notificationStore.unreadCount }}
+          </NTag>
         </div>
-        <NButton size="small" text type="primary" @click="markAllRead">
+        <NButton
+          v-if="notificationStore.unreadCount > 0"
+          size="small"
+          text
+          type="primary"
+          @click="handleMarkAllRead"
+        >
           <template #icon><icon-carbon:checkmark-outline /></template>
           全部已读
         </NButton>
       </div>
-      <div class="space-y-2">
+
+      <!-- 加载骨架 -->
+      <div v-if="notificationStore.loading" class="space-y-2">
         <div
-          v-for="msg in msgList"
-          :key="msg.id"
-          class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors"
-          :class="msg.read
-            ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-            : 'bg-blue-50/40 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/30'"
-          @click="msg.read = true"
+          v-for="i in 4"
+          :key="i"
+          class="h-16 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse"
+        />
+      </div>
+
+      <!-- 空状态 -->
+      <div
+        v-else-if="notificationStore.notifications.length === 0"
+        class="flex flex-col items-center justify-center py-12 text-gray-400"
+      >
+        <icon-carbon:notification-off class="text-5xl mb-3 text-gray-300 dark:text-gray-600" />
+        <p class="text-sm font-medium">暂无消息通知</p>
+        <p class="text-xs mt-1 text-gray-400">当管理员操作您的资源时，您会在此处收到通知</p>
+      </div>
+
+      <!-- 通知列表 -->
+      <div v-else class="space-y-2">
+        <div
+          v-for="item in notificationStore.notifications"
+          :key="item.id"
+          class="flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors"
+          :class="item.isRead
+            ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+            : 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-900/30 hover:bg-blue-50 dark:hover:bg-blue-900/20'"
+          @click="handleMarkRead(item.id)"
         >
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" :class="typeBgMap[msg.type]">
-            <component :is="typeIconMap[msg.type]" class="text-sm" :class="typeIconColorMap[msg.type]" />
+          <!-- 图标 -->
+          <div
+            class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+            :class="notificationStore.getActionBgClass(item.actionType)"
+          >
+            <component
+              :is="notificationStore.getActionIcon(item.actionType)"
+              class="text-base"
+              :class="notificationStore.getActionIconClass(item.actionType)"
+            />
           </div>
+
+          <!-- 内容 -->
           <div class="flex-1 min-w-0">
             <div class="flex items-start justify-between gap-2">
-              <p class="text-sm text-gray-800 dark:text-gray-100" :class="msg.read ? 'font-medium' : 'font-bold'">
-                {{ msg.title }}
-                <span v-if="!msg.read" class="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full align-middle ml-1 mb-0.5" />
+              <p
+                class="text-sm text-gray-800 dark:text-gray-100 leading-snug"
+                :class="item.isRead ? 'font-normal' : 'font-semibold'"
+              >
+                {{ item.message }}
+                <span
+                  v-if="!item.isRead"
+                  class="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full align-middle ml-1 mb-0.5"
+                />
               </p>
-              <span class="text-xs text-gray-400 flex-shrink-0">{{ msg.time }}</span>
+              <span class="text-xs text-gray-400 flex-shrink-0 mt-0.5">
+                {{ notificationStore.formatRelativeTime(item.createdAt) }}
+              </span>
             </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{{ msg.content }}</p>
+            <!-- 操作类型标签 -->
+            <div class="flex items-center gap-2 mt-1.5">
+              <NTag size="tiny" :bordered="false" class="text-9px">
+                {{ actionTypeLabel[item.actionType] ?? item.actionType }}
+              </NTag>
+              <span class="text-xs text-gray-400">
+                操作者：{{ item.operatorUsername }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 通知设置 -->
+    <!-- ── 通知偏好设置 ── -->
     <div>
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">通知偏好设置</h3>

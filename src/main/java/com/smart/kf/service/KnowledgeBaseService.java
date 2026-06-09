@@ -40,6 +40,9 @@ public class KnowledgeBaseService {
     @Lazy
     private DocumentService documentService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     private static final int CHUNK_SIZE_BYTES = 4096;
 
     /**
@@ -104,8 +107,21 @@ public class KnowledgeBaseService {
         if (kb.getCreatedBy() != null && kb.getCreatedBy().getUsername().equals(username)) {
             return false;
         }
-        // 管理员有权修改（通过组织标签匹配判断，组织标签关联的用户视为管理员）
+        // ADMIN 角色拥有最高权限，可修改所有知识库
+        if (isAdminUser(username)) {
+            return false;
+        }
+        // 组织标签管理员有权修改（通过组织标签匹配判断）
         return kb.getOrgTag() == null || !userOrgTags.contains(kb.getOrgTag());
+    }
+
+    /**
+     * 判断用户是否为系统管理员（ADMIN 角色）
+     */
+    private boolean isAdminUser(String username) {
+        return userRepository.findByUsername(username)
+            .map(u -> u.getRole() == User.Role.ADMIN)
+            .orElse(false);
     }
 
     /**
@@ -163,10 +179,15 @@ public class KnowledgeBaseService {
             userOrgTags.addAll(effectiveTags);
         }
         
-        // 过滤出用户可访问的知识库
-        List<KnowledgeBase> accessibleKbs = allKbs.stream()
-            .filter(kb -> isAccessible(kb, username, userOrgTags))
-            .toList();
+        // admin 可以访问所有知识库，普通用户只能看到自己可访问的
+        List<KnowledgeBase> accessibleKbs;
+        if (isAdminUser(username)) {
+            accessibleKbs = allKbs;
+        } else {
+            accessibleKbs = allKbs.stream()
+                .filter(kb -> isAccessible(kb, username, userOrgTags))
+                .toList();
+        }
         
         // 应用筛选条件
         List<KnowledgeBase> filteredKbs = accessibleKbs.stream()
@@ -268,7 +289,14 @@ public class KnowledgeBaseService {
         KnowledgeBase kb = kbOpt.get();
         Set<String> userOrgTags = resolveUserOrgTags(operatorUsername, operatorOrgTags);
         if (isNotModifiable(kb, operatorUsername, userOrgTags)) {
-            throw new SecurityException("无权修改该知识库: " + kbId);
+            throw new SecurityException("暂无权限修改该知识库: " + kbId);
+        }
+
+        // 如果是 admin 修改他人的知识库，发送通知给资源拥有者
+        String ownerUsername = kb.getCreatedBy() != null ? kb.getCreatedBy().getUsername() : null;
+        if (ownerUsername != null && !ownerUsername.equals(operatorUsername) && isAdminUser(operatorUsername)) {
+            notificationService.sendNotification(ownerUsername, operatorUsername,
+                "UPDATE_KB", kbId, kb.getName());
         }
         
         if (name != null) kb.setName(name);
@@ -296,7 +324,15 @@ public class KnowledgeBaseService {
         KnowledgeBase kb = kbOpt.get();
         Set<String> userOrgTags = resolveUserOrgTags(operatorUsername, operatorOrgTags);
         if (isNotModifiable(kb, operatorUsername, userOrgTags)) {
-            throw new SecurityException("无权删除该知识库: " + kbId);
+            throw new SecurityException("暂无权限删除该知识库: " + kbId);
+        }
+
+        // 如果是 admin 删除他人的知识库，发送通知给资源拥有者（在删除前记录名称）
+        String ownerUsername = kb.getCreatedBy() != null ? kb.getCreatedBy().getUsername() : null;
+        String kbName = kb.getName();
+        if (ownerUsername != null && !ownerUsername.equals(operatorUsername) && isAdminUser(operatorUsername)) {
+            notificationService.sendNotification(ownerUsername, operatorUsername,
+                "DELETE_KB", kbId, kbName);
         }
         
         // 级联删除知识库下的所有文档
@@ -331,7 +367,8 @@ public class KnowledgeBaseService {
         
         KnowledgeBase kb = kbOpt.get();
         Set<String> userOrgTags = resolveUserOrgTags(username, orgTags);
-        if (!isAccessible(kb, username, userOrgTags)) {
+        // admin 可以访问所有知识库详情，普通用户需要权限校验
+        if (!isAdminUser(username) && !isAccessible(kb, username, userOrgTags)) {
             throw new SecurityException("无权访问该知识库: " + kbId);
         }
         
@@ -383,7 +420,7 @@ public class KnowledgeBaseService {
         
         KnowledgeBase kb = kbOpt.get();
         
-        // 权限校验
+        // 权限校验：admin 可访问所有知识库的文档，普通用户需要权限校验
         Set<String> userOrgTags = new HashSet<>();
         if (orgTags != null && !orgTags.isEmpty()) {
             userOrgTags.addAll(Arrays.asList(orgTags.split(",")));
@@ -393,7 +430,7 @@ public class KnowledgeBaseService {
             userOrgTags.addAll(effectiveTags);
         }
         
-        if (!isAccessible(kb, username, userOrgTags)) {
+        if (!isAdminUser(username) && !isAccessible(kb, username, userOrgTags)) {
             throw new IllegalArgumentException("无权访问该知识库: " + kbId);
         }
         

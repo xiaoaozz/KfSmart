@@ -74,3 +74,17 @@ CREATE TABLE knowledge_bases (
     INDEX idx_created_by (created_by),
     CONSTRAINT fk_kb_created_by FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
+
+CREATE TABLE user_notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '通知唯一标识',
+    recipient_username VARCHAR(255) NOT NULL COMMENT '通知接收者用户名',
+    operator_username VARCHAR(255) NOT NULL COMMENT '操作者（admin）用户名',
+    action_type VARCHAR(50) NOT NULL COMMENT '操作类型：UPDATE_KB / DELETE_KB / UPDATE_DOCUMENT / DELETE_DOCUMENT',
+    resource_id VARCHAR(255) DEFAULT NULL COMMENT '被操作的资源标识（kbId 或 fileMd5）',
+    resource_name VARCHAR(255) DEFAULT NULL COMMENT '被操作的资源名称（知识库名称 或 文件名）',
+    message TEXT NOT NULL COMMENT '通知内容',
+    is_read BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否已读',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_recipient (recipient_username) COMMENT '接收者用户名索引',
+    INDEX idx_recipient_unread (recipient_username, is_read) COMMENT '未读通知查询索引'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户通知表';
