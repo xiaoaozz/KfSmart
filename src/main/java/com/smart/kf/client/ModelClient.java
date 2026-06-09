@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -26,7 +27,7 @@ import java.util.function.Consumer;
  * 支持两种配置来源（优先级从高到低）：
  * <ol>
  *   <li>通过 {@link ApiKeyConfig} 动态指定（数据库管理的 API Key 配置）</li>
- *   <li>回退到 YAML 文件中的默认配置（{@code deepseek.api.*}）</li>
+ *   <li>回退到 YAML 文件中的默认配置（{@code ai.default.*}）</li>
  * </ol>
  */
 @Service
@@ -41,9 +42,9 @@ public class ModelClient {
     /** 全局 AI 属性（Prompt 模板 + 生成参数） */
     private final AiProperties aiProperties;
 
-    public ModelClient(@Value("${deepseek.api.url}") String apiUrl,
-                       @Value("${deepseek.api.key}") String apiKey,
-                       @Value("${deepseek.api.model}") String model,
+    public ModelClient(@Value("${ai.default.url}") String apiUrl,
+                       @Value("${ai.default.key:}") String apiKey,
+                       @Value("${ai.default.model}") String model,
                        AiProperties aiProperties) {
         WebClient.Builder builder = WebClient.builder().baseUrl(apiUrl);
         if (apiKey != null && !apiKey.trim().isEmpty()) {
@@ -109,7 +110,7 @@ public class ModelClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .onStatus(
-                            status -> status.isError(),
+                            HttpStatusCode::isError,
                             clientResponse -> clientResponse.bodyToMono(String.class)
                                     .flatMap(errorBody -> {
                                         logger.error("Anthropic 服务返回错误，HTTP状态码: {}，响应体: {}",
@@ -140,7 +141,7 @@ public class ModelClient {
                 .bodyValue(requestBody)
                 .retrieve()
                 .onStatus(
-                        status -> status.isError(),
+                        HttpStatusCode::isError,
                         clientResponse -> clientResponse.bodyToMono(String.class)
                                 .flatMap(errorBody -> {
                                     logger.error("模型服务返回错误，HTTP状态码: {}，响应体: {}",

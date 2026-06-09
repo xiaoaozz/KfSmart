@@ -165,6 +165,7 @@ const local: App.I18n.Schema = {
     'system-overview': '系统总览',
     chat: '聊天助手',
     'knowledge-base': '知识库',
+    'document-management': '文档管理',
     'mcp-tools': 'MCP工具',
     'org-tag': '组织标签',
     user: '用户管理',

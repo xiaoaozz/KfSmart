@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fetchCreateKnowledgeBase } from '@/service/api/knowledge-base';
+import { fetchCreateKnowledgeBase, fetchUpdateKnowledgeBase } from '@/service/api/knowledge-base';
 
 defineOptions({
   name: 'CreateKbDialog'
@@ -7,6 +7,13 @@ defineOptions({
 
 const loading = ref(false);
 const visible = defineModel<boolean>('visible', { default: false });
+
+// 编辑模式：传入 editData 则为编辑，否则为新建
+const props = defineProps<{
+  editData?: Api.KnowledgeBase.KnowledgeBaseInfo | null;
+}>();
+
+const isEditMode = computed(() => !!props.editData);
 
 const authStore = useAuthStore();
 
@@ -59,22 +66,37 @@ async function handleSubmit() {
   loading.value = true;
 
   try {
-    // 调用独立的知识库创建API
-    const { error, data } = await fetchCreateKnowledgeBase({
-      name: model.value.name,
-      description: model.value.description,
-      orgTag: model.value.orgTag,
-      isPublic: model.value.isPublic,
-      icon: model.value.icon
-    });
-
-    if (!error) {
-      window.$message?.success('知识库创建成功');
-      close();
-      emit('submitted');
+    if (isEditMode.value && props.editData) {
+      // 编辑模式
+      const { error } = await fetchUpdateKnowledgeBase(props.editData.kbId, {
+        name: model.value.name,
+        description: model.value.description,
+        orgTag: model.value.orgTag,
+        isPublic: model.value.isPublic,
+        icon: model.value.icon
+      });
+      if (!error) {
+        window.$message?.success('知识库更新成功');
+        close();
+        emit('submitted');
+      }
+    } else {
+      // 新建模式
+      const { error } = await fetchCreateKnowledgeBase({
+        name: model.value.name,
+        description: model.value.description,
+        orgTag: model.value.orgTag,
+        isPublic: model.value.isPublic,
+        icon: model.value.icon
+      });
+      if (!error) {
+        window.$message?.success('知识库创建成功');
+        close();
+        emit('submitted');
+      }
     }
   } catch (e) {
-    console.error('[知识库] 创建失败:', e);
+    console.error('[知识库] 操作失败:', e);
   }
 
   loading.value = false;
@@ -82,7 +104,18 @@ async function handleSubmit() {
 
 watch(visible, () => {
   if (visible.value) {
-    model.value = createDefaultModel();
+    if (isEditMode.value && props.editData) {
+      // 编辑模式：填入已有数据
+      model.value = {
+        name: props.editData.name || '',
+        description: props.editData.description || '',
+        orgTag: props.editData.orgTag || null,
+        isPublic: props.editData.isPublic ?? false,
+        icon: props.editData.icon || 'folder'
+      };
+    } else {
+      model.value = createDefaultModel();
+    }
     restoreValidation();
   }
 });
@@ -94,7 +127,7 @@ const emit = defineEmits<{ submitted: [] }>();
   <NModal
     v-model:show="visible"
     preset="dialog"
-    title="新建知识库"
+    :title="isEditMode ? '编辑知识库' : '新建知识库'"
     :show-icon="false"
     :mask-closable="false"
     class="w-560px!"
@@ -153,7 +186,7 @@ const emit = defineEmits<{ submitted: [] }>();
     <template #action>
       <NSpace :size="16">
         <NButton @click="close">取消</NButton>
-        <NButton type="primary" :loading="loading" @click="handleSubmit">创建</NButton>
+        <NButton type="primary" :loading="loading" @click="handleSubmit">{{ isEditMode ? '保存' : '创建' }}</NButton>
       </NSpace>
     </template>
   </NModal>

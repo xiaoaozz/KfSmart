@@ -76,4 +76,23 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
      * 用于筛选选项等批量查询场景，避免 N+1 查询
      */
     List<FileUpload> findByKbIdIn(Collection<String> kbIds);
+
+    /**
+     * 根据用户ID和文件名关键词模糊查询用户上传的文件
+     *
+     * @param userId  用户ID
+     * @param keyword 文件名关键词（LIKE 匹配）
+     * @return 匹配的文件列表
+     */
+    @Query("SELECT f FROM FileUpload f WHERE f.userId = :userId AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<FileUpload> findByUserIdAndFileNameContainingIgnoreCase(@Param("userId") String userId, @Param("keyword") String keyword);
+
+    /**
+     * 根据用户ID、文件名关键词和知识库ID模糊查询
+     */
+    @Query("SELECT f FROM FileUpload f WHERE f.userId = :userId AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%')) AND f.kbId = :kbId")
+    List<FileUpload> findByUserIdAndFileNameContainingIgnoreCaseAndKbId(
+            @Param("userId") String userId,
+            @Param("keyword") String keyword,
+            @Param("kbId") String kbId);
 }

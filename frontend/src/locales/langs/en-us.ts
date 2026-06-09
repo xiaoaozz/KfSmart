@@ -165,6 +165,7 @@ const local: App.I18n.Schema = {
     'system-overview': 'System Overview',
     chat: 'Chat Assistant',
     'knowledge-base': 'Knowledge Base',
+    'document-management': 'Document Management',
     'mcp-tools': 'MCP Tools',
     'org-tag': 'Organization Tag',
     user: 'User Management',
