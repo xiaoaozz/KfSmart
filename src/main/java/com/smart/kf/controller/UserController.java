@@ -41,7 +41,7 @@ public class UserController {
                     request.password() == null || request.password().isEmpty()) {
                 LogUtils.logUserOperation("anonymous", "REGISTER", "validation", "FAILED_EMPTY_PARAMS");
                 monitor.end("注册失败：参数为空");
-                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "Username and password cannot be empty"));
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
             
             userService.registerUser(request.username(), request.password());
@@ -75,7 +75,7 @@ public class UserController {
                 try {
                     userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", "用户名或密码为空");
                 } catch (Exception ignored) {}
-                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "Username and password cannot be empty"));
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
             
             String username = userService.authenticateUser(request.username(), request.password());
@@ -85,7 +85,7 @@ public class UserController {
                 try {
                     userService.recordLogin(request.username(), null, clientIp, userAgent, "FAILED", "用户名或密码错误");
                 } catch (Exception ignored) {}
-                return ResponseEntity.status(401).body(Map.of("code", 401, "message", "Invalid credentials"));
+                return ResponseEntity.status(401).body(Map.of("code", 401, "message", "用户名或密码错误"));
             }
             
             // 记录登录成功
@@ -101,7 +101,7 @@ public class UserController {
             LogUtils.logUserOperation(username, "LOGIN", "token_generation", "SUCCESS");
             monitor.end("登录成功");
             
-            return ResponseEntity.ok(Map.of("code", 200, "message", "Login successful", "data", Map.of(
+            return ResponseEntity.ok(Map.of("code", 200, "message", "登录成功", "data", Map.of(
                 "token", token,
                 "refreshToken", refreshToken
             )));

@@ -274,11 +274,11 @@ public class UserService {
      */
     public String authenticateUser(String username, String password) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new CustomException("Invalid username or password", HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new CustomException("用户名或密码错误", HttpStatus.UNAUTHORIZED));
         // 比较输入的密码和数据库中存储的加密密码是否匹配
         if (!PasswordUtil.matches(password, user.getPassword())) {
             // 若不匹配，抛出自定义异常，状态码为 401 Unauthorized
-            throw new CustomException("Invalid username or password", HttpStatus.UNAUTHORIZED);
+            throw new CustomException("用户名或密码错误", HttpStatus.UNAUTHORIZED);
         }
         // 认证成功，返回用户的用户名
         return user.getUsername();

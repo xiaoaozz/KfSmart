@@ -106,6 +106,9 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     const { data: loginToken, error } = await fetchLogin(userName, password);
 
     if (!error) {
+      // Reset chat store to clear any stale conversation state from previous user
+      useChatStore().$reset();
+
       const pass = await loginByToken(loginToken);
 
       if (pass) {
@@ -182,6 +185,7 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     const { error } = await fetchLogout();
     if (!error) {
       resetStore();
+      useChatStore().$reset();
       useKnowledgeBaseStore().$reset();
     }
   }

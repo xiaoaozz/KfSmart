@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fetchGetApiKeyList, type ApiKeyConfig } from '@/service/api/api-key';
+import { fetchGetModelConfigs, type ApiKeyConfig } from '@/service/api/api-key';
 
 const chatStore = useChatStore();
 const { input, list, wsStatus, wsData, conversationId } = storeToRefs(chatStore);
@@ -169,7 +169,7 @@ const selectedModelLabel = computed(() => {
 });
 
 async function loadApiKeyConfigs() {
-  const { error, data } = await fetchGetApiKeyList();
+  const { error, data } = await fetchGetModelConfigs();
   if (!error && data) {
     apiKeyConfigs.value = data;
     // 默认选中激活的配置（用 null 代表"系统会自动使用激活配置"）
