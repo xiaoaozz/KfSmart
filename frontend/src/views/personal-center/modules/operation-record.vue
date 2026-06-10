@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 defineOptions({ name: 'OperationRecord' });
 
+const pageSizeOptions = [5, 10, 20, 50];
 const currentPage = ref(1);
-const pageSize = 12;
+const pageSize = ref(5);
 const filterType = ref('all');
 const searchText = ref('');
 
@@ -36,7 +37,7 @@ const allRecords = ref<OperationRecord[]>([
   { id: 12, type: 'upload', action: '批量上传', detail: '批量上传 5 份文档到「Java开发规范库」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-30 15:45:22', status: 'success' },
   { id: 13, type: 'login', action: '登录失败', detail: '密码错误，登录失败', ip: '203.0.113.42', device: 'Unknown', time: '2024-05-30 08:05:33', status: 'failed' },
   { id: 14, type: 'chat', action: '发起对话', detail: '新建对话「数据库优化建议」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-29 13:20:15', status: 'success' },
-  { id: 15, type: 'delete', action: '删除知识库', detail: '删除知识库「废弃测试库」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-28 10:15:50', status: 'success' },
+  { id: 15, type: 'delete', action: '删除知识库', detail: '删除知识库「废弃测试库」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-28 10:15:50', status: 'success' }
 ]);
 
 const typeOptions = [
@@ -46,21 +47,52 @@ const typeOptions = [
   { label: '对话操作', value: 'chat' },
   { label: '知识库', value: 'knowledge' },
   { label: '个人设置', value: 'profile' },
-  { label: '删除操作', value: 'delete' },
+  { label: '删除操作', value: 'delete' }
 ];
 
+const typeLabelMap: Record<OpType, string> = {
+  login: '登录',
+  upload: '文档',
+  chat: '对话',
+  knowledge: '知识库',
+  profile: '设置',
+  delete: '删除'
+};
+
 const filteredRecords = computed(() =>
-  allRecords.value.filter(r => {
-    const matchType = filterType.value === 'all' || r.type === filterType.value;
-    const matchSearch = !searchText.value || r.action.includes(searchText.value) || r.detail.includes(searchText.value);
+  allRecords.value.filter(record => {
+    const matchType = filterType.value === 'all' || record.type === filterType.value;
+    const keyword = searchText.value.trim();
+    const matchSearch = !keyword || record.action.includes(keyword) || record.detail.includes(keyword);
     return matchType && matchSearch;
   })
 );
 
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredRecords.value.length / pageSize.value)));
+
 const pagedRecords = computed(() => {
-  const start = (currentPage.value - 1) * pageSize;
-  return filteredRecords.value.slice(start, start + pageSize);
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredRecords.value.slice(start, start + pageSize.value);
 });
+
+watch([filterType, searchText], () => {
+  currentPage.value = 1;
+});
+
+watch([filteredRecords, pageSize], () => {
+  if (currentPage.value > pageCount.value) {
+    currentPage.value = pageCount.value;
+  }
+});
+
+function handlePageChange(page: number) {
+  currentPage.value = page;
+}
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
+}
 
 const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = {
   login: { icon: 'carbon:login', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20' },
@@ -68,14 +100,14 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
   chat: { icon: 'carbon:chat', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20' },
   knowledge: { icon: 'carbon:folder', color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/20' },
   profile: { icon: 'carbon:user', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20' },
-  delete: { icon: 'carbon:trash-can', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' },
+  delete: { icon: 'carbon:trash-can', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' }
 };
 </script>
 
 <template>
-  <div class="operation-record space-y-4">
+  <div class="operation-record space-y-3">
     <!-- 筛选栏 -->
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3">
       <NInput
         v-model:value="searchText"
         placeholder="搜索操作记录..."
@@ -95,56 +127,68 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
     </div>
 
     <!-- 记录列表 -->
-    <div class="space-y-2">
-      <div
-        v-for="record in pagedRecords"
-        :key="record.id"
-        class="flex items-start gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
-      >
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" :class="typeConfig[record.type].bg">
-          <component :is="typeConfig[record.type].icon" class="text-sm" :class="typeConfig[record.type].color" />
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2 mb-0.5">
-                <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ record.action }}</span>
-                <NTag :type="record.status === 'success' ? 'success' : 'error'" size="tiny">
-                  {{ record.status === 'success' ? '成功' : '失败' }}
-                </NTag>
-              </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ record.detail }}</p>
-            </div>
-            <span class="text-xs text-gray-400 flex-shrink-0">{{ record.time }}</span>
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div v-if="pagedRecords.length > 0" class="divide-y divide-gray-100 dark:divide-gray-700">
+        <div
+          v-for="record in pagedRecords"
+          :key="record.id"
+          class="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+        >
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" :class="typeConfig[record.type].bg">
+            <component :is="typeConfig[record.type].icon" class="text-sm" :class="typeConfig[record.type].color" />
           </div>
-          <div class="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
-            <span class="flex items-center gap-1">
-              <icon-carbon:network-4 class="text-xs" />
-              {{ record.ip }}
-            </span>
-            <span class="flex items-center gap-1">
-              <icon-carbon:screen class="text-xs" />
-              {{ record.device }}
-            </span>
+
+          <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-medium text-gray-800 dark:text-gray-100 leading-5">{{ record.action }}</span>
+                  <NTag size="tiny" :bordered="false" class="text-11px">
+                    {{ typeLabelMap[record.type] }}
+                  </NTag>
+                  <NTag :type="record.status === 'success' ? 'success' : 'error'" size="tiny" :bordered="false">
+                    {{ record.status === 'success' ? '成功' : '失败' }}
+                  </NTag>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-5 break-all">{{ record.detail }}</p>
+              </div>
+
+              <span class="text-xs text-gray-400 flex-shrink-0 leading-5 whitespace-nowrap">{{ record.time }}</span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-400">
+              <span class="inline-flex items-center gap-1 rounded-md bg-gray-50 dark:bg-gray-700/50 px-2 py-0.5">
+                <icon-carbon:network-4 class="text-xs" />
+                {{ record.ip }}
+              </span>
+              <span class="inline-flex items-center gap-1 rounded-md bg-gray-50 dark:bg-gray-700/50 px-2 py-0.5">
+                <icon-carbon:screen class="text-xs" />
+                {{ record.device }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- 空状态 -->
-      <div v-if="pagedRecords.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400">
+      <div v-else class="flex flex-col items-center justify-center py-12 text-gray-400">
         <icon-carbon:document-blank class="text-4xl mb-2 opacity-50" />
         <p class="text-sm">暂无操作记录</p>
       </div>
-    </div>
 
-    <!-- 分页 -->
-    <div v-if="filteredRecords.length > pageSize" class="flex justify-center">
-      <NPagination
-        v-model:page="currentPage"
-        :page-count="Math.ceil(filteredRecords.length / pageSize)"
-        size="small"
-        show-quick-jumper
-      />
+      <!-- 分页 -->
+      <div v-if="filteredRecords.length > 0" class="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+        <span class="text-xs text-gray-400">每页展示更少记录，避免右侧出现滚动条</span>
+        <NPagination
+          v-model:page="currentPage"
+          :page-count="pageCount"
+          :page-size="pageSize"
+          :page-sizes="pageSizeOptions"
+          show-size-picker
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+        />
+      </div>
     </div>
   </div>
 </template>
