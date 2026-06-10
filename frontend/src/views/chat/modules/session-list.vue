@@ -4,7 +4,7 @@ defineOptions({
 });
 
 const chatStore = useChatStore();
-const { sessions, sessionsLoading, conversationId, deletingSessionIds, pinningSessionIds } = storeToRefs(chatStore);
+const { sessions, sessionsLoading, conversationId, list, deletingSessionIds, pinningSessionIds } = storeToRefs(chatStore);
 const searchKeyword = ref('');
 const creating = ref(false);
 
@@ -22,23 +22,24 @@ function buildSessionSearchIndex(session: Api.Chat.Session) {
 }
 
 const filteredSessions = computed(() => {
-  const sortedSessions = [...sessions.value].sort((a, b) => {
-    if (a.isPinned !== b.isPinned) {
-      return a.isPinned ? -1 : 1;
-    }
-
-    if (a.isPinned && b.isPinned) {
-      const bPinnedAt = b.pinnedAt || '';
-      const aPinnedAt = a.pinnedAt || '';
-      if (bPinnedAt !== aPinnedAt) {
-        return bPinnedAt.localeCompare(aPinnedAt);
+  const sortedSessions = sessions.value
+    .map((session, index) => ({ session, index }))
+    .sort((a, b) => {
+      if (a.session.isPinned !== b.session.isPinned) {
+        return a.session.isPinned ? -1 : 1;
       }
-    }
 
-    const bTime = b.updatedAt || b.time || '';
-    const aTime = a.updatedAt || a.time || '';
-    return bTime.localeCompare(aTime);
-  });
+      if (a.session.isPinned && b.session.isPinned) {
+        const bPinnedAt = b.session.pinnedAt || '';
+        const aPinnedAt = a.session.pinnedAt || '';
+        if (bPinnedAt !== aPinnedAt) {
+          return bPinnedAt.localeCompare(aPinnedAt);
+        }
+      }
+
+      return a.index - b.index;
+    })
+    .map(item => item.session);
 
   const keyword = normalizeSearchText(searchKeyword.value);
   if (!keyword) return sortedSessions;
@@ -58,6 +59,15 @@ async function selectSession(id: string) {
 }
 
 async function createNewSession() {
+  const activeSession = sessions.value.find(session => session.id === conversationId.value);
+  const hasActiveEmptySession = Boolean(
+    conversationId.value && (activeSession?.messageCount ?? list.value.length) === 0 && list.value.length === 0
+  );
+  if (hasActiveEmptySession) {
+    window.$message?.warning('当前新会话暂无消息，请先发送消息后再创建新会话');
+    return;
+  }
+
   creating.value = true;
   const { error, data } = await chatStore.createSession(true);
   creating.value = false;

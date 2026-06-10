@@ -83,10 +83,15 @@ async function fetchStats() {
     }
 
     // 获取用户自己的文件列表
-    const { error: fErr, data: files } = await request<any[]>({ url: '/documents/uploads' });
-    if (!fErr && files) {
-      stats.value[1].value = formatNumber(files.length);
-      stats.value[1].change = String(files.length);
+    const { error: fErr, data: filesPage } = await request<Api.Common.PaginatingQueryRecord<any>>({
+      url: '/documents/uploads',
+      params: { size: 100 }
+    });
+    if (!fErr && filesPage) {
+      const files = filesPage.records || filesPage.content || filesPage.data || [];
+      const total = filesPage.totalElements ?? filesPage.total ?? files.length;
+      stats.value[1].value = formatNumber(total);
+      stats.value[1].change = String(total);
 
       // 今日上传
       const now = new Date();

@@ -163,6 +163,23 @@ export const request = getFlatRequest();
 // 某些接口不是分页接口，但是需要当作套用分页的页面，故需要对数据结构做转换
 export const fakePaginationRequest = getFlatRequest({
   transformBackendResponse(response) {
-    return { data: response.data.data };
+    const data = response.data.data as Record<string, any> | any[];
+    if (Array.isArray(data)) {
+      return { data };
+    }
+
+    return {
+      data: data?.records || data?.content || data?.data || [],
+      records: data?.records,
+      content: data?.content,
+      total: data?.total,
+      totalElements: data?.totalElements ?? data?.total,
+      totalPages: data?.totalPages,
+      size: data?.size,
+      page: data?.page,
+      number: data?.number ?? data?.page,
+      hasNext: data?.hasNext,
+      nextCursor: data?.nextCursor
+    };
   }
 });

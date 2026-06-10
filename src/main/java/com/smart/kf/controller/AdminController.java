@@ -9,6 +9,7 @@ import com.smart.kf.model.FileProcessingTask;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.OrganizationTag;
 import com.smart.kf.model.User;
+import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.repository.UserRepository;
@@ -18,6 +19,8 @@ import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.MinioMigrationUtil;
+import com.smart.kf.utils.pagination.PageQuery;
+import com.smart.kf.utils.pagination.PageResult;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -32,9 +35,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.lang.management.ManagementFactory;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.Comparator;
 
 /**
  * 管理员控制器，提供管理知识库、查看系统状态和监控用户活动的接口
@@ -45,6 +50,9 @@ public class AdminController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ConversationRepository conversationRepository;
 
     @Autowired
     private JwtUtils jwtUtils;
@@ -90,7 +98,11 @@ public class AdminController {
      * 获取所有用户列表
      */
     @GetMapping("/users")
-    public ResponseEntity<?> getAllUsers(@RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> getAllUsers(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_ALL_USERS");
         String adminUsername = null;
         try {
@@ -99,7 +111,9 @@ public class AdminController {
             
             LogUtils.logBusiness("ADMIN_GET_ALL_USERS", adminUsername, "管理员开始获取所有用户列表");
             
-            List<User> users = userRepository.findAll();
+            List<User> users = userRepository.findAll().stream()
+                .sorted(Comparator.comparing(User::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                .toList();
             // 移除敏感信息
             users.forEach(user -> user.setPassword(null));
             
@@ -107,7 +121,11 @@ public class AdminController {
             LogUtils.logBusiness("ADMIN_GET_ALL_USERS", adminUsername, "成功获取用户列表，用户数量: %d", users.size());
             monitor.end("获取用户列表成功");
             
-            return ResponseEntity.ok(Map.of("code", 200, "message", "Get all users successful", "data", users));
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "Get all users successful",
+                "data", PageResult.fromList(users, PageQuery.of(page, size, cursor))
+            ));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_ALL_USERS", adminUsername, "获取所有用户失败", e);
             monitor.end("获取用户列表失败: " + e.getMessage());
@@ -436,24 +454,26 @@ public class AdminController {
             adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
             validateAdmin(adminUsername);
             
+            LocalDate today = LocalDate.now();
+            LocalDateTime todayStart = today.atStartOfDay();
+            LocalDateTime tomorrowStart = today.plusDays(1).atStartOfDay();
+
             // 从数据库查询真实数据
             long totalUsers = userRepository.count();
             long totalFiles = fileUploadRepository.count();
             long totalDocuments = fileUploadRepository.count(); // 文件即文档
-            long totalConversations = 0L;
-            
-            // 统计对话数（从 Redis 中统计）
+            long totalConversations = conversationRepository.count();
+
+            // Redis 中可能包含仅保存在聊天会话缓存中的最近会话，取两边较大值兼容旧数据
             try {
                 Set<String> conversationKeys = redisTemplate.keys("conversation:*");
-                totalConversations = conversationKeys.size();
+                totalConversations = Math.max(totalConversations, conversationKeys.size());
             } catch (Exception e) {
                 LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", adminUsername, "统计对话数失败", e);
             }
             
             // 统计今日新增数据
-            java.time.LocalDateTime todayStart = java.time.LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
             long todayUploads = 0;
-            long todayConversations = 0;
             
             try {
                 // 统计今日上传的文件
@@ -467,6 +487,17 @@ public class AdminController {
             
             // 统计组织标签数量
             long totalOrgTags = organizationTagRepository.count();
+            long dbTodayQuestions = conversationRepository.findByTimestampBetween(todayStart, tomorrowStart).size();
+            long todayQuestions = Math.max(dbTodayQuestions, getRedisLong("analytics:qa:" + today));
+            long hitCount = getRedisLong("analytics:kb:" + today + ":hit");
+            long missCount = getRedisLong("analytics:kb:" + today + ":miss");
+            long searchTotal = hitCount + missCount;
+            double knowledgeHitRate = searchTotal > 0 ? hitCount * 100.0 / searchTotal : 0;
+            long responseTimeCount = getRedisLong("analytics:response_time_count:" + today);
+            long responseTimeSum = getRedisLong("analytics:response_time_sum:" + today);
+            long averageResponseTimeMs = responseTimeCount > 0 ? Math.round((double) responseTimeSum / responseTimeCount) : 0;
+            List<Map<String, Object>> usageTrends = buildUsageTrends(today);
+            List<Map<String, Object>> popularQuestions = buildPopularQuestions(today);
             
             Map<String, Object> stats = new LinkedHashMap<>();
             stats.put("totalUsers", totalUsers);
@@ -475,11 +506,16 @@ public class AdminController {
             stats.put("totalConversations", totalConversations);
             stats.put("totalOrgTags", totalOrgTags);
             stats.put("todayUploads", todayUploads);
-            stats.put("todayConversations", todayConversations);
+            stats.put("todayConversations", todayQuestions);
+            stats.put("todayQuestions", todayQuestions);
+            stats.put("knowledgeHitRate", Math.round(knowledgeHitRate * 10.0) / 10.0);
+            stats.put("averageResponseTimeMs", averageResponseTimeMs);
+            stats.put("usageTrends", usageTrends);
+            stats.put("popularQuestions", popularQuestions);
             
-            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATS", adminUsername, 
-                "获取系统统计成功: users=%d, files=%d, conversations=%d, orgTags=%d", 
-                totalUsers, totalFiles, totalConversations, totalOrgTags);
+            LogUtils.logBusiness("ADMIN_GET_SYSTEM_STATS", adminUsername,
+                "获取系统统计成功: users=%d, files=%d, conversations=%d, orgTags=%d, todayQuestions=%d",
+                totalUsers, totalFiles, totalConversations, totalOrgTags, todayQuestions);
             monitor.end("获取系统统计成功");
             
             return ResponseEntity.ok(Map.of("code", 200, "message", "获取系统统计成功", "data", stats));
@@ -716,13 +752,23 @@ public class AdminController {
      * 获取所有组织标签
      */
     @GetMapping("/org-tags")
-    public ResponseEntity<?> getAllOrganizationTags(@RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> getAllOrganizationTags(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
         String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
         validateAdmin(adminUsername);
         
         try {
-            List<OrganizationTag> tags = organizationTagRepository.findAll();
-            return ResponseEntity.ok(Map.of("code", 200, "message", "获取组织标签成功", "data", tags));
+            List<OrganizationTag> tags = organizationTagRepository.findAll().stream()
+                .sorted(Comparator.comparing(OrganizationTag::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                .toList();
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "获取组织标签成功",
+                "data", PageResult.fromList(tags, PageQuery.of(page, size, cursor))
+            ));
         } catch (Exception e) {
             LogUtils.logBusinessError("ADMIN_GET_ORG_TAGS", adminUsername, "获取组织标签失败", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -860,13 +906,14 @@ public class AdminController {
             @RequestParam(required = false) String orgTag,
             @RequestParam(required = false) Integer status,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String cursor) {
         
         String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
         validateAdmin(adminUsername);
         
         try {
-            Map<String, Object> usersData = userService.getUserList(keyword, orgTag, status, page, size);
+            Map<String, Object> usersData = userService.getUserList(keyword, orgTag, status, page, size, cursor);
             return ResponseEntity.ok(Map.of(
                 "code", 200, 
                 "message", "获取用户列表成功", 
@@ -1234,4 +1281,56 @@ public class AdminController {
 
     /** 组织标签更新请求记录类 */
     public record OrgTagUpdateRequest(String name, String description, String parentTag) {}
+
+    private long getRedisLong(String key) {
+        try {
+            String value = redisTemplate.opsForValue().get(key);
+            return value == null ? 0L : Long.parseLong(value);
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private List<Map<String, Object>> buildUsageTrends(LocalDate today) {
+        List<Map<String, Object>> trends = new ArrayList<>();
+        for (int i = 6; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime start = date.atStartOfDay();
+            LocalDateTime end = date.plusDays(1).atStartOfDay();
+            long dbQuestions = conversationRepository.findByTimestampBetween(start, end).size();
+            long redisQuestions = getRedisLong("analytics:qa:" + date);
+            long questions = Math.max(dbQuestions, redisQuestions);
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("date", date.toString());
+            item.put("label", date.getMonthValue() + "/" + date.getDayOfMonth());
+            item.put("questions", questions);
+            trends.add(item);
+        }
+        return trends;
+    }
+
+    private List<Map<String, Object>> buildPopularQuestions(LocalDate today) {
+        List<Map<String, Object>> questions = new ArrayList<>();
+        try {
+            Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> tuples =
+                redisTemplate.opsForZSet().reverseRangeWithScores("analytics:popular_questions:" + today, 0, 4);
+            if (tuples != null) {
+                int rank = 1;
+                for (org.springframework.data.redis.core.ZSetOperations.TypedTuple<String> tuple : tuples) {
+                    if (tuple.getValue() == null) {
+                        continue;
+                    }
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("rank", rank++);
+                    item.put("question", tuple.getValue());
+                    item.put("count", tuple.getScore() == null ? 0 : tuple.getScore().longValue());
+                    questions.add(item);
+                }
+            }
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", "system", "统计热门问题失败", e);
+        }
+        return questions;
+    }
 }

@@ -19,16 +19,22 @@ interface ApiKeyItem {
   updatedAt: string;
 }
 
-const appStore = useAppStore();
 const loading = ref(false);
 const data = ref<ApiKeyItem[]>([]);
 const dialogVisible = ref(false);
 const operateType = ref<'add' | 'edit'>('add');
 const editingData = ref<ApiKeyItem | null>(null);
 const activatingId = ref<number | null>(null);
+const pageSizeOptions = [10, 50, 100];
+const currentPage = ref(1);
+const pageSize = ref(10);
+const pagedData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return data.value.slice(start, start + pageSize.value);
+});
 
 /** 提供商标签颜色映射 */
-const providerTagType: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'default'> = {
+const providerTagType: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'error' | 'default'> = {
   deepseek: 'primary',
   openai: 'success',
   qwen: 'info',
@@ -68,6 +74,10 @@ async function getData() {
   });
   if (!error && res) {
     data.value = res;
+    const maxPage = Math.max(1, Math.ceil(res.length / pageSize.value));
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage;
+    }
   }
   loading.value = false;
 }
@@ -100,6 +110,11 @@ function handleEdit(row: ApiKeyItem) {
   operateType.value = 'edit';
   editingData.value = { ...row };
   dialogVisible.value = true;
+}
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
 }
 
 const columns = computed(() => [
@@ -258,45 +273,59 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-500px flex-col-stretch overflow-hidden lt-sm:overflow-auto">
-    <!-- 配置列表 -->
-    <NCard title="API Key 配置列表" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
-      <template #header-extra>
-        <NSpace>
-          <NButton type="primary" size="small" @click="handleAdd">
-            <template #icon>
-              <icon-carbon:add class="text-base" />
-            </template>
-            新增配置
-          </NButton>
-          <NButton size="small" :loading="loading" @click="getData">
-            <template #icon>
-              <icon-carbon:renew class="text-base" />
-            </template>
-            刷新
-          </NButton>
-        </NSpace>
-      </template>
+  <div class="api-key-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
+    <div class="px-8 py-6 flex-1 min-h-0">
+      <!-- 标题 -->
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">API Key 配置列表</h1>
+
       <!-- 说明 Alert -->
-      <NAlert type="info" :show-icon="true" class="mb-12px">
+      <NAlert type="info" :show-icon="true" class="mb-4">
         <template #header>API Key 管理说明</template>
         管理平台问答模型的 API Key 配置。每次只能有一个配置处于
         <NTag type="success" size="small" round>激活中</NTag>
         状态，激活的配置将被聊天助手用于生成回答。修改激活配置后立即生效。
       </NAlert>
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        size="small"
-        :flex-height="!appStore.isMobile"
-        :scroll-x="1460"
-        :loading="loading"
-        :pagination="false"
-        :row-key="(row: ApiKeyItem) => row.id"
-        :row-class-name="(row: ApiKeyItem) => (row.active ? 'bg-green-50 dark:bg-green-900/20' : '')"
-        class="sm:h-full"
-      />
-    </NCard>
+
+      <!-- 工具栏 -->
+      <div class="flex items-center justify-end gap-3 mb-4">
+        <NButton :loading="loading" @click="getData">
+          <template #icon>
+            <icon-carbon:renew />
+          </template>
+          刷新
+        </NButton>
+        <NButton type="primary" @click="handleAdd">
+          <template #icon>
+            <icon-carbon:add />
+          </template>
+          新增配置
+        </NButton>
+      </div>
+
+      <!-- 表格 -->
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <NDataTable
+          :columns="columns"
+          :data="pagedData"
+          size="small"
+          :scroll-x="1460"
+          :loading="loading"
+          :pagination="false"
+          :row-key="(row: ApiKeyItem) => row.id"
+          :row-class-name="(row: ApiKeyItem) => (row.active ? 'bg-green-50 dark:bg-green-900/20' : '')"
+        />
+        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <NPagination
+            v-model:page="currentPage"
+            :page-count="Math.max(1, Math.ceil(data.length / pageSize))"
+            :page-size="pageSize"
+            :page-sizes="pageSizeOptions"
+            show-size-picker
+            @update:page-size="handlePageSizeChange"
+          />
+        </div>
+      </div>
+    </div>
 
     <ApiKeyOperateDialog
       v-model:visible="dialogVisible"

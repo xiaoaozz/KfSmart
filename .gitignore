@@ -1,9 +1,6 @@
 # Compiled class file
 *.class
 
-# Log file
-*.log
-
 # BlueJ files
 *.ctxt
 
@@ -23,15 +20,11 @@
 hs_err_pid*
 replay_pid*
 
-.DS_Store
 .vite-ssg-dist
 .vite-ssg-temp
-*.local
-dist
 dist-ssr
 node_modules
 .idea/
-*.log
 /target
 /.idea
 /.vscode
@@ -45,10 +38,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+.pnpm-store/
 .DS_Store
 dist
-dist-ssr
 coverage
 *.local
 

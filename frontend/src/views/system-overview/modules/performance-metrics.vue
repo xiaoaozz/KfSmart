@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { EChartsOption } from 'echarts';
-import { fetchGetSystemStats, fetchGetSystemStatus } from '@/service/api/system';
+import { fetchGetSystemStatus } from '@/service/api/system';
 
 defineOptions({
   name: 'PerformanceMetrics'
@@ -159,8 +159,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="performance-metrics">
-    <NCard>
+  <div class="performance-metrics h-full">
+    <NCard class="h-full">
       <template #header>
         <div class="flex items-center justify-between">
           <div>
@@ -180,35 +180,37 @@ onMounted(() => {
       </template>
 
       <NSpin :show="loading">
-        <!-- 指标卡片 -->
-        <div class="grid grid-cols-4 gap-4 mb-6">
-          <div
-            v-for="item in performanceData"
-            :key="item.metric"
-            class="metric-card rounded-xl p-4 border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all hover:shadow-md"
-          >
-            <div class="flex items-start justify-between mb-3">
-              <div :class="['w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', getColorClasses(item.color).bg]">
-                <icon-carbon:meter v-if="item.icon === 'meter'" :class="['text-xl', getColorClasses(item.color).icon]" />
-                <icon-carbon:data-base v-else-if="item.icon === 'data-base'" :class="['text-xl', getColorClasses(item.color).icon]" />
-                <icon-carbon:document v-else-if="item.icon === 'document'" :class="['text-xl', getColorClasses(item.color).icon]" />
-                <icon-carbon:user-multiple v-else-if="item.icon === 'user-multiple'" :class="['text-xl', getColorClasses(item.color).icon]" />
+        <div class="flex h-[560px] flex-col">
+          <!-- 指标卡片 -->
+          <div class="grid grid-cols-2 gap-4">
+            <div
+              v-for="item in performanceData"
+              :key="item.metric"
+              class="metric-card rounded-xl p-4 border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all hover:shadow-md"
+            >
+              <div class="flex items-start justify-between mb-3">
+                <div :class="['w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', getColorClasses(item.color).bg]">
+                  <icon-carbon:meter v-if="item.icon === 'meter'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                  <icon-carbon:data-base v-else-if="item.icon === 'data-base'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                  <icon-carbon:document v-else-if="item.icon === 'document'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                  <icon-carbon:user-multiple v-else-if="item.icon === 'user-multiple'" :class="['text-xl', getColorClasses(item.color).icon]" />
+                </div>
+                <div :class="['inline-flex px-2 py-1 rounded-full text-xs', getStatusColor(item.status)]">
+                  {{ item.status === 'good' ? '正常' : item.status === 'normal' ? '一般' : '警告' }}
+                </div>
               </div>
-              <div :class="['inline-flex px-2 py-1 rounded-full text-xs', getStatusColor(item.status)]">
-                {{ item.status === 'good' ? '正常' : item.status === 'normal' ? '一般' : '警告' }}
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ item.metric }}</div>
+              <div class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ item.value }}</div>
+              <div class="text-xs text-gray-400 dark:text-gray-500 line-clamp-1">
+                目标：{{ item.target }} | {{ item.description }}
               </div>
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ item.metric }}</div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white mb-2">{{ item.value }}</div>
-            <div class="text-xs text-gray-400 dark:text-gray-500">
-              目标：{{ item.target }} | {{ item.description }}
             </div>
           </div>
-        </div>
 
-        <!-- 资源占用雷达图 -->
-        <div class="chart-container">
-          <VChart :option="chartOptions" autoresize />
+          <!-- 资源占用雷达图 -->
+          <div class="chart-container mt-4 min-h-0 flex-1">
+            <VChart :option="chartOptions" autoresize />
+          </div>
         </div>
       </NSpin>
     </NCard>
@@ -218,8 +220,15 @@ onMounted(() => {
 <style scoped lang="scss">
 .performance-metrics {
   .chart-container {
-    height: 380px;
     width: 100%;
+  }
+
+  :deep(.n-card) {
+    height: 100%;
+  }
+
+  :deep(.n-card__content) {
+    height: calc(100% - 73px);
   }
 
   .metric-card {

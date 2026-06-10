@@ -18,6 +18,7 @@ import org.springframework.web.socket.WebSocketSession;
 import reactor.core.Disposable;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -58,6 +59,7 @@ public class ChatHandler {
     private final ModelClient modelClient;
     private final ElasticsearchService elasticsearchService;
     private final ApiKeyConfigService apiKeyConfigService;
+    private final ConversationService conversationService;
     private final ObjectMapper objectMapper;
 
     // 用于存储每个会话的完整响应
@@ -79,12 +81,14 @@ public class ChatHandler {
                       HybridSearchService searchService,
                       ModelClient modelClient,
                       ElasticsearchService elasticsearchService,
-                      ApiKeyConfigService apiKeyConfigService) {
+                      ApiKeyConfigService apiKeyConfigService,
+                      ConversationService conversationService) {
         this.redisTemplate = redisTemplate;
         this.searchService = searchService;
         this.modelClient = modelClient;
         this.elasticsearchService = elasticsearchService;
         this.apiKeyConfigService = apiKeyConfigService;
+        this.conversationService = conversationService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -100,6 +104,7 @@ public class ChatHandler {
     public void processMessage(String userId, String userMessage, String requestedConversationId,
                                Long apiKeyConfigId, WebSocketSession session) {
         String sessionId = session.getId();
+        long requestStartNanos = System.nanoTime();
         logger.info("开始处理消息，用户ID: {}, WebSocket会话ID: {}, 目标会话ID: {}, apiKeyConfigId: {}",
                 userId, sessionId, requestedConversationId, apiKeyConfigId);
         try {
@@ -133,6 +138,7 @@ public class ChatHandler {
                     .limit(3)
                     .collect(java.util.stream.Collectors.toList());
             logger.info("[流程] 搜索完成，原始结果数={}，取最高分3条", rawResults.size());
+            recordQuestionAnalytics(userMessage, !searchResults.isEmpty());
 
             // 3.5 通过 WebSocket 将检索结果推送到前端（在 AI 流式调用之前同步发送）
             sendSearchResults(session, searchResults);
@@ -171,9 +177,9 @@ public class ChatHandler {
                 },
                 error -> {
                     logger.error("流式响应出错，会话ID: {}", sessionId, error);
-                    handleStreamError(session, responseFuture, error, conversationId, userId, userMessage);
+                    handleStreamError(session, responseFuture, error, conversationId, userId, userMessage, requestStartNanos);
                 },
-                () -> finalizeStreamResponse(session, responseFuture, conversationId, userId, userMessage));
+                () -> finalizeStreamResponse(session, responseFuture, conversationId, userId, userMessage, requestStartNanos));
             streamSubscriptions.put(sessionId, streamSubscription);
 
         } catch (Exception e) {
@@ -183,6 +189,7 @@ public class ChatHandler {
             sessionErrorSent.remove(sessionId);
             cancelStreamSubscription(sessionId);
             responseBuilders.remove(sessionId);
+            recordResponseTime(requestStartNanos);
             CompletableFuture<String> future = responseFutures.remove(sessionId);
             if (future != null && !future.isDone()) {
                 future.completeExceptionally(e);
@@ -315,12 +322,16 @@ public class ChatHandler {
             sessions.add(normalizeSessionMeta(conversationId, sessionMeta));
         }
 
-        sessions.sort((a, b) -> String.valueOf(b.getOrDefault("updatedAt", b.getOrDefault("time", "")))
-                .compareTo(String.valueOf(a.getOrDefault("updatedAt", a.getOrDefault("time", "")))));
+        sessions.sort((a, b) -> compareSessionMeta(a, b, currentConversationId));
         return sessions;
     }
 
     public Map<String, Object> createConversationSession(String userId) {
+        String currentConversationId = getCurrentConversationId(userId);
+        if (hasText(currentConversationId) && isConversationEmpty(currentConversationId)) {
+            throw new CustomException("当前新会话暂无消息，请先发送消息后再创建新会话", HttpStatus.BAD_REQUEST);
+        }
+
         String conversationId = createConversationInternal(userId);
         return normalizeSessionMeta(conversationId, getConversationMeta(conversationId));
     }
@@ -545,6 +556,49 @@ public class ChatHandler {
         normalized.put("isPinned", toBooleanValue(meta.get("isPinned")));
         normalized.put("pinnedAt", toStringValue(meta.get("pinnedAt"), ""));
         return normalized;
+    }
+
+    private int compareSessionMeta(Map<String, Object> a, Map<String, Object> b, String currentConversationId) {
+        String aId = String.valueOf(a.getOrDefault("id", ""));
+        String bId = String.valueOf(b.getOrDefault("id", ""));
+        boolean aCurrent = hasText(currentConversationId) && currentConversationId.equals(aId);
+        boolean bCurrent = hasText(currentConversationId) && currentConversationId.equals(bId);
+        if (aCurrent != bCurrent) {
+            return aCurrent ? -1 : 1;
+        }
+
+        boolean aPinned = toBooleanValue(a.get("isPinned"));
+        boolean bPinned = toBooleanValue(b.get("isPinned"));
+        if (aPinned != bPinned) {
+            return aPinned ? -1 : 1;
+        }
+
+        if (aPinned) {
+            int pinnedCompare = toStringValue(b.get("pinnedAt"), "").compareTo(toStringValue(a.get("pinnedAt"), ""));
+            if (pinnedCompare != 0) {
+                return pinnedCompare;
+            }
+        }
+
+        String bUpdatedAt = toStringValue(b.get("updatedAt"), toStringValue(b.get("time"), ""));
+        String aUpdatedAt = toStringValue(a.get("updatedAt"), toStringValue(a.get("time"), ""));
+        int updatedCompare = bUpdatedAt.compareTo(aUpdatedAt);
+        if (updatedCompare != 0) {
+            return updatedCompare;
+        }
+
+        String bCreatedAt = toStringValue(b.get("createdAt"), "");
+        String aCreatedAt = toStringValue(a.get("createdAt"), "");
+        return bCreatedAt.compareTo(aCreatedAt);
+    }
+
+    private boolean isConversationEmpty(String conversationId) {
+        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
+        if (!sessionMeta.isEmpty() && toIntValue(sessionMeta.get("messageCount")) > 0) {
+            return false;
+        }
+
+        return getConversationHistory(conversationId).isEmpty();
     }
 
     private List<Map<String, String>> getConversationHistory(String conversationId) {
@@ -837,16 +891,11 @@ public class ChatHandler {
 
     private void handleStreamError(WebSocketSession session,
                                    CompletableFuture<String> responseFuture,
-                                   Throwable error) {
-        handleStreamError(session, responseFuture, error, null, null, null);
-    }
-
-    private void handleStreamError(WebSocketSession session,
-                                   CompletableFuture<String> responseFuture,
                                    Throwable error,
                                    String conversationId,
                                    String userId,
-                                   String userMessage) {
+                                   String userMessage,
+                                   long requestStartNanos) {
         String sessionId = session.getId();
         StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
         if (terminalState == StreamTerminalState.STOPPED) {
@@ -877,6 +926,7 @@ public class ChatHandler {
         responseBuilders.remove(sessionId);
         streamTerminalStates.remove(sessionId);
         sessionErrorSent.remove(sessionId);
+        recordResponseTime(requestStartNanos);
         logger.warn("流式响应异常结束，会话ID: {}", sessionId, error);
     }
 
@@ -884,7 +934,8 @@ public class ChatHandler {
                                         CompletableFuture<String> responseFuture,
                                         String conversationId,
                                         String userId,
-                                        String userMessage) {
+                                        String userMessage,
+                                        long requestStartNanos) {
         String sessionId = session.getId();
         StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
         if (terminalState == StreamTerminalState.STOPPED) {
@@ -905,12 +956,45 @@ public class ChatHandler {
         sendCompletionNotification(session, "finished", "响应已完成");
         updateConversationHistory(conversationId, userId, userMessage, completeResponse);
 
+        // 将对话记录持久化到 MySQL，供个人使用统计查询
+        try {
+            conversationService.recordConversation(userId, userMessage, completeResponse);
+            logger.debug("对话已写入数据库，用户ID: {}，会话ID: {}", userId, conversationId);
+        } catch (Exception e) {
+            logger.warn("对话写入数据库失败（不影响主流程），用户ID: {}，原因: {}", userId, e.getMessage());
+        }
+
         String redisKey = userCurrentConversationKey(userId);
         logger.info("对话存储信息 - Redis键: {}, 值: {}", redisKey, conversationId);
 
         streamTerminalStates.remove(sessionId);
         sessionErrorSent.remove(sessionId);
+        recordResponseTime(requestStartNanos);
         logger.info("消息处理完成，用户ID: {}，会话ID: {}", userId, sessionId);
+    }
+
+    private void recordQuestionAnalytics(String question, boolean kbHit) {
+        try {
+            String day = LocalDate.now().toString();
+            redisTemplate.opsForValue().increment("analytics:qa:" + day);
+            redisTemplate.opsForValue().increment("analytics:kb:" + day + ":" + (kbHit ? "hit" : "miss"));
+            if (hasText(question)) {
+                redisTemplate.opsForZSet().incrementScore("analytics:popular_questions:" + day, question.trim(), 1);
+            }
+        } catch (Exception e) {
+            logger.warn("记录问答分析指标失败: {}", e.getMessage());
+        }
+    }
+
+    private void recordResponseTime(long requestStartNanos) {
+        try {
+            long elapsedMs = Math.max(0, (System.nanoTime() - requestStartNanos) / 1_000_000);
+            String day = LocalDate.now().toString();
+            redisTemplate.opsForValue().increment("analytics:response_time_sum:" + day, elapsedMs);
+            redisTemplate.opsForValue().increment("analytics:response_time_count:" + day);
+        } catch (Exception e) {
+            logger.warn("记录响应时间指标失败: {}", e.getMessage());
+        }
     }
 
     /**

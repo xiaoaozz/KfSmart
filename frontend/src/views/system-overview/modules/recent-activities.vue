@@ -1,32 +1,70 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import { request } from '@/service/request';
-import { fetchGetSystemStats } from '@/service/api/system';
 
 defineOptions({
   name: 'RecentActivities'
 });
 
+type ActivityType = 'all' | 'knowledge' | 'document' | 'user';
+
 interface Activity {
-  id: number;
-  type: string;
+  id: string;
+  type: Exclude<ActivityType, 'all'>;
   icon: string;
   title: string;
   description: string;
   time: string;
+  timestamp: number;
   color: string;
 }
 
 const activities = ref<Activity[]>([]);
 const loading = ref(false);
+const activeType = ref<ActivityType>('all');
+const currentPage = ref(1);
+const pageSize = 5;
 const activityStats = ref({
   todayActivities: 0,
   weekActivities: 0,
-  activeUsers: 0,
-  systemEvents: 0
+  knowledgeUpdates: 0,
+  documentUpdates: 0
 });
 
-const activityColors = ['blue', 'green', 'purple', 'cyan', 'orange', 'pink'];
+const typeOptions = [
+  { label: '全部', value: 'all' },
+  { label: '知识库', value: 'knowledge' },
+  { label: '文档', value: 'document' },
+  { label: '用户', value: 'user' }
+];
+
+const filteredActivities = computed(() =>
+  activeType.value === 'all' ? activities.value : activities.value.filter(item => item.type === activeType.value)
+);
+
+const visibleActivities = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return filteredActivities.value.slice(start, start + pageSize);
+});
+
+function getTimeValue(dateStr?: string): number {
+  if (!dateStr) return 0;
+  const value = new Date(dateStr).getTime();
+  return Number.isNaN(value) ? 0 : value;
+}
+
+function isSameTime(left?: string, right?: string): boolean {
+  const leftTime = getTimeValue(left);
+  const rightTime = getTimeValue(right);
+  if (!leftTime || !rightTime) return false;
+  return Math.abs(leftTime - rightTime) < 60 * 1000;
+}
+
+function isSameDay(timestamp: number, date: Date): boolean {
+  if (!timestamp) return false;
+  return new Date(timestamp).toDateString() === date.toDateString();
+}
 
 function formatTime(dateStr: string): string {
   if (!dateStr) return '--';
@@ -47,90 +85,109 @@ function formatTime(dateStr: string): string {
   }
 }
 
-/** 从后端获取最新文件上传记录作为活动 */
+function pushActivity(items: Activity[], activity: Activity) {
+  if (!activity.timestamp) return;
+  items.push(activity);
+}
+
+/** 聚合知识库创建/更新、文档上传/更新和用户加入记录 */
 async function fetchActivities() {
   loading.value = true;
   try {
-    // 获取文件上传列表作为活动记录
-    const { error: filesErr, data: files } = await request<any[]>({ url: '/documents/uploads' });
-    
+    const [filesRes, kbRes] = await Promise.all([
+      request<Api.Common.PaginatingQueryRecord<any>>({ url: '/documents/uploads', params: { sort: 'updatedAt', size: 100 } }),
+      fetchGetKnowledgeBases({ size: 100 })
+    ]);
+
     const items: Activity[] = [];
-    let colorIndex = 0;
-    
-    if (!filesErr && files && files.length > 0) {
-      // 取最近 6 条上传作为活动
-      const sortedFiles = [...files].sort((a, b) => {
-        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return tB - tA;
+    const files = !filesRes.error && filesRes.data ? filesRes.data.records || filesRes.data.content || filesRes.data.data || [] : [];
+    const knowledgeBases = !kbRes.error && kbRes.data ? kbRes.data.records || kbRes.data.content || kbRes.data.data || [] : [];
+
+    knowledgeBases.forEach((kb: Api.KnowledgeBase.KnowledgeBaseInfo) => {
+      pushActivity(items, {
+        id: `kb-create-${kb.kbId}`,
+        type: 'knowledge',
+        icon: 'data-base',
+        title: '创建知识库',
+        description: `知识库「${kb.name || '未命名'}」已创建`,
+        time: formatTime(kb.createdAt),
+        timestamp: getTimeValue(kb.createdAt),
+        color: 'green'
       });
 
-      sortedFiles.slice(0, 6).forEach((file, idx) => {
-        const tagName = file.orgTagName || '未知组织';
-        items.push({
-          id: 200 + idx,
-          type: 'document',
-          icon: 'document-add',
-          title: '上传文档',
-          description: `文件「${file.fileName || '未知'}」上传到「${tagName}」`,
-          time: formatTime(file.createdAt),
-          color: activityColors[colorIndex % activityColors.length]
+      if (!isSameTime(kb.createdAt, kb.updatedAt)) {
+        pushActivity(items, {
+          id: `kb-update-${kb.kbId}`,
+          type: 'knowledge',
+          icon: 'settings-adjust',
+          title: '更新知识库',
+          description: `知识库「${kb.name || '未命名'}」信息已更新`,
+          time: formatTime(kb.updatedAt),
+          timestamp: getTimeValue(kb.updatedAt),
+          color: 'cyan'
         });
-        colorIndex++;
+      }
+    });
+
+    files.forEach((file: any) => {
+      const targetName = file.kbName || file.orgTagName || file.kbId || '未归类';
+      pushActivity(items, {
+        id: `doc-create-${file.fileMd5 || file.fileName}`,
+        type: 'document',
+        icon: 'document-add',
+        title: '上传文档',
+        description: `文件「${file.fileName || '未知'}」上传到「${targetName}」`,
+        time: formatTime(file.createdAt),
+        timestamp: getTimeValue(file.createdAt),
+        color: 'blue'
       });
-    }
 
-    // 如果文件不足 6 条，补充用户活动
-    if (items.length < 6) {
-      try {
-        const { error: userErr, data: users } = await request<any[]>({ url: '/admin/users' });
-        if (!userErr && users && users.length > 0) {
-          const recentUsers = users.slice(-3);
-          recentUsers.forEach((user: any, idx: number) => {
-            items.push({
-              id: 300 + idx,
-              type: 'user',
-              icon: 'user-follow',
-              title: '用户注册',
-              description: `用户「${user.username || '未知'}」已加入系统`,
-              time: formatTime(user.createdAt),
-              color: activityColors[colorIndex % activityColors.length]
-            });
-            colorIndex++;
-          });
-        }
-      } catch (e) {
-        // 非管理员可能无法访问
+      if (file.mergedAt && !isSameTime(file.createdAt, file.mergedAt)) {
+        pushActivity(items, {
+          id: `doc-update-${file.fileMd5 || file.fileName}`,
+          type: 'document',
+          icon: 'document-tasks',
+          title: '更新文档',
+          description: `文件「${file.fileName || '未知'}」已完成处理并更新索引`,
+          time: formatTime(file.mergedAt),
+          timestamp: getTimeValue(file.mergedAt),
+          color: 'purple'
+        });
       }
-    }
+    });
 
-    activities.value = items.sort((a, b) => a.id - b.id).slice(0, 6);
-    
-    // 计算活动统计
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
-    if (files && files.length > 0) {
-      activityStats.value.todayActivities = files.filter((f: any) => {
-        if (!f.createdAt) return false;
-        return new Date(f.createdAt).toDateString() === now.toDateString();
-      }).length;
-      
-      activityStats.value.weekActivities = files.filter((f: any) => {
-        if (!f.createdAt) return false;
-        return new Date(f.createdAt) >= weekAgo;
-      }).length;
-    }
-
-    // 获取系统统计数据
     try {
-      const { error: sErr, data: sData } = await fetchGetSystemStats();
-      if (!sErr && sData) {
-        activityStats.value.activeUsers = sData.totalUsers || 0;
-        activityStats.value.systemEvents = sData.totalFiles || 0;
+      const { error: userErr, data: users } = await request<any[]>({ url: '/admin/users' });
+      if (!userErr && users && users.length > 0) {
+        users.slice(-5).forEach((user: any) => {
+          pushActivity(items, {
+            id: `user-${user.id || user.username}`,
+            type: 'user',
+            icon: 'user-follow',
+            title: '用户加入',
+            description: `用户「${user.username || '未知'}」已加入系统`,
+            time: formatTime(user.createdAt),
+            timestamp: getTimeValue(user.createdAt),
+            color: 'orange'
+          });
+        });
       }
-    } catch { /* ignore */ }
-    
+    } catch {
+      // 非管理员可能无法访问用户列表，不影响知识库和文档活动。
+    }
+
+    activities.value = items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 40);
+
+    const now = new Date();
+    const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    activityStats.value.todayActivities = activities.value.filter(item => isSameDay(item.timestamp, now)).length;
+    activityStats.value.weekActivities = activities.value.filter(item => item.timestamp >= weekAgo).length;
+    activityStats.value.knowledgeUpdates = activities.value.filter(
+      item => item.type === 'knowledge' && item.title.includes('更新')
+    ).length;
+    activityStats.value.documentUpdates = activities.value.filter(
+      item => item.type === 'document' && item.title.includes('更新')
+    ).length;
   } catch (e) {
     console.error('[RecentActivities] 获取活动数据失败:', e);
   } finally {
@@ -140,6 +197,17 @@ async function fetchActivities() {
 
 onMounted(() => {
   fetchActivities();
+});
+
+watch(activeType, () => {
+  currentPage.value = 1;
+});
+
+watch(filteredActivities, list => {
+  const maxPage = Math.max(1, Math.ceil(list.length / pageSize));
+  if (currentPage.value > maxPage) {
+    currentPage.value = maxPage;
+  }
 });
 
 const getColorClasses = (color: string) => {
@@ -159,80 +227,125 @@ const getColorClasses = (color: string) => {
   <div class="recent-activities">
     <NCard>
       <template #header>
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">最近活动</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">文档上传与用户活动实时追踪</p>
+            <h2 class="text-lg text-gray-900 font-semibold dark:text-white">最近活动</h2>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">知识库、文档与用户活动实时追踪</p>
           </div>
-          <NButton text @click="fetchActivities">
-            <template #icon>
-              <icon-carbon:renew class="text-lg" />
-            </template>
-            刷新
-          </NButton>
+          <div class="flex items-center gap-3">
+            <NRadioGroup v-model:value="activeType" size="small">
+              <NRadioButton v-for="option in typeOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </NRadioButton>
+            </NRadioGroup>
+            <NButton text @click="fetchActivities">
+              <template #icon>
+                <icon-carbon:renew class="text-lg" />
+              </template>
+              刷新
+            </NButton>
+          </div>
         </div>
       </template>
 
       <NSpin :show="loading">
-        <div v-if="activities.length === 0" class="flex flex-col items-center justify-center py-12 text-gray-400">
-          <icon-carbon:document-blank class="text-4xl mb-3" />
-          <p class="text-sm">暂无活动记录</p>
-          <p class="text-xs mt-1">上传文档后将在此显示</p>
-        </div>
-
-        <div v-else class="activities-list space-y-1">
+        <div class="activity-panel h-[410px] flex flex-col">
           <div
-            v-for="activity in activities"
-            :key="activity.id"
-            class="activity-item flex items-start gap-4 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            v-if="visibleActivities.length === 0"
+            class="min-h-0 flex flex-col flex-1 items-center justify-center text-gray-400"
           >
-            <div :class="[
-              'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-              getColorClasses(activity.color).bg
-            ]">
-              <icon-carbon:chat v-if="activity.icon === 'chat'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-              <icon-carbon:document-add v-else-if="activity.icon === 'document-add'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-              <icon-carbon:user-follow v-else-if="activity.icon === 'user-follow'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-              <icon-carbon:data-base v-else-if="activity.icon === 'data-base'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-              <icon-carbon:settings-adjust v-else-if="activity.icon === 'settings-adjust'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-              <icon-carbon:thumbs-up v-else-if="activity.icon === 'thumbs-up'" :class="['text-lg', getColorClasses(activity.color).icon]" />
-            </div>
+            <icon-carbon:document-blank class="mb-3 text-4xl" />
+            <p class="text-sm">暂无活动记录</p>
+            <p class="mt-1 text-xs">创建知识库或上传文档后将在此显示</p>
+          </div>
 
-            <div class="flex-1 min-w-0">
-              <div class="flex items-start justify-between gap-2 mb-1">
-                <h4 class="text-sm font-medium text-gray-900 dark:text-white">
-                  {{ activity.title }}
-                </h4>
-                <span class="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                  {{ activity.time }}
-                </span>
+          <div v-else class="activities-list min-h-0 flex-1 overflow-hidden space-y-1">
+            <div
+              v-for="activity in visibleActivities"
+              :key="activity.id"
+              class="activity-item flex cursor-pointer items-start gap-4 rounded-lg p-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
+              <div
+                class="h-10 w-10 flex flex-shrink-0 items-center justify-center rounded-lg"
+                :class="[getColorClasses(activity.color).bg]"
+              >
+                <icon-carbon:document-add
+                  v-if="activity.icon === 'document-add'"
+                  class="text-lg"
+                  :class="[getColorClasses(activity.color).icon]"
+                />
+                <icon-carbon:document-tasks
+                  v-else-if="activity.icon === 'document-tasks'"
+                  class="text-lg"
+                  :class="[getColorClasses(activity.color).icon]"
+                />
+                <icon-carbon:user-follow
+                  v-else-if="activity.icon === 'user-follow'"
+                  class="text-lg"
+                  :class="[getColorClasses(activity.color).icon]"
+                />
+                <icon-carbon:data-base
+                  v-else-if="activity.icon === 'data-base'"
+                  class="text-lg"
+                  :class="[getColorClasses(activity.color).icon]"
+                />
+                <icon-carbon:settings-adjust
+                  v-else-if="activity.icon === 'settings-adjust'"
+                  class="text-lg"
+                  :class="[getColorClasses(activity.color).icon]"
+                />
               </div>
-              <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
-                {{ activity.description }}
-              </p>
+
+              <div class="min-w-0 flex-1">
+                <div class="mb-1 flex items-start justify-between gap-2">
+                  <div class="min-w-0 flex items-center gap-2">
+                    <h4 class="truncate text-sm text-gray-900 font-medium dark:text-white">
+                      {{ activity.title }}
+                    </h4>
+                    <NTag size="small" :bordered="false">
+                      {{ activity.type === 'knowledge' ? '知识库' : activity.type === 'document' ? '文档' : '用户' }}
+                    </NTag>
+                  </div>
+                  <span class="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
+                    {{ activity.time }}
+                  </span>
+                </div>
+                <p class="line-clamp-1 text-sm text-gray-600 dark:text-gray-400">
+                  {{ activity.description }}
+                </p>
+              </div>
             </div>
+          </div>
+
+          <div class="mt-3 h-9 flex justify-end border-t border-gray-100 pt-3 dark:border-gray-700">
+            <NPagination
+              v-model:page="currentPage"
+              :item-count="filteredActivities.length"
+              :page-size="pageSize"
+              :disabled="filteredActivities.length === 0"
+              size="small"
+            />
           </div>
         </div>
       </NSpin>
 
-      <!-- 活动统计 -->
-      <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div class="grid grid-cols-4 gap-4">
+      <div class="mt-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
           <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activityStats.todayActivities }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">今日上传</div>
+            <div class="text-2xl text-gray-900 font-bold dark:text-white">{{ activityStats.todayActivities }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">今日活动</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activityStats.weekActivities }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">本周上传</div>
+            <div class="text-2xl text-gray-900 font-bold dark:text-white">{{ activityStats.weekActivities }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">本周活动</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activityStats.activeUsers }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">总用户数</div>
+            <div class="text-2xl text-gray-900 font-bold dark:text-white">{{ activityStats.knowledgeUpdates }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">知识库更新</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ activityStats.systemEvents }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">总文件数</div>
+            <div class="text-2xl text-gray-900 font-bold dark:text-white">{{ activityStats.documentUpdates }}</div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">文档更新</div>
           </div>
         </div>
       </div>
@@ -244,7 +357,7 @@ const getColorClasses = (color: string) => {
 .recent-activities {
   .activity-item {
     transition: all 0.2s ease;
-    
+
     &:hover {
       transform: translateX(4px);
     }

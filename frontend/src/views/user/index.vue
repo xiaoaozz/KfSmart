@@ -1,15 +1,14 @@
 <script setup lang="tsx">
-import { NButton, NTag } from 'naive-ui';
-import UserSearch from './modules/user-search.vue';
+import { NButton, NInput, NPagination, NSelect, NTag } from 'naive-ui';
 import OrgTagSettingDialog from './modules/org-tag-setting-dialog.vue';
-
-const appStore = useAppStore();
+import { enableStatusOptions } from '@/constants/common';
+import debounce from 'lodash-es/debounce';
 
 function apiFn(params: Api.User.SearchParams) {
   return request<Api.User.List>({ url: '/admin/users/list', params });
 }
 
-const { columns, columnChecks, data, getData, loading, mobilePagination, searchParams, resetSearchParams } = useTable({
+const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagination, searchParams } = useTable({
   apiFn,
   apiParams: {
     keyword: null,
@@ -76,6 +75,8 @@ const { columns, columnChecks, data, getData, loading, mobilePagination, searchP
   ]
 });
 
+const debouncedSearch = debounce(() => getDataByPage(), 300);
+
 const visible = ref(false);
 const editingData = ref<Api.User.Item | null>(null);
 function handleOrgTag(row: Api.User.Item) {
@@ -95,25 +96,72 @@ function handleOrgTag(row: Api.User.Item) {
 </script>
 
 <template>
-  <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <UserSearch v-model:model="searchParams" @reset="resetSearchParams" @search="getData" />
-    <NCard title="用户列表" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
-      <template #header-extra>
-        <TableHeaderOperation v-model:columns="columnChecks" :addable="false" :loading="loading" @refresh="getData" />
-      </template>
-      <NDataTable
-        :columns="columns"
-        :data="data"
-        size="small"
-        :flex-height="!appStore.isMobile"
-        :scroll-x="962"
-        :loading="loading"
-        remote
-        :row-key="row => row.id"
-        :pagination="mobilePagination"
-        class="sm:h-full"
-      />
-    </NCard>
+  <div class="user-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
+    <div class="px-8 py-6 flex-1 min-h-0">
+      <!-- 标题 -->
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">用户管理</h1>
+
+      <!-- 工具栏 -->
+      <div class="flex items-center gap-3 mb-4">
+        <NInput
+          v-model:value="searchParams.keyword"
+          placeholder="搜索用户名或邮箱"
+          clearable
+          class="max-w-220px"
+          @input="debouncedSearch"
+          @clear="debouncedSearch"
+        >
+          <template #prefix>
+            <icon-carbon:search class="text-gray-400" />
+          </template>
+        </NInput>
+
+        <OrgTagCascader
+          v-model:value="searchParams.orgTag"
+          clearable
+          placeholder="全部组织标签"
+          class="w-200px"
+          @update:value="() => getDataByPage()"
+        />
+
+        <NSelect
+          v-model:value="searchParams.status"
+          placeholder="全部状态"
+          :options="enableStatusOptions"
+          clearable
+          class="w-150px"
+          @update:value="() => getDataByPage()"
+        />
+
+        <div class="flex-1" />
+
+        <TableColumnSetting v-model:columns="columnChecks" />
+        <NButton :loading="loading" @click="getData">
+          <template #icon>
+            <icon-carbon:renew />
+          </template>
+          刷新
+        </NButton>
+      </div>
+
+      <!-- 表格 -->
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <NDataTable
+          :columns="columns"
+          :data="data"
+          size="small"
+          :scroll-x="962"
+          :loading="loading"
+          remote
+          :row-key="row => row.id"
+          :pagination="false"
+        />
+        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <NPagination v-bind="mobilePagination" />
+        </div>
+      </div>
+    </div>
+
     <OrgTagSettingDialog v-model:visible="visible" :row-data="editingData!" @submitted="getData" />
   </div>
 </template>

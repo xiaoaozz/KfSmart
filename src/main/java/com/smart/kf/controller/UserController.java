@@ -1,7 +1,12 @@
 package com.smart.kf.controller;
 
 import com.smart.kf.exception.CustomException;
+import com.smart.kf.model.FileUpload;
+import com.smart.kf.model.KnowledgeBase;
 import com.smart.kf.model.User;
+import com.smart.kf.repository.ConversationRepository;
+import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
@@ -12,11 +17,19 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -30,6 +43,15 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private ConversationRepository conversationRepository;
+
+    @Autowired
+    private FileUploadRepository fileUploadRepository;
+
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
 
     // 用户注册接口
     // 接收用户请求体中的用户名和密码，并调用用户服务进行注册
@@ -173,6 +195,48 @@ public class UserController {
             LogUtils.logBusinessError("GET_USER_INFO", username, "获取用户信息异常: %s", e, e.getMessage());
             monitor.end("获取用户信息异常: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    /**
+     * 获取当前用户的个人使用统计。
+     */
+    @GetMapping("/usage-stats")
+    public ResponseEntity<?> getUsageStatistics(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(defaultValue = "7") int days) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USAGE_STATS");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                monitor.end("获取使用统计失败：无效token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+
+            int normalizedDays = days == 30 ? 30 : 7;
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
+
+            Map<String, Object> stats = buildUsageStatistics(user, normalizedDays);
+            LogUtils.logUserOperation(username, "GET_USAGE_STATS", "query", "SUCCESS");
+            monitor.end("获取使用统计成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "Get usage statistics successful",
+                "data", stats
+            ));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("GET_USAGE_STATS", username, "获取使用统计失败: %s", e, e.getMessage());
+            monitor.end("获取使用统计失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_USAGE_STATS", username, "获取使用统计异常: %s", e, e.getMessage());
+            monitor.end("获取使用统计异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "Internal server error"));
         }
     }
     
@@ -398,6 +462,117 @@ public class UserController {
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
+
+    private Map<String, Object> buildUsageStatistics(User user, int days) {
+        LocalDate today = LocalDate.now();
+        LocalDateTime todayStart = today.atStartOfDay();
+        LocalDateTime tomorrowStart = today.plusDays(1).atStartOfDay();
+
+        List<FileUpload> ownFiles = findOwnFiles(user);
+        List<FileUpload> completedFiles = ownFiles.stream()
+                .filter(file -> file.getStatus() == 1)
+                .toList();
+        List<KnowledgeBase> ownKnowledgeBases = knowledgeBaseRepository.findByCreatedBy(user);
+        List<Map<String, Object>> usageTrends = buildPersonalUsageTrends(user, today, days);
+
+        long totalConversations = conversationRepository.findByUserId(user.getId()).size();
+        long todayConversations = conversationRepository
+                .findByUserIdAndTimestampBetween(user.getId(), todayStart, tomorrowStart)
+                .size();
+        long weekActiveDays = buildPersonalUsageTrends(user, today, 7).stream()
+                .filter(item -> ((Number) item.get("questions")).longValue() > 0)
+                .count();
+        long totalStorage = completedFiles.stream().mapToLong(FileUpload::getTotalSize).sum();
+        long todayUploads = completedFiles.stream()
+                .filter(file -> file.getCreatedAt() != null && !file.getCreatedAt().isBefore(todayStart))
+                .count();
+
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("totalConversations", totalConversations);
+        stats.put("todayConversations", todayConversations);
+        stats.put("totalDocuments", completedFiles.size());
+        stats.put("todayUploads", todayUploads);
+        stats.put("knowledgeBaseCount", ownKnowledgeBases.size());
+        stats.put("weekActiveDays", weekActiveDays);
+        stats.put("totalStorage", totalStorage);
+        stats.put("favoriteCount", 0);
+        stats.put("usageTrends", usageTrends);
+        stats.put("topKnowledgeBases", buildTopKnowledgeBases(ownKnowledgeBases, completedFiles));
+        stats.put("featureUsage", buildFeatureUsage(totalConversations, completedFiles.size(), ownKnowledgeBases.size()));
+        stats.put("rangeDays", days);
+        return stats;
+    }
+
+    private List<FileUpload> findOwnFiles(User user) {
+        Set<Long> seenIds = new HashSet<>();
+        List<FileUpload> files = new ArrayList<>();
+        for (String ownerId : List.of(user.getId().toString(), user.getUsername())) {
+            for (FileUpload file : fileUploadRepository.findByUserId(ownerId)) {
+                Long id = file.getId();
+                if (id == null || seenIds.add(id)) {
+                    files.add(file);
+                }
+            }
+        }
+        return files;
+    }
+
+    private List<Map<String, Object>> buildPersonalUsageTrends(User user, LocalDate today, int days) {
+        List<Map<String, Object>> trends = new ArrayList<>();
+        for (int i = days - 1; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime start = date.atStartOfDay();
+            LocalDateTime end = date.plusDays(1).atStartOfDay();
+            long questions = conversationRepository.findByUserIdAndTimestampBetween(user.getId(), start, end).size();
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("date", date.toString());
+            item.put("label", date.getMonthValue() + "/" + date.getDayOfMonth());
+            item.put("questions", questions);
+            trends.add(item);
+        }
+        return trends;
+    }
+
+    private List<Map<String, Object>> buildTopKnowledgeBases(List<KnowledgeBase> knowledgeBases, List<FileUpload> completedFiles) {
+        Map<String, Long> docCountByKbId = completedFiles.stream()
+                .filter(file -> file.getKbId() != null && !file.getKbId().isEmpty())
+                .collect(Collectors.groupingBy(FileUpload::getKbId, Collectors.counting()));
+
+        return knowledgeBases.stream()
+                .map(kb -> {
+                    long count = docCountByKbId.getOrDefault(kb.getKbId(), 0L);
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("kbId", kb.getKbId());
+                    item.put("name", kb.getName());
+                    item.put("count", count);
+                    return item;
+                })
+                .sorted(Comparator
+                        .comparing((Function<Map<String, Object>, Long>) item -> ((Number) item.get("count")).longValue())
+                        .reversed()
+                        .thenComparing(item -> String.valueOf(item.get("name"))))
+                .limit(5)
+                .toList();
+    }
+
+    private List<Map<String, Object>> buildFeatureUsage(long conversations, long documents, long knowledgeBases) {
+        long total = conversations + documents + knowledgeBases;
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(buildFeatureUsageItem("智能对话", conversations, total, "#2563EB"));
+        items.add(buildFeatureUsageItem("文档上传", documents, total, "#16A34A"));
+        items.add(buildFeatureUsageItem("知识库管理", knowledgeBases, total, "#F59E0B"));
+        return items;
+    }
+
+    private Map<String, Object> buildFeatureUsageItem(String label, long count, long total, String color) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("label", label);
+        item.put("count", count);
+        item.put("value", total > 0 ? Math.round(count * 1000.0 / total) / 10.0 : 0);
+        item.put("color", color);
+        return item;
+    }
 
     // ==================== 登录记录相关接口 ====================
 

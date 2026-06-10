@@ -71,7 +71,7 @@ public class SecurityConfig {
                             // 用户通知接口 - 用户和管理员都可访问（只能看到自己的通知）
                             .requestMatchers("/api/v1/notifications/**").hasAnyRole("USER", "ADMIN")
                             // 登录记录和统计接口 - 用户和管理员都可访问
-                            .requestMatchers("/api/v1/users/login-records", "/api/v1/users/login-stats").hasAnyRole("USER", "ADMIN")
+                            .requestMatchers("/api/v1/users/login-records", "/api/v1/users/login-stats", "/api/v1/users/usage-stats").hasAnyRole("USER", "ADMIN")
                             // 用户组织标签管理接口 - 包括查看组织标签树、设置主组织等
                             .requestMatchers("/api/v1/users/org-tags/**", "/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
                             // 其他请求需要认证
@@ -97,4 +97,3 @@ public class SecurityConfig {
         }
     }
 }
-

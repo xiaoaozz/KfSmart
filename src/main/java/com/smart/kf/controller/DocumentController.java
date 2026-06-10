@@ -7,6 +7,8 @@ import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.service.DocumentService;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.JwtUtils;
+import com.smart.kf.utils.pagination.PageQuery;
+import com.smart.kf.utils.pagination.PageResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -155,7 +157,10 @@ public class DocumentController {
             @RequestParam(required = false) Boolean isPublic,
             @RequestParam(required = false) String kbId,
             @RequestParam(required = false) Boolean mine,
-            @RequestParam(required = false) String sort) {
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
 
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
         try {
@@ -254,7 +259,7 @@ public class DocumentController {
             Map<String, Object> response = new HashMap<>();
             response.put("code", 200);
             response.put("message", "获取用户上传文件列表成功");
-            response.put("data", fileData);
+            response.put("data", PageResult.fromList(fileData, PageQuery.of(page, size, cursor)));
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             LogUtils.logBusinessError("GET_USER_UPLOADED_FILES", userId, "获取用户上传文件失败", e);
