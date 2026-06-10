@@ -29,9 +29,9 @@ const kbLoading = ref(false);
 async function loadKnowledgeBases() {
   kbLoading.value = true;
   try {
-    const { error, data } = await fetchGetKnowledgeBases();
+    const { error, data } = await fetchGetKnowledgeBases({ size: 100 });
     if (!error && data) {
-      knowledgeBases.value = data;
+      knowledgeBases.value = data.records || data.content || data.data || [];
     }
   } catch (e) {
     console.error('[上传文档] 加载知识库列表失败:', e);

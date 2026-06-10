@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import { NButton, NDataTable, NInput, NModal, NPopconfirm, NSelect, NTag, NTooltip } from 'naive-ui';
+import { NButton, NDataTable, NInput, NModal, NPagination, NPopconfirm, NSelect, NTag, NTooltip } from 'naive-ui';
 import { fakePaginationRequest } from '@/service/request';
 import { UploadStatus } from '@/enum';
 import FilePreview from '@/components/custom/file-preview.vue';
@@ -37,10 +37,10 @@ const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
 async function loadFilterOptions() {
   const [filterRes, kbRes] = await Promise.all([
     fetchGetKnowledgeBaseFilterOptions(),
-    fetchGetKnowledgeBases({})
+    fetchGetKnowledgeBases({ size: 100 })
   ]);
   if (!filterRes.error && filterRes.data) filterOptions.value = filterRes.data;
-  if (!kbRes.error && kbRes.data) knowledgeBases.value = kbRes.data;
+  if (!kbRes.error && kbRes.data) knowledgeBases.value = kbRes.data.records || kbRes.data.content || kbRes.data.data || [];
 }
 
 const kbSelectOptions = computed(() => [
@@ -126,8 +126,10 @@ async function handleDownloadPreview() {
 }
 
 // --------- 数据加载 ---------
-function apiFn() {
-  const params: Record<string, string | boolean> = {};
+function apiFn(pageParams?: Api.Common.CommonSearchParams) {
+  const params: Record<string, string | boolean | number> = {};
+  if (pageParams?.page) params.page = pageParams.page;
+  if (pageParams?.size) params.size = pageParams.size;
   if (selectedFileType.value) params.fileType = selectedFileType.value;
   if (selectedKbId.value) params.kbId = selectedKbId.value;
   if (searchKeyword.value) params.keyword = searchKeyword.value;
@@ -171,7 +173,7 @@ function renderIcon(fileName: string) {
 const store = useKnowledgeBaseStore();
 const { tasks } = storeToRefs(store);
 
-const { columns, data, getData, loading } = useTable({
+const { columns, data, getData, getDataByPage, loading, mobilePagination } = useTable({
   apiFn,
   immediate: false,
   columns: () => [
@@ -228,7 +230,7 @@ const { columns, data, getData, loading } = useTable({
       }
     },
     {
-      key: 'fileType',
+      key: 'status',
       title: '类型',
       width: 80,
       align: 'center',
@@ -307,12 +309,12 @@ async function handleDelete(fileMd5: string) {
 }
 
 // --------- 搜索防抖 ---------
-const debouncedSearch = debounce(() => getData(), 300);
+const debouncedSearch = debounce(() => getDataByPage(), 300);
 
 // --------- Tab 切换 ---------
 function onTabChange(val: string) {
   activeTab.value = val as 'all' | 'mine' | 'recent';
-  getData();
+  getDataByPage();
 }
 
 // --------- 上传 ---------
@@ -384,7 +386,7 @@ onMounted(async () => {
           placeholder="全部类型"
           class="w-130px"
           size="medium"
-          @update:value="getData"
+          @update:value="getDataByPage"
         />
 
         <!-- 所属知识库 -->
@@ -394,7 +396,7 @@ onMounted(async () => {
           placeholder="全部知识库"
           class="w-150px"
           size="medium"
-          @update:value="getData"
+          @update:value="getDataByPage"
         />
 
         <div class="flex-1" />
@@ -409,19 +411,24 @@ onMounted(async () => {
       </div>
 
       <!-- 表格 -->
-      <div class="flex-1 min-h-0 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <NDataTable
           striped
           :columns="columns"
           :data="data"
           size="medium"
-          :flex-height="true"
           :scroll-x="800"
           :loading="loading"
           :row-key="row => row.fileMd5"
+          remote
           :pagination="false"
-          class="h-full doc-table"
+          class="doc-table"
         />
+
+        <!-- 分页 -->
+        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <NPagination v-bind="mobilePagination" />
+        </div>
       </div>
     </div>
 

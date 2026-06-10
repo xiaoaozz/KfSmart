@@ -37,6 +37,11 @@ export function fetchGetUserInfo() {
   return request<Api.Auth.UserInfo>({ url: '/users/me' });
 }
 
+/** Get personal usage statistics */
+export function fetchGetUsageStats(days: 7 | 30 = 7) {
+  return request<Api.User.UsageStats>({ url: '/users/usage-stats', params: { days } });
+}
+
 /**
  * Refresh token
  *

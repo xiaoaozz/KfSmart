@@ -38,23 +38,25 @@ export function useTable<A extends NaiveUI.TableApiFn>(config: NaiveUI.NaiveTabl
     apiParams,
     columns: config.columns,
     transformer: res => {
-      const { number = 1, size = 10, totalElements = 0 } = res.data || {};
-      const records = res.data?.data || res.data?.content || [];
+      const { number, page, size = 10, totalElements, total } = res.data || {};
+      const currentPage = number || page || 1;
+      const records = res.data?.records || res.data?.data || res.data?.content || [];
+      const totalCount = totalElements ?? total ?? records.length;
       // Ensure that the size is greater than 0, If it is less than 0, it will cause paging calculation errors.
       const pageSize = size <= 0 ? 10 : size;
 
       const recordsWithIndex = records.map((item, index) => {
         return {
           ...item,
-          index: (number - 1) * pageSize + index + 1
+          index: (currentPage - 1) * pageSize + index + 1
         };
       });
 
       return {
         data: recordsWithIndex,
-        pageNum: number,
+        pageNum: currentPage,
         pageSize,
-        total: totalElements
+        total: totalCount
       };
     },
     getColumnChecks: cols => {
@@ -120,7 +122,7 @@ export function useTable<A extends NaiveUI.TableApiFn>(config: NaiveUI.NaiveTabl
     pageSize: 10,
     showSizePicker: true,
     itemCount: 0,
-    pageSizes: [10, 15, 20, 25, 30],
+    pageSizes: [10, 50, 100],
     onUpdatePage: async (page: number) => {
       pagination.page = page;
 

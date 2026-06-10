@@ -1,6 +1,7 @@
 package com.smart.kf.controller;
 
 import com.smart.kf.service.KnowledgeBaseService;
+import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -83,7 +84,10 @@ public class KnowledgeBaseController {
             @RequestParam(required = false) String orgTag,
             @RequestParam(required = false) Boolean isPublic,
             @RequestParam(required = false) String createdBy,
-            @RequestParam(required = false) String updatedAfter) {
+            @RequestParam(required = false) String updatedAfter,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String cursor) {
         
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_KB_LIST");
         String username = null;
@@ -110,8 +114,8 @@ public class KnowledgeBaseController {
                 }
             }
             
-            List<Map<String, Object>> kbList = knowledgeBaseService.getAccessibleKnowledgeBases(
-                username, orgTags, keyword, orgTag, isPublic, createdBy, filterUpdatedAfter);
+            var kbList = knowledgeBaseService.getAccessibleKnowledgeBasesPage(
+                username, orgTags, keyword, orgTag, isPublic, createdBy, filterUpdatedAfter, PageQuery.of(page, size, cursor));
             
             monitor.end("获取知识库列表成功");
             return ResponseEntity.ok(Map.of("code", 200, "message", "获取知识库列表成功", "data", kbList));

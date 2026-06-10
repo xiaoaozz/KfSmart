@@ -1,5 +1,11 @@
 import { request } from '../request';
 
+type PageParams = {
+  page?: number;
+  size?: number;
+  cursor?: string;
+};
+
 /** 获取用户可访问的知识库列表 */
 export function fetchGetKnowledgeBases(params?: {
   keyword?: string;
@@ -7,8 +13,11 @@ export function fetchGetKnowledgeBases(params?: {
   isPublic?: boolean;
   createdBy?: string;
   updatedAfter?: string;
-}) {
-  return request<Api.KnowledgeBase.KnowledgeBaseInfo[]>({ url: '/knowledge-bases', params });
+} & PageParams) {
+  return request<Api.Common.PaginatingQueryRecord<Api.KnowledgeBase.KnowledgeBaseInfo>>({
+    url: '/knowledge-bases',
+    params
+  });
 }
 
 /** 获取知识库统计概览 */

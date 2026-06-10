@@ -1,8 +1,8 @@
 import { fakePaginationRequest, request } from '../request';
 
 /** Get flat list of org tags for table display (wraps in pagination format for useTable) */
-export function fetchGetOrgTagList() {
-  return fakePaginationRequest<Api.OrgTag.List>({ url: '/admin/org-tags' });
+export function fetchGetOrgTagList(params?: Api.Common.CommonSearchParams) {
+  return fakePaginationRequest<Api.OrgTag.List>({ url: '/admin/org-tags', params });
 }
 
 /** Get org tag tree for cascader display (for regular users) */

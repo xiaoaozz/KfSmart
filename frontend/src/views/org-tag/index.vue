@@ -1,10 +1,8 @@
 <script setup lang="tsx">
-import { NButton, NPopconfirm } from 'naive-ui';
+import { NButton, NPagination, NPopconfirm } from 'naive-ui';
 import OrgTagOperateDialog from './modules/org-tag-operate-dialog.vue';
 
-const appStore = useAppStore();
-
-const { columns, columnChecks, data, loading, getData } = useTable({
+const { columns, columnChecks, data, loading, getData, mobilePagination } = useTable({
   apiFn: fetchGetOrgTagList,
   columns: () => [
     {
@@ -80,30 +78,54 @@ async function handleDelete(tagId: string) {
 </script>
 
 <template>
-  <div class="flex-col-stretch gap-16px overflow-hidden <sm:overflow-auto">
-    <NCard title="组织标签" :bordered="false" size="small" class="sm:flex-1-hidden card-wrapper">
-      <template #header-extra>
-        <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" @add="handleAdd" @refresh="getData" />
-      </template>
-      <NDataTable
-        remote
-        :columns="columns"
-        :data="data"
-        size="small"
-        :flex-height="!appStore.isMobile"
-        :scroll-x="962"
-        :loading="loading"
-        :pagination="false"
-        :row-key="item => item.tagId"
-        class="sm:h-full"
-      />
-      <OrgTagOperateDialog
-        v-model:visible="dialogVisible"
-        :operate-type="operateType"
-        :row-data="editingData!"
-        @submitted="getData"
-      />
-    </NCard>
+  <div class="org-tag-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
+    <div class="px-8 py-6 flex-1 min-h-0">
+      <!-- 标题 -->
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">组织管理</h1>
+
+      <!-- 工具栏 -->
+      <div class="flex items-center justify-between mb-4">
+        <TableColumnSetting v-model:columns="columnChecks" />
+        <div class="flex items-center gap-3">
+          <NButton :loading="loading" @click="getData">
+            <template #icon>
+              <icon-carbon:renew />
+            </template>
+            刷新
+          </NButton>
+          <NButton type="primary" @click="handleAdd">
+            <template #icon>
+              <icon-carbon:add />
+            </template>
+            新增标签
+          </NButton>
+        </div>
+      </div>
+
+      <!-- 表格 -->
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <NDataTable
+          remote
+          :columns="columns"
+          :data="data"
+          size="small"
+          :scroll-x="962"
+          :loading="loading"
+          :pagination="false"
+          :row-key="item => item.tagId"
+        />
+        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+          <NPagination v-bind="mobilePagination" />
+        </div>
+      </div>
+    </div>
+
+    <OrgTagOperateDialog
+      v-model:visible="dialogVisible"
+      :operate-type="operateType"
+      :row-data="editingData!"
+      @submitted="getData"
+    />
   </div>
 </template>
 

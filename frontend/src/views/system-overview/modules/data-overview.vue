@@ -21,14 +21,34 @@ interface StatItem {
 
 const stats = ref<StatItem[]>([
   {
-    icon: 'data-base',
-    label: '组织标签数',
+    icon: 'chat',
+    label: '今日问答数',
     value: '--',
     change: '--',
     trend: 'up',
-    changeLabel: '总计',
+    changeLabel: '实时累计',
     color: 'blue',
-    tooltip: '当前系统中的组织标签总数量'
+    tooltip: '今日已完成的用户问答次数'
+  },
+  {
+    icon: 'search',
+    label: '知识库命中率',
+    value: '--%',
+    change: '--',
+    trend: 'up',
+    changeLabel: '今日检索',
+    color: 'emerald',
+    tooltip: '今日问答中成功检索到知识库上下文的比例'
+  },
+  {
+    icon: 'time',
+    label: '平均响应时间',
+    value: '--',
+    change: '--',
+    trend: 'down',
+    changeLabel: '今日平均',
+    color: 'cyan',
+    tooltip: '今日 AI 问答从请求到完成的平均耗时'
   },
   {
     icon: 'document',
@@ -37,68 +57,8 @@ const stats = ref<StatItem[]>([
     change: '--',
     trend: 'up',
     changeLabel: '总计',
-    color: 'green',
-    tooltip: '系统中已上传的文档总数量'
-  },
-  {
-    icon: 'user-multiple',
-    label: '用户总数',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '总计',
-    color: 'purple',
-    tooltip: '系统中注册的用户总数'
-  },
-  {
-    icon: 'chat',
-    label: '会话总数',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '总计',
-    color: 'orange',
-    tooltip: '系统中产生的会话总数'
-  },
-  {
-    icon: 'chat-bot',
-    label: '今日上传',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '今日新增',
-    color: 'cyan',
-    tooltip: '今日新增上传的文档数量'
-  },
-  {
-    icon: 'time',
-    label: '今日会话',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '今日新增',
-    color: 'pink',
-    tooltip: '今日新增的会话数量'
-  },
-  {
-    icon: 'thumbs-up',
-    label: '文档完成率',
-    value: '--%',
-    change: '--',
-    trend: 'up',
-    changeLabel: '完成/总计',
-    color: 'emerald',
-    tooltip: '已完成处理文档占总文档的比例'
-  },
-  {
-    icon: 'checkmark-filled',
-    label: '系统状态',
-    value: '正常',
-    change: '运行中',
-    trend: 'up',
-    changeLabel: '',
     color: 'indigo',
-    tooltip: '当前系统运行状态'
+    tooltip: '系统中已上传并纳入知识库统计的文档总数'
   }
 ]);
 
@@ -110,6 +70,14 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
+function formatDuration(ms: number): string {
+  if (!ms) return '0ms';
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  return `${ms}ms`;
+}
+
 /** 从后端获取统计数据并更新 */
 async function fetchStats() {
   loading.value = true;
@@ -117,29 +85,17 @@ async function fetchStats() {
     const { error, data } = await fetchGetSystemStats();
     if (!error && data) {
       // 更新各统计卡片
-      stats.value[0].value = formatNumber(data.totalOrgTags || 0);
-      stats.value[0].change = String(data.totalOrgTags || 0);
+      stats.value[0].value = formatNumber(data.todayQuestions || data.todayConversations || 0);
+      stats.value[0].change = `+${data.todayQuestions || data.todayConversations || 0}`;
 
-      stats.value[1].value = formatNumber(data.totalDocuments || 0);
-      stats.value[1].change = String(data.totalDocuments || 0);
+      stats.value[1].value = `${data.knowledgeHitRate || 0}%`;
+      stats.value[1].change = data.knowledgeHitRate ? '有命中数据' : '暂无命中';
 
-      stats.value[2].value = formatNumber(data.totalUsers || 0);
-      stats.value[2].change = String(data.totalUsers || 0);
+      stats.value[2].value = formatDuration(data.averageResponseTimeMs || 0);
+      stats.value[2].change = data.averageResponseTimeMs ? `${data.averageResponseTimeMs}ms` : '暂无耗时';
 
-      stats.value[3].value = formatNumber(data.totalConversations || 0);
-      stats.value[3].change = String(data.totalConversations || 0);
-
-      stats.value[4].value = formatNumber(data.todayUploads || 0);
-      stats.value[4].change = `+${data.todayUploads || 0}`;
-
-      stats.value[5].value = formatNumber(data.todayConversations || 0);
-      stats.value[5].change = `+${data.todayConversations || 0}`;
-
-      // 文档完成率（如果有总数则计算比例）
-      if (data.totalFiles && data.totalFiles > 0) {
-        stats.value[6].value = Math.round((data.totalDocuments / data.totalFiles) * 100) + '%';
-        stats.value[6].change = `${data.totalDocuments}/${data.totalFiles}`;
-      }
+      stats.value[3].value = formatNumber(data.totalDocuments || 0);
+      stats.value[3].change = String(data.totalDocuments || 0);
     }
   } catch (e) {
     console.error('[DataOverview] 获取系统统计失败:', e);
@@ -218,7 +174,7 @@ const getColorClasses = (color: string) => {
       </template>
 
       <NSpin :show="loading">
-        <div class="grid grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div
             v-for="stat in stats"
             :key="stat.label"
@@ -236,10 +192,8 @@ const getColorClasses = (color: string) => {
                       <icon-carbon:document v-else-if="stat.icon === 'document'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                       <icon-carbon:user-multiple v-else-if="stat.icon === 'user-multiple'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                       <icon-carbon:chat v-else-if="stat.icon === 'chat'" :class="['text-xl', getColorClasses(stat.color).icon]" />
-                      <icon-carbon:chat-bot v-else-if="stat.icon === 'chat-bot'" :class="['text-xl', getColorClasses(stat.color).icon]" />
+                      <icon-carbon:search v-else-if="stat.icon === 'search'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                       <icon-carbon:time v-else-if="stat.icon === 'time'" :class="['text-xl', getColorClasses(stat.color).icon]" />
-                      <icon-carbon:thumbs-up v-else-if="stat.icon === 'thumbs-up'" :class="['text-xl', getColorClasses(stat.color).icon]" />
-                      <icon-carbon:checkmark-filled v-else-if="stat.icon === 'checkmark-filled'" :class="['text-xl', getColorClasses(stat.color).icon]" />
                     </div>
                   </div>
                   

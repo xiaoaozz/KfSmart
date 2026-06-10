@@ -61,7 +61,7 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     }
   }
 
-  function reorderActiveSession(targetConversationId: string) {
+  function moveSessionToTop(targetConversationId: string) {
     const index = sessions.value.findIndex(item => item.id === targetConversationId);
     if (index > 0) {
       const [session] = sessions.value.splice(index, 1);
@@ -100,7 +100,6 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     };
 
     upsertSession(nextSession);
-    reorderActiveSession(conversationId.value);
   }
 
   function handleWsMessage(val: string | null) {
@@ -179,7 +178,6 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
       list.value = data;
       if (finalConversationId) {
         conversationId.value = finalConversationId;
-        reorderActiveSession(finalConversationId);
       }
       scrollToBottom.value?.();
     }
@@ -191,6 +189,7 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     const { error, data } = await fetchCreateConversationSession();
     if (!error && data) {
       upsertSession(data);
+      moveSessionToTop(data.id);
       if (autoSelect) {
         conversationId.value = data.id;
         list.value = [];

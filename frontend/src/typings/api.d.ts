@@ -14,12 +14,17 @@ declare namespace Api {
       size?: number;
       /** total count */
       totalElements: number;
+      total?: number;
+      totalPages?: number;
+      hasNext?: boolean;
+      nextCursor?: string | null;
     }
 
     /** common params of paginating query list data */
     interface PaginatingQueryRecord<T = any> extends PaginatingCommonParams {
       data: T[];
       content: T[];
+      records?: T[];
     }
 
     /** common search params of table */
@@ -104,6 +109,40 @@ declare namespace Api {
     };
 
     type List = Common.PaginatingQueryRecord<Item>;
+
+    interface UsageTrendItem {
+      date: string;
+      label: string;
+      questions: number;
+    }
+
+    interface TopKnowledgeBase {
+      kbId: string;
+      name: string;
+      count: number;
+    }
+
+    interface FeatureUsage {
+      label: string;
+      count: number;
+      value: number;
+      color: string;
+    }
+
+    interface UsageStats {
+      totalConversations: number;
+      todayConversations: number;
+      totalDocuments: number;
+      todayUploads: number;
+      knowledgeBaseCount: number;
+      weekActiveDays: number;
+      totalStorage: number;
+      favoriteCount: number;
+      usageTrends: UsageTrendItem[];
+      topKnowledgeBases: TopKnowledgeBase[];
+      featureUsage: FeatureUsage[];
+      rangeDays: number;
+    }
   }
 
   namespace KnowledgeBase {
@@ -311,6 +350,23 @@ declare namespace Api {
       totalOrgTags: number;
       todayUploads: number;
       todayConversations: number;
+      todayQuestions: number;
+      knowledgeHitRate: number;
+      averageResponseTimeMs: number;
+      usageTrends: UsageTrendItem[];
+      popularQuestions: PopularQuestion[];
+    }
+
+    interface UsageTrendItem {
+      date: string;
+      label: string;
+      questions: number;
+    }
+
+    interface PopularQuestion {
+      rank: number;
+      question: string;
+      count: number;
     }
 
     interface Status {

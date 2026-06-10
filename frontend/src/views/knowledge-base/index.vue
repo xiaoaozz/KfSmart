@@ -2,7 +2,7 @@
 import { NButton, NDataTable, NInput, NModal, NPagination, NTag, NTooltip } from 'naive-ui';
 
 import type { DataTableColumns } from 'naive-ui';
-import { fetchGetKnowledgeBases, fetchDeleteKnowledgeBase } from '@/service/api/knowledge-base';
+import { fetchGetKnowledgeBases, fetchDeleteKnowledgeBase, fetchGetKnowledgeBaseStats } from '@/service/api/knowledge-base';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import debounce from 'lodash-es/debounce';
 
@@ -16,18 +16,14 @@ const stats = ref({
 
 // --------- 知识库列表 ---------
 const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
-const allKnowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
 const loading = ref(false);
 const searchKeyword = ref('');
 
 // --------- 分页 ---------
+const pageSizeOptions = [10, 50, 100];
 const currentPage = ref(1);
 const pageSize = ref(10);
-
-const pagedData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return knowledgeBases.value.slice(start, start + pageSize.value);
-});
+const totalCount = ref(0);
 
 // --------- 新建/编辑知识库 ---------
 const createKbVisible = ref(false);
@@ -89,37 +85,49 @@ async function handleDeleteConfirm() {
 // --------- 搜索防抖 ---------
 const debouncedSearch = debounce(() => {
   currentPage.value = 1;
-  filterList();
+  loadKnowledgeBases();
 }, 300);
-
-function filterList() {
-  const kw = searchKeyword.value.trim().toLowerCase();
-  if (!kw) {
-    knowledgeBases.value = allKnowledgeBases.value;
-  } else {
-    knowledgeBases.value = allKnowledgeBases.value.filter(
-      kb => kb.name.toLowerCase().includes(kw) || (kb.description || '').toLowerCase().includes(kw)
-    );
-  }
-}
 
 // --------- 加载数据 ---------
 async function loadKnowledgeBases() {
   loading.value = true;
   try {
-    const { error, data } = await fetchGetKnowledgeBases({});
+    const [listRes, statsRes] = await Promise.all([
+      fetchGetKnowledgeBases({
+        keyword: searchKeyword.value.trim() || undefined,
+        page: currentPage.value,
+        size: pageSize.value
+      }),
+      fetchGetKnowledgeBaseStats()
+    ]);
+
+    const { error, data } = listRes;
     if (!error && data) {
-      allKnowledgeBases.value = data;
-      filterList();
-      // 聚合统计
-      stats.value.knowledgeBaseCount = data.length;
-      stats.value.documentCount = data.reduce((s, kb) => s + kb.fileCount, 0);
-      stats.value.totalSize = data.reduce((s, kb) => s + (kb.totalSize || 0), 0);
-      stats.value.chunkCount = data.reduce((s, kb) => s + kb.chunkCount, 0);
+      const records = data.records || data.content || data.data || [];
+      knowledgeBases.value = records;
+      totalCount.value = data.totalElements ?? data.total ?? records.length;
+    }
+
+    if (!statsRes.error && statsRes.data) {
+      stats.value.knowledgeBaseCount = statsRes.data.knowledgeBaseCount || 0;
+      stats.value.documentCount = statsRes.data.documentCount || 0;
+      stats.value.totalSize = statsRes.data.totalSize || 0;
+      stats.value.chunkCount = statsRes.data.chunkCount || 0;
     }
   } finally {
     loading.value = false;
   }
+}
+
+function handlePageChange(page: number) {
+  currentPage.value = page;
+  loadKnowledgeBases();
+}
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
+  loadKnowledgeBases();
 }
 
 onMounted(loadKnowledgeBases);
@@ -314,7 +322,7 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <NDataTable
           :columns="columns"
-          :data="pagedData"
+          :data="knowledgeBases"
           :loading="loading"
           :row-key="row => row.kbId"
           size="small"
@@ -328,9 +336,12 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
         <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
           <NPagination
             v-model:page="currentPage"
-            :page-count="Math.max(1, Math.ceil(knowledgeBases.length / pageSize))"
+            :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
             :page-size="pageSize"
-            :show-size-picker="false"
+            :page-sizes="pageSizeOptions"
+            show-size-picker
+            @update:page="handlePageChange"
+            @update:page-size="handlePageSizeChange"
           />
         </div>
       </div>

@@ -7,6 +7,8 @@ import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.utils.LogUtils;
+import com.smart.kf.utils.pagination.PageQuery;
+import com.smart.kf.utils.pagination.PageResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -147,6 +149,14 @@ public class KnowledgeBaseService {
         return getAccessibleKnowledgeBases(username, orgTags, null, null, null, null, null);
     }
 
+    public PageResult<Map<String, Object>> getAccessibleKnowledgeBasesPage(String username, String orgTags,
+            String keyword, String filterOrgTag, Boolean filterIsPublic,
+            String filterCreatedBy, LocalDateTime filterUpdatedAfter, PageQuery pageQuery) {
+        List<Map<String, Object>> list = getAccessibleKnowledgeBases(
+            username, orgTags, keyword, filterOrgTag, filterIsPublic, filterCreatedBy, filterUpdatedAfter);
+        return PageResult.fromList(list, pageQuery);
+    }
+
     /**
      * 获取用户可访问的知识库列表（带筛选参数）
      * 包括：用户创建的、公开的、用户所属组织标签关联的
@@ -213,6 +223,10 @@ public class KnowledgeBaseService {
                 // 更新时间筛选
                 return filterUpdatedAfter == null || (kb.getUpdatedAt() != null && !kb.getUpdatedAt().isBefore(filterUpdatedAfter));
             })
+            .sorted(Comparator.comparing(
+                KnowledgeBase::getUpdatedAt,
+                Comparator.nullsLast(Comparator.naturalOrder())
+            ).reversed())
             .toList();
         
         // 构建返回数据（含统计信息）

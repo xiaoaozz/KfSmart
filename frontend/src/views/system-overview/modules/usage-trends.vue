@@ -1,129 +1,170 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import type { EChartsOption } from 'echarts';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { fetchGetSystemStats } from '@/service/api/system';
+import { type ECOption, useEcharts } from '@/hooks/common/echarts';
 
 defineOptions({
   name: 'UsageTrends'
 });
 
-const timeRange = ref<'day' | 'week' | 'month'>('week');
 const loading = ref(false);
-
-// 从后端获取的统计数据
 const systemStats = ref<Api.System.Stats | null>(null);
 
-const chartOptions = computed<EChartsOption>(() => {
-  const dates = timeRange.value === 'day' 
-    ? ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '23:59']
-    : timeRange.value === 'week'
-    ? ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-    : ['第1周', '第2周', '第3周', '第4周'];
+interface TrendItem {
+  date: string;
+  label: string;
+  questions: number;
+}
 
-  // 如果后端有数据，使用真实数据；否则显示 0 作为初始值
-  const total = systemStats.value;
-  
-  // 会话和文档趋势（模拟分布到各时段，实际需要后端提供时间序列数据）
-  const baseConversation = total?.totalConversations ? Math.floor(total.totalConversations / 7) : 0;
-  const baseDocument = total?.totalDocuments ? Math.floor(total.totalDocuments / 7) : 0;
-  const baseUser = total?.totalUsers ? Math.floor(total.totalUsers / 7) : 0;
+function buildFallbackTrends(): TrendItem[] {
+  const today = new Date();
+  const todayQuestions = systemStats.value?.todayQuestions || systemStats.value?.todayConversations || 0;
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (6 - index));
+    const isToday = index === 6;
+    return {
+      date: date.toISOString().slice(0, 10),
+      label: `${date.getMonth() + 1}/${date.getDate()}`,
+      questions: isToday ? todayQuestions : 0
+    };
+  });
+}
 
-  const conversationData = timeRange.value === 'day'
-    ? [baseConversation * 2, baseConversation, baseConversation * 3, baseConversation * 5, baseConversation * 7, baseConversation * 6, baseConversation * 5]
-    : timeRange.value === 'week'
-    ? [baseConversation * 3, baseConversation * 4, baseConversation * 5, baseConversation * 6, baseConversation * 7, baseConversation * 2, baseConversation * 2]
-    : [baseConversation * 20, baseConversation * 24, baseConversation * 28, baseConversation * 30];
+const chartTrends = computed<TrendItem[]>(() => {
+  const source = systemStats.value?.usageTrends || [];
+  if (source.length > 0) {
+    return source.map(item => ({
+      date: item.date,
+      label: item.label,
+      questions: Number(item.questions || 0)
+    }));
+  }
+  return buildFallbackTrends();
+});
 
-  const documentData = timeRange.value === 'day'
-    ? [baseDocument * 3, baseDocument * 2, baseDocument * 5, baseDocument * 8, baseDocument * 10, baseDocument * 8, baseDocument * 6]
-    : timeRange.value === 'week'
-    ? [baseDocument * 15, baseDocument * 18, baseDocument * 22, baseDocument * 25, baseDocument * 20, baseDocument * 8, baseDocument * 6]
-    : [baseDocument * 70, baseDocument * 80, baseDocument * 90, baseDocument * 100];
-
-  const userCountData = timeRange.value === 'day'
-    ? [baseUser * 2, baseUser, baseUser * 3, baseUser * 5, baseUser * 7, baseUser * 6, baseUser * 4]
-    : timeRange.value === 'week'
-    ? [baseUser * 5, baseUser * 6, baseUser * 7, baseUser * 8, baseUser * 7, baseUser * 4, baseUser * 3]
-    : [baseUser * 20, baseUser * 24, baseUser * 26, baseUser * 28];
-
+function buildChartOptions(): ECOption {
   return {
     tooltip: {
       trigger: 'axis',
       axisPointer: {
-        type: 'cross',
-        label: { backgroundColor: '#6a7985' }
+        type: 'line',
+        lineStyle: { color: '#94a3b8' }
+      },
+      formatter: (params: any) => {
+        const item = params?.[0];
+        return item ? `${item.axisValue}<br/>问答数：${item.value}` : '';
       }
     },
-    legend: {
-      data: ['会话数', '文档数', '用户数'],
-      textStyle: { color: '#666' }
-    },
     grid: {
-      left: '3%', right: '4%', bottom: '3%', top: '12%',
+      left: 16,
+      right: 20,
+      top: 28,
+      bottom: 18,
       containLabel: true
     },
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: dates,
-      axisLine: { lineStyle: { color: '#ddd' } },
-      axisLabel: { color: '#666' }
+      data: chartTrends.value.map(item => item.label),
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      axisLabel: { color: '#64748b' }
     },
     yAxis: {
       type: 'value',
-      axisLine: { lineStyle: { color: '#ddd' } },
-      axisLabel: { color: '#666' },
-      splitLine: { lineStyle: { color: '#f0f0f0' } }
+      minInterval: 1,
+      min: 0,
+      max: (value: { max: number }) => (value.max <= 0 ? 5 : Math.ceil(value.max * 1.2)),
+      axisLabel: { color: '#64748b' },
+      splitLine: { lineStyle: { color: '#eef2f7' } }
     },
     series: [
       {
-        name: '会话数',
+        name: '问答数',
         type: 'line',
         smooth: true,
         symbol: 'circle',
-        symbolSize: 6,
+        symbolSize: 7,
         lineStyle: {
           width: 3,
-          color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#667eea' }, { offset: 1, color: '#764ba2' }] }
+          color: '#2563eb'
+        },
+        itemStyle: {
+          color: '#2563eb',
+          borderColor: '#fff',
+          borderWidth: 2
         },
         areaStyle: {
-          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(102, 126, 234, 0.3)' }, { offset: 1, color: 'rgba(102, 126, 234, 0.05)' }] }
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(37, 99, 235, 0.22)' },
+              { offset: 1, color: 'rgba(37, 99, 235, 0.02)' }
+            ]
+          }
         },
-        data: conversationData
-      },
-      {
-        name: '文档数',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: {
-          width: 3,
-          color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#06b6d4' }, { offset: 1, color: '#0891b2' }] }
-        },
-        areaStyle: {
-          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(6, 182, 212, 0.3)' }, { offset: 1, color: 'rgba(6, 182, 212, 0.05)' }] }
-        },
-        data: documentData
-      },
-      {
-        name: '用户数',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: {
-          width: 3,
-          color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#10b981' }, { offset: 1, color: '#059669' }] }
-        },
-        areaStyle: {
-          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(16, 185, 129, 0.05)' }] }
-        },
-        data: userCountData
+        data: chartTrends.value.map(item => item.questions)
       }
     ]
   };
+}
+
+const { domRef, updateOptions } = useEcharts(buildChartOptions, {
+  onRender: chart => {
+    // 图表渲染完成后，用最新数据（含已加载的 API 数据）更新一次
+    // 避免 API 数据比图表渲染更早到达时更新被跳过的问题
+    chart.hideLoading();
+    chart.setOption(buildChartOptions(), true);
+  }
 });
+
+async function refreshChart() {
+  await nextTick();
+  await updateOptions(() => buildChartOptions());
+}
+
+const totalQuestions = computed(() => chartTrends.value.reduce((sum, item) => sum + item.questions, 0));
+const todayQuestions = computed(() => chartTrends.value.at(-1)?.questions || 0);
+const peakQuestions = computed(() => Math.max(...chartTrends.value.map(item => item.questions), 0));
+const activeDays = computed(() => chartTrends.value.filter(item => item.questions > 0).length);
+
+const summaryItems = computed(() => [
+  {
+    label: '7日问答',
+    value: totalQuestions.value,
+    icon: 'chart-line'
+  },
+  {
+    label: '今日问答',
+    value: todayQuestions.value,
+    icon: 'chat'
+  },
+  {
+    label: '峰值',
+    value: peakQuestions.value,
+    icon: 'growth'
+  },
+  {
+    label: '活跃天数',
+    value: activeDays.value,
+    icon: 'calendar'
+  }
+]);
+
+function getSummaryIcon(icon: string) {
+  const map: Record<string, string> = {
+    'chart-line': 'i-carbon-chart-line',
+    chat: 'i-carbon-chat',
+    growth: 'i-carbon-growth',
+    calendar: 'i-carbon-calendar'
+  };
+  return map[icon] || map['chart-line'];
+}
 
 async function fetchTrendsData() {
   loading.value = true;
@@ -132,16 +173,13 @@ async function fetchTrendsData() {
     if (!error && data) {
       systemStats.value = data;
     }
+    await refreshChart();
   } catch (e) {
     console.error('[UsageTrends] 获取趋势数据失败:', e);
   } finally {
     loading.value = false;
   }
 }
-
-const handleTimeRangeChange = (range: 'day' | 'week' | 'month') => {
-  timeRange.value = range;
-};
 
 onMounted(() => {
   fetchTrendsData();
@@ -150,45 +188,39 @@ onMounted(() => {
 
 <template>
   <div class="usage-trends">
-    <NCard>
+    <NCard class="h-full">
       <template #header>
         <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">使用趋势</h2>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              系统使用情况趋势分析
-              <span class="text-blue-500" v-if="systemStats">（基于 {{ systemStats.totalDocuments }} 文档，{{ systemStats.totalUsers }} 用户）</span>
-            </p>
+            <h2 class="text-lg text-gray-900 font-semibold dark:text-white">使用趋势</h2>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">近 7 天问答量趋势</p>
           </div>
-          <div class="flex gap-2">
-            <NButton
-              :type="timeRange === 'day' ? 'primary' : 'default'"
-              size="small"
-              @click="handleTimeRangeChange('day')"
-            >
-              今日
-            </NButton>
-            <NButton
-              :type="timeRange === 'week' ? 'primary' : 'default'"
-              size="small"
-              @click="handleTimeRangeChange('week')"
-            >
-              本周
-            </NButton>
-            <NButton
-              :type="timeRange === 'month' ? 'primary' : 'default'"
-              size="small"
-              @click="handleTimeRangeChange('month')"
-            >
-              本月
-            </NButton>
-          </div>
+          <NButton text @click="fetchTrendsData">
+            <template #icon>
+              <icon-carbon:renew class="text-lg" />
+            </template>
+            刷新
+          </NButton>
         </div>
       </template>
 
       <NSpin :show="loading">
-        <div class="chart-container">
-          <VChart :option="chartOptions" autoresize />
+        <div class="h-[360px] flex flex-col gap-4">
+          <div class="grid grid-cols-4 gap-3">
+            <div v-for="item in summaryItems" :key="item.label" class="summary-card">
+              <div class="flex items-center justify-between">
+                <div class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</div>
+                <div class="text-base text-blue-500" :class="[getSummaryIcon(item.icon)]" />
+              </div>
+              <div class="mt-1 text-lg text-gray-900 font-bold dark:text-white">{{ item.value }}</div>
+            </div>
+          </div>
+
+          <div ref="domRef" class="chart-container min-h-0 flex-1"></div>
+          <div v-if="chartTrends.length === 0" class="empty-chart text-gray-400">
+            <icon-carbon:chart-line-data class="mb-3 text-4xl" />
+            <p class="text-sm">暂无趋势数据</p>
+          </div>
         </div>
       </NSpin>
     </NCard>
@@ -197,9 +229,34 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .usage-trends {
+  height: 100%;
+
   .chart-container {
-    height: 400px;
     width: 100%;
+  }
+
+  :deep(.n-card) {
+    height: 100%;
+  }
+
+  :deep(.n-card__content) {
+    height: calc(100% - 73px);
+  }
+
+  .summary-card {
+    border-radius: 10px;
+    border: 1px solid rgb(243 244 246);
+    background: rgb(249 250 251);
+    padding: 12px;
+  }
+
+  .empty-chart {
+    display: none;
+  }
+
+  :global(.dark) .summary-card {
+    border-color: rgb(55 65 81);
+    background: rgb(31 41 55);
   }
 }
 </style>
