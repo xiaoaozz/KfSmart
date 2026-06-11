@@ -26,7 +26,6 @@ declare module "@elegant-router/types" {
     "iframe-page": "/iframe-page/:url";
     "knowledge-base": "/knowledge-base";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
-    "mcp-tools": "/mcp-tools";
     "org-tag": "/org-tag";
     "personal-center": "/personal-center";
     "system-overview": "/system-overview";
@@ -71,7 +70,6 @@ declare module "@elegant-router/types" {
     | "iframe-page"
     | "knowledge-base"
     | "login"
-    | "mcp-tools"
     | "org-tag"
     | "personal-center"
     | "system-overview"
@@ -101,7 +99,6 @@ declare module "@elegant-router/types" {
     | "chat"
     | "document-management"
     | "knowledge-base"
-    | "mcp-tools"
     | "org-tag"
     | "personal-center"
     | "system-overview"

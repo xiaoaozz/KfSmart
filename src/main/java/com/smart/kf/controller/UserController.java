@@ -16,7 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -34,6 +39,9 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
+
+    private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+    private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
 
     @Autowired
     private UserService userService;
@@ -178,6 +186,7 @@ public class UserController {
             
             // 添加主组织标签信息
             displayUserData.put("primaryOrg", user.getPrimaryOrg());
+            displayUserData.put("avatar", user.getAvatarUrl());
             
             displayUserData.put("createdAt", user.getCreatedAt());
             displayUserData.put("updatedAt", user.getUpdatedAt());
@@ -194,6 +203,60 @@ public class UserController {
         } catch (Exception e) {
             LogUtils.logBusinessError("GET_USER_INFO", username, "获取用户信息异常: %s", e, e.getMessage());
             monitor.end("获取用户信息异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    // 更新当前用户头像
+    @PostMapping("/me/avatar")
+    public ResponseEntity<?> updateCurrentUserAvatar(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("file") MultipartFile file) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("UPDATE_USER_AVATAR");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            if (username == null || username.isEmpty()) {
+                LogUtils.logUserOperation("anonymous", "UPDATE_AVATAR", "token_validation", "FAILED_INVALID_TOKEN");
+                monitor.end("更新头像失败：无效token");
+                throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+            }
+
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
+
+            validateAvatarFile(file);
+
+            String extension = getAvatarExtension(file.getContentType());
+            Path avatarDir = Path.of("data", "avatars");
+            Files.createDirectories(avatarDir);
+            String fileName = "user-" + user.getId() + extension;
+            Path target = avatarDir.resolve(fileName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            String avatarUrl = "/avatars/" + fileName;
+            user.setAvatarUrl(avatarUrl);
+            userRepository.save(user);
+
+            LogUtils.logUserOperation(username, "UPDATE_AVATAR", avatarUrl, "SUCCESS");
+            monitor.end("更新头像成功");
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "message", "Avatar updated successfully",
+                "data", Map.of("avatar", avatarUrl)
+            ));
+        } catch (CustomException e) {
+            LogUtils.logBusinessError("UPDATE_USER_AVATAR", username, "更新头像失败: %s", e, e.getMessage());
+            monitor.end("更新头像失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (IOException e) {
+            LogUtils.logBusinessError("UPDATE_USER_AVATAR", username, "保存头像失败: %s", e, e.getMessage());
+            monitor.end("保存头像失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "头像保存失败"));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("UPDATE_USER_AVATAR", username, "更新头像异常: %s", e, e.getMessage());
+            monitor.end("更新头像异常: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
         }
     }
@@ -462,6 +525,31 @@ public class UserController {
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
+
+    private void validateAvatarFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new CustomException("头像文件不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (file.getSize() > MAX_AVATAR_SIZE) {
+            throw new CustomException("头像文件不能超过2MB", HttpStatus.BAD_REQUEST);
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_AVATAR_TYPES.contains(contentType.toLowerCase())) {
+            throw new CustomException("仅支持 JPG、PNG、WebP、GIF 格式头像", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private String getAvatarExtension(String contentType) {
+        if (contentType == null) {
+            return ".png";
+        }
+        return switch (contentType.toLowerCase()) {
+            case "image/jpeg" -> ".jpg";
+            case "image/webp" -> ".webp";
+            case "image/gif" -> ".gif";
+            default -> ".png";
+        };
+    }
 
     private Map<String, Object> buildUsageStatistics(User user, int days) {
         LocalDate today = LocalDate.now();

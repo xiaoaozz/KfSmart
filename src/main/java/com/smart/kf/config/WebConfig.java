@@ -1,5 +1,6 @@
 package com.smart.kf.config;
 
+import com.fasterxml.jackson.core.json.JsonWriteFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +29,8 @@ public class WebConfig implements WebMvcConfigurer {
         // 配置静态资源处理（仅匹配静态资源路径，不拦截API请求）
         registry.addResourceHandler("/static/**")
                 .addResourceLocations("classpath:/static/");
+        registry.addResourceHandler("/avatars/**")
+                .addResourceLocations("file:data/avatars/");
         // 注意：不添加 /** catch-all handler，避免将未匹配的API请求误当静态资源处理
         // Spring Boot 默认的 ResourceHttpRequestHandler 会自动处理静态资源
     }
@@ -56,7 +59,7 @@ public class WebConfig implements WebMvcConfigurer {
         
         // 确保中文字符不被转义为Unicode编码
         objectMapper.getFactory().configure(
-            com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false
+            JsonWriteFeature.ESCAPE_NON_ASCII.mappedFeature(), false
         );
         
         jsonConverter.setObjectMapper(objectMapper);

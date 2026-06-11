@@ -33,6 +33,9 @@ public class User {
     @Column(name = "primary_org")
     private String primaryOrg; // 用户主组织标签
 
+    @Column(name = "avatar_url")
+    private String avatarUrl; // 用户头像访问地址
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

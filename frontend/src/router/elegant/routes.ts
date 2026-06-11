@@ -110,17 +110,6 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
-    name: 'mcp-tools',
-    path: '/mcp-tools',
-    component: 'layout.base$view.mcp-tools',
-    meta: {
-      title: 'mcp-tools',
-      i18nKey: 'route.mcp-tools',
-      icon: 'solar:settings-minimalistic-line-duotone',
-      order: 3.5
-    }
-  },
-  {
     name: 'org-tag',
     path: '/org-tag',
     component: 'layout.base$view.org-tag',

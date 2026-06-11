@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import type { UploadCustomRequestOptions, UploadFileInfo } from 'naive-ui';
+import { fetchUpdateUserAvatar } from '@/service/api';
+import { useUserAvatar } from '@/utils/avatar';
 
 defineOptions({ name: 'PersonalProfile' });
 
-const { userInfo } = storeToRefs(useAuthStore());
+const authStore = useAuthStore();
+const { userInfo } = storeToRefs(authStore);
+const { avatarText } = useUserAvatar(userInfo);
 
 const editing = ref(false);
 const saving = ref(false);
+const avatarUploading = ref(false);
 
 const form = ref({
   email: '',
@@ -22,12 +27,44 @@ async function saveProfile() {
   window.$message?.success('个人资料保存成功');
 }
 
-const avatarColor = computed(() => {
-  const colors = ['#5865F2', '#3BA55C', '#FAA61A', '#ED4245', '#EB459E'];
-  const idx = (userInfo.value.username || '').charCodeAt(0) % colors.length;
-  return colors[idx] || colors[0];
-});
-const avatarLetter = computed(() => (userInfo.value.username || 'U')[0]?.toUpperCase());
+function beforeAvatarUpload({ file }: { file: UploadFileInfo }) {
+  const rawFile = file.file;
+  if (!rawFile) {
+    return false;
+  }
+
+  if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(rawFile.type)) {
+    window.$message?.error('仅支持 JPG、PNG、WebP、GIF 格式头像');
+    return false;
+  }
+
+  if (rawFile.size > 2 * 1024 * 1024) {
+    window.$message?.error('头像文件不能超过 2MB');
+    return false;
+  }
+
+  return true;
+}
+
+async function uploadAvatar({ file, onFinish, onError }: UploadCustomRequestOptions) {
+  if (!file.file) {
+    onError();
+    return;
+  }
+
+  avatarUploading.value = true;
+  const { data, error } = await fetchUpdateUserAvatar(file.file);
+  avatarUploading.value = false;
+
+  if (error || !data?.avatar) {
+    onError();
+    return;
+  }
+
+  authStore.setUserAvatar(data.avatar);
+  onFinish();
+  window.$message?.success('头像已更新');
+}
 
 const bioLength = computed(() => form.value.bio.length);
 </script>
@@ -38,16 +75,24 @@ const bioLength = computed(() => form.value.bio.length);
     <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 flex items-start gap-8">
       <!-- 头像区 -->
       <div class="flex flex-col items-center gap-3 flex-shrink-0">
-        <div
-          class="w-40 h-40 rounded-full flex items-center justify-center text-white text-5xl font-bold shadow-lg"
-          :style="{ background: avatarColor }"
+        <Avatar
+          :src="userInfo.avatar || ''"
+          :text="avatarText"
+          :version="userInfo.avatarVersion"
+          :size="160"
+          class="shadow-lg text-5xl font-bold"
+        />
+        <NUpload
+          :show-file-list="false"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          :before-upload="beforeAvatarUpload"
+          :custom-request="uploadAvatar"
         >
-          {{ avatarLetter }}
-        </div>
-        <NButton size="small" secondary>
-          <template #icon><icon-carbon:camera /></template>
-          更换头像
-        </NButton>
+          <NButton size="small" secondary :loading="avatarUploading">
+            <template #icon><icon-carbon:camera /></template>
+            更换头像
+          </NButton>
+        </NUpload>
       </div>
 
       <!-- 信息表格 -->
