@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/modules/auth';
 import { useRouterPush } from '@/hooks/common/router';
+import { getAvatarText, getVersionedAvatarUrl } from '@/utils/avatar';
 
 defineOptions({
   name: 'ModernTopNav'
@@ -11,6 +12,8 @@ defineOptions({
 const router = useRouter();
 const authStore = useAuthStore();
 const { toLogin } = useRouterPush();
+const avatarUrl = computed(() => getVersionedAvatarUrl(authStore.userInfo.avatar, authStore.userInfo.avatarVersion));
+const avatarText = computed(() => getAvatarText(authStore.userInfo.username));
 
 // 导航菜单配置
 const navMenus = computed(() => [
@@ -145,11 +148,11 @@ function handleUserMenuSelect(key: string) {
         <div class="user-avatar-section">
           <NDropdown :options="userMenuOptions" @select="handleUserMenuSelect">
             <div class="user-avatar">
-              <div v-if="authStore.userInfo.avatar" class="avatar-img">
-                <img :src="authStore.userInfo.avatar" alt="User Avatar" />
+              <div v-if="avatarUrl" class="avatar-img">
+                <img :src="avatarUrl" alt="User Avatar" />
               </div>
-              <div v-else class="avatar-placeholder gradient-primary">
-                {{ authStore.userInfo.username?.charAt(0).toUpperCase() || 'U' }}
+              <div v-else class="avatar-placeholder">
+                {{ avatarText }}
               </div>
             </div>
           </NDropdown>
@@ -380,6 +383,7 @@ function handleUserMenuSelect(key: string) {
       display: flex;
       align-items: center;
       justify-content: center;
+      background: linear-gradient(135deg, #5865f2 0%, #3ba55c 100%);
       color: white;
       font-weight: 700;
       font-size: 16px;

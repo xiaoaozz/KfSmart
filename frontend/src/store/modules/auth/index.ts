@@ -25,7 +25,9 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     username: '',
     role: 'USER',
     orgTags: [],
-    primaryOrg: ''
+    primaryOrg: '',
+    avatar: '',
+    avatarVersion: Date.now()
   });
 
   const isAdmin = computed(() => userInfo.role === 'ADMIN');
@@ -155,7 +157,10 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
 
     if (!error) {
       // update store
-      Object.assign(userInfo, info);
+      Object.assign(userInfo, {
+        ...info,
+        avatarVersion: Date.now()
+      });
 
       return true;
     }
@@ -181,6 +186,11 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     localStg.set('token', newToken);
   }
 
+  function setUserAvatar(avatar: string | null | undefined) {
+    userInfo.avatar = avatar || '';
+    userInfo.avatarVersion = Date.now();
+  }
+
   async function logout() {
     const { error } = await fetchLogout();
     if (!error) {
@@ -201,6 +211,8 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     login,
     logout,
     initUserInfo,
-    setToken
+    setToken,
+    setUserAvatar,
+    getUserInfo
   };
 });

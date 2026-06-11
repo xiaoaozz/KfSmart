@@ -47,7 +47,7 @@ public class SecurityConfig {
                             // 允许错误处理路径（防止404等错误转发时丢失认证上下文变成403）
                             .requestMatchers("/error").permitAll()
                             // 允许静态资源访问
-                            .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/*.js", "/*.css", "/*.ico").permitAll()
+                            .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/avatars/**", "/*.js", "/*.css", "/*.ico").permitAll()
                             // 允许 WebSocket 连接
                             .requestMatchers("/chat/**", "/ws/**").permitAll()
                             // 允许登录注册接口

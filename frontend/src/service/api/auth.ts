@@ -37,6 +37,18 @@ export function fetchGetUserInfo() {
   return request<Api.Auth.UserInfo>({ url: '/users/me' });
 }
 
+/** Update current user avatar */
+export function fetchUpdateUserAvatar(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request<Pick<Api.Auth.UserInfo, 'avatar'>>({
+    url: '/users/me/avatar',
+    method: 'post',
+    data: formData
+  });
+}
+
 /** Get personal usage statistics */
 export function fetchGetUsageStats(days: 7 | 30 = 7) {
   return request<Api.User.UsageStats>({ url: '/users/usage-stats', params: { days } });

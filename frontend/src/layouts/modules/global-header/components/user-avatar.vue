@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/modules/auth';
 import { useRouterPush } from '@/hooks/common/router';
 import { useSvgIcon } from '@/hooks/common/icon';
 import { $t } from '@/locales';
+import { getAvatarText } from '@/utils/avatar';
 
 defineOptions({
   name: 'UserAvatar'
@@ -80,8 +81,10 @@ function handleDropdown(key: DropdownKey) {
 
 // 获取用户角色标签
 const userRoleLabel = computed(() => {
-  return authStore.userInfo?.role === 'admin' ? '管理员' : '普通用户';
+  return authStore.userInfo?.role === 'ADMIN' ? '管理员' : '普通用户';
 });
+
+const avatarText = computed(() => getAvatarText(authStore.userInfo?.username));
 </script>
 
 <template>
@@ -91,15 +94,13 @@ const userRoleLabel = computed(() => {
   <NDropdown v-else placement="bottom-end" trigger="click" :options="options" @select="handleDropdown">
     <div class="flex items-center gap-3 px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl cursor-pointer transition-all">
       <!-- 用户头像 -->
-      <NAvatar 
+      <Avatar
         :size="36"
-        round
-        :src="authStore.userInfo?.avatar"
-        :fallback-src="'https://api.dicebear.com/7.x/avataaars/svg?seed=' + authStore.userInfo?.username"
+        :src="authStore.userInfo?.avatar || ''"
+        :text="avatarText"
+        :version="authStore.userInfo?.avatarVersion"
         class="flex-shrink-0"
-      >
-        {{ authStore.userInfo?.username?.charAt(0).toUpperCase() }}
-      </NAvatar>
+      />
       
       <!-- 用户信息 -->
       <div class="flex flex-col items-start min-w-0">

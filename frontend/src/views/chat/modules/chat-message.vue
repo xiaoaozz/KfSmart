@@ -3,6 +3,7 @@
 import { nextTick } from 'vue';
 import { VueMarkdownIt } from 'vue-markdown-shiki';
 import { formatDate } from '@/utils/common';
+import { useUserAvatar } from '@/utils/avatar';
 defineOptions({ name: 'ChatMessage' });
 
 const props = defineProps<{
@@ -11,6 +12,8 @@ const props = defineProps<{
 }>();
 
 const authStore = useAuthStore();
+const { userInfo } = storeToRefs(authStore);
+const { avatarText } = useUserAvatar(userInfo);
 
 function handleCopy(content: string) {
   navigator.clipboard.writeText(content);
@@ -256,9 +259,13 @@ async function handleSourceFileClick(fileInfo: { fileName: string, referenceNumb
             <div class="text-sm leading-relaxed whitespace-pre-wrap break-words">{{ content }}</div>
           </div>
         </div>
-        <NAvatar size="medium" round class="flex-shrink-0 bg-gradient-to-br from-green-400 to-green-600 mt-6">
-          <icon-ph:user-circle class="text-lg text-white" />
-        </NAvatar>
+        <Avatar
+          :src="userInfo.avatar || ''"
+          :text="avatarText"
+          :version="userInfo.avatarVersion"
+          :size="34"
+          class="mt-6"
+        />
       </div>
     </div>
 

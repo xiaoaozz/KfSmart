@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { getAvatarText, getVersionedAvatarUrl } from '@/utils/avatar';
 
 const props = defineProps({
   /** 头像URL */
@@ -26,6 +27,11 @@ const props = defineProps({
   bgColor: {
     type: String,
     default: ''
+  },
+  /** 头像刷新版本号 */
+  version: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -44,24 +50,15 @@ const avatarStyle = computed(() => {
   const style: Record<string, string> = {
     width: `${avatarSize.value}px`,
     height: `${avatarSize.value}px`,
-    fontSize: `${avatarSize.value / 2}px`
+    fontSize: `${avatarSize.value / 2}px`,
+    background: props.bgColor || 'linear-gradient(135deg, #5865f2 0%, #3ba55c 100%)'
   };
-  
-  if (props.bgColor) {
-    style.background = props.bgColor;
-  }
-  
+
   return style;
 });
 
-const initials = computed(() => {
-  if (!props.text) return '';
-  const words = props.text.trim().split(' ');
-  if (words.length >= 2) {
-    return (words[0][0] + words[1][0]).toUpperCase();
-  }
-  return props.text.substring(0, 2).toUpperCase();
-});
+const avatarUrl = computed(() => getVersionedAvatarUrl(props.src, props.version));
+const initials = computed(() => getAvatarText(props.text));
 </script>
 
 <template>
@@ -69,7 +66,7 @@ const initials = computed(() => {
     :class="['avatar', `avatar--${shape}`]"
     :style="avatarStyle"
   >
-    <img v-if="src" :src="src" :alt="text" class="avatar__image" />
+    <img v-if="avatarUrl" :src="avatarUrl" :alt="text" class="avatar__image" />
     <span v-else class="avatar__text">{{ initials }}</span>
     <slot name="badge" />
   </div>
@@ -82,7 +79,6 @@ const initials = computed(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: var(--gradient-primary);
   color: white;
   font-weight: 600;
   overflow: hidden;

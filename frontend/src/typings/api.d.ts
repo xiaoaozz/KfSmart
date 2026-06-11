@@ -48,6 +48,8 @@ declare namespace Api {
       role: 'USER' | 'ADMIN';
       orgTags: string[];
       primaryOrg: string;
+      avatar?: string | null;
+      avatarVersion?: number;
     }
   }
 
