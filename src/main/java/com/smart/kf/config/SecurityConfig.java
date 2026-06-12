@@ -68,6 +68,8 @@ public class SecurityConfig {
                             .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                             // 知识库管理接口 - 用户和管理员都可访问（自己创建的或公开的知识库）
                             .requestMatchers("/api/v1/knowledge-bases/**").hasAnyRole("USER", "ADMIN")
+                            // AI能力中心 - Agent工作流、MCP工具、Prompt、运行分析
+                            .requestMatchers("/api/v1/agent-center/**").hasAnyRole("USER", "ADMIN")
                             // 用户通知接口 - 用户和管理员都可访问（只能看到自己的通知）
                             .requestMatchers("/api/v1/notifications/**").hasAnyRole("USER", "ADMIN")
                             // 登录记录和统计接口 - 用户和管理员都可访问

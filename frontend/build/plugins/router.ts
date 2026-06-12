@@ -25,10 +25,41 @@ export function setupElegantRouter() {
       const key = routeName as RouteKey;
 
       const constantRoutes: RouteKey[] = ['login', '403', '404', '500'];
+      const aiCenterMeta: Partial<Record<string, Partial<RouteMeta>>> = {
+        'ai-center': {
+          icon: 'carbon:ai-status',
+          order: 3.5
+        },
+        'ai-center_agent-workflow': {
+          icon: 'carbon:flow',
+          order: 1
+        },
+        'ai-center_mcp-tools': {
+          icon: 'carbon:tool-kit',
+          order: 2
+        },
+        'ai-center_prompt-management': {
+          icon: 'carbon:text-annotation-toggle',
+          order: 3
+        },
+        'ai-center_model-management': {
+          icon: 'carbon:model',
+          order: 4
+        },
+        'ai-center_agent-marketplace': {
+          icon: 'carbon:store',
+          order: 5
+        },
+        'ai-center_run-analysis': {
+          icon: 'carbon:chart-line-data',
+          order: 6
+        }
+      };
 
       const meta: Partial<RouteMeta> = {
         title: key,
-        i18nKey: `route.${key}` as App.I18n.I18nKey
+        i18nKey: `route.${key}` as App.I18n.I18nKey,
+        ...aiCenterMeta[key]
       };
 
       if (constantRoutes.includes(key)) {

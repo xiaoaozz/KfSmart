@@ -416,4 +416,119 @@ declare namespace Api {
       recentRecords: Item[];
     }
   }
+
+  namespace AgentCenter {
+    interface Workflow {
+      id: number;
+      workflowId: string;
+      name: string;
+      description: string;
+      type: string;
+      status: string;
+      ownerName: string;
+      tags: string;
+      callCount: number;
+      successCount: number;
+      failureCount: number;
+      avgDurationMs: number;
+      installCount: number;
+      permissionScope: string;
+      knowledgeBases: string;
+      promptRefs: string;
+      mcpTools: string;
+      models: string;
+      nodesJson: string;
+      edgesJson: string;
+      createdAt: string;
+      updatedAt: string;
+      publishedAt: string | null;
+    }
+
+    interface WorkflowStats {
+      agentCount: number;
+      runCount: number;
+      successRate: number;
+      avgDurationMs: number;
+    }
+
+    interface PromptTemplate {
+      id: number;
+      templateId: string;
+      name: string;
+      category: string;
+      version: string;
+      content: string;
+      variables: string;
+      status: string;
+      updatedAt: string;
+    }
+
+    interface McpTool {
+      id: number;
+      toolId: string;
+      name: string;
+      type: string;
+      status: string;
+      endpoint: string;
+      authType: string;
+      apiKeyMasked: string;
+      apiKey?: string;
+      description: string;
+      callCount: number;
+      updatedAt: string;
+    }
+
+    interface DebugResult {
+      trace: { name: string; durationMs: number; status: string }[];
+      variables: Record<string, any>;
+      tokens: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        cost: number;
+      };
+      output: {
+        answer: string;
+        documents: any[];
+      };
+      durationMs: number;
+    }
+
+    interface MarketplaceItem {
+      workflowId: string;
+      name: string;
+      category: string;
+      description: string;
+      installCount: number;
+      tags: string;
+    }
+
+    interface RunAnalysis extends WorkflowStats {
+      failureRate: number;
+      hotAgents: { name: string; callCount: number }[];
+      cost: {
+        tokenUsage: number;
+        modelCost: number;
+        toolCost: number;
+      };
+    }
+
+    interface ModelConfig {
+      id: number;
+      name: string;
+      provider: string;
+      apiUrl: string;
+      apiKey: string;
+      modelName: string;
+      active: boolean;
+      authType: string;
+      temperature: number;
+      maxTokens: number;
+      topP: number;
+      remark: string;
+      status: string;
+      scene: string;
+      updatedAt: string;
+    }
+  }
 }
