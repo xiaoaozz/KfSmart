@@ -20,6 +20,13 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "ai-center": "/ai-center";
+    "ai-center_agent-marketplace": "/ai-center/agent-marketplace";
+    "ai-center_agent-workflow": "/ai-center/agent-workflow";
+    "ai-center_mcp-tools": "/ai-center/mcp-tools";
+    "ai-center_model-management": "/ai-center/model-management";
+    "ai-center_prompt-management": "/ai-center/prompt-management";
+    "ai-center_run-analysis": "/ai-center/run-analysis";
     "api-key-management": "/api-key-management";
     "chat": "/chat";
     "document-management": "/document-management";
@@ -64,6 +71,7 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "ai-center"
     | "api-key-management"
     | "chat"
     | "document-management"
@@ -95,6 +103,12 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "ai-center_agent-marketplace"
+    | "ai-center_agent-workflow"
+    | "ai-center_mcp-tools"
+    | "ai-center_model-management"
+    | "ai-center_prompt-management"
+    | "ai-center_run-analysis"
     | "api-key-management"
     | "chat"
     | "document-management"

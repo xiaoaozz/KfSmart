@@ -170,6 +170,47 @@ public class ModelClient {
                 );
     }
 
+    /**
+     * 非流式对话接口，供工作流引擎等同步执行场景使用。
+     */
+    public String chat(String userMessage,
+                       String context,
+                       List<Map<String, String>> history,
+                       ApiKeyConfig apiKeyConfig) {
+        WebClient client;
+        String model;
+
+        if (apiKeyConfig != null) {
+            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
+            model = apiKeyConfig.getModelName();
+        } else {
+            client = defaultWebClient;
+            model = defaultModel;
+        }
+
+        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
+                ? apiKeyConfig.getAuthType().toLowerCase()
+                : "bearer";
+        Map<String, Object> requestBody = buildRequest(userMessage, context, history, model, apiKeyConfig);
+        requestBody.put("stream", false);
+        String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
+
+        String response = client.post()
+                .uri(resolvedUri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(
+                        HttpStatusCode::isError,
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> Mono.error(new RuntimeException(parseErrorMessage(errorBody))))
+                )
+                .bodyToMono(String.class)
+                .block();
+
+        return "anthropic".equals(authType) ? parseAnthropicText(response) : parseOpenAiText(response);
+    }
+
     // ───────────────────────── 私有方法 ─────────────────────────
 
     /**
@@ -411,5 +452,50 @@ public class ModelClient {
         } catch (Exception e) {
             logger.error("处理 Anthropic 数据块时出错: {}", e.getMessage(), e);
         }
+    }
+
+    private String parseOpenAiText(String response) {
+        try {
+            JsonNode node = new ObjectMapper().readTree(response);
+            return node.path("choices").path(0).path("message").path("content").asText("");
+        } catch (Exception e) {
+            logger.error("解析非流式模型响应失败: {}", e.getMessage(), e);
+            throw new RuntimeException("解析模型响应失败");
+        }
+    }
+
+    private String parseAnthropicText(String response) {
+        try {
+            JsonNode node = new ObjectMapper().readTree(response);
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode item : node.path("content")) {
+                String text = item.path("text").asText("");
+                if (!text.isEmpty()) {
+                    builder.append(text);
+                }
+            }
+            return builder.toString();
+        } catch (Exception e) {
+            logger.error("解析 Anthropic 非流式响应失败: {}", e.getMessage(), e);
+            throw new RuntimeException("解析模型响应失败");
+        }
+    }
+
+    private String parseErrorMessage(String errorBody) {
+        String msg = "模型服务暂时不可用";
+        try {
+            JsonNode errNode = new ObjectMapper().readTree(errorBody);
+            if (errNode.has("msg")) {
+                msg = errNode.get("msg").asText(msg);
+            } else if (errNode.has("message")) {
+                msg = errNode.get("message").asText(msg);
+            } else if (errNode.has("error")) {
+                JsonNode error = errNode.get("error");
+                msg = error.has("message") ? error.get("message").asText(msg) : error.asText(msg);
+            }
+        } catch (Exception e) {
+            logger.warn("无法解析模型服务错误响应体: {}", errorBody);
+        }
+        return msg;
     }
 }

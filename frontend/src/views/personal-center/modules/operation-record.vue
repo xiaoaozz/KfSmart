@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 
 defineOptions({ name: 'OperationRecord' });
 
-const pageSizeOptions = [5, 10, 20, 50];
+const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
-const pageSize = ref(5);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const filterType = ref('all');
 const searchText = ref('');
 
@@ -177,8 +178,7 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
       </div>
 
       <!-- 分页 -->
-      <div v-if="filteredRecords.length > 0" class="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-        <span class="text-xs text-gray-400">每页展示更少记录，避免右侧出现滚动条</span>
+      <div v-if="filteredRecords.length > 0" class="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
         <NPagination
           v-model:page="currentPage"
           :page-count="pageCount"

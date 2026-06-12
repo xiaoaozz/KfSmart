@@ -5,7 +5,7 @@
 
 import type { GeneratedRoute } from '@elegant-router/types'
 
-export const generatedRoutes: GeneratedRoute[] = [
+export const generatedRoutes = [
   {
     name: '403',
     path: '/403',
@@ -38,6 +38,85 @@ export const generatedRoutes: GeneratedRoute[] = [
       constant: true,
       hideInMenu: true
     }
+  },
+  {
+    name: 'ai-center',
+    path: '/ai-center',
+    component: 'layout.base',
+    meta: {
+      title: 'ai-center',
+      i18nKey: 'route.ai-center',
+      icon: 'carbon:ai-status',
+      order: 3.5
+    },
+    children: [
+      {
+        name: 'ai-center_agent-marketplace',
+        path: '/ai-center/agent-marketplace',
+        component: 'view.ai-center_agent-marketplace',
+        meta: {
+          title: 'ai-center_agent-marketplace',
+          i18nKey: 'route.ai-center_agent-marketplace',
+          icon: 'carbon:store',
+          order: 5
+        }
+      },
+      {
+        name: 'ai-center_agent-workflow',
+        path: '/ai-center/agent-workflow',
+        component: 'view.ai-center_agent-workflow',
+        meta: {
+          title: 'ai-center_agent-workflow',
+          i18nKey: 'route.ai-center_agent-workflow',
+          icon: 'carbon:flow',
+          order: 1
+        }
+      },
+      {
+        name: 'ai-center_mcp-tools',
+        path: '/ai-center/mcp-tools',
+        component: 'view.ai-center_mcp-tools',
+        meta: {
+          title: 'ai-center_mcp-tools',
+          i18nKey: 'route.ai-center_mcp-tools',
+          icon: 'carbon:tool-kit',
+          order: 2
+        }
+      },
+      {
+        name: 'ai-center_model-management',
+        path: '/ai-center/model-management',
+        component: 'view.ai-center_model-management',
+        meta: {
+          title: 'ai-center_model-management',
+          i18nKey: 'route.ai-center_model-management',
+          icon: 'carbon:model',
+          order: 4
+        }
+      },
+      {
+        name: 'ai-center_prompt-management',
+        path: '/ai-center/prompt-management',
+        component: 'view.ai-center_prompt-management',
+        meta: {
+          title: 'ai-center_prompt-management',
+          i18nKey: 'route.ai-center_prompt-management',
+          icon: 'carbon:text-annotation-toggle',
+          order: 3
+        }
+      },
+      {
+        name: 'ai-center_run-analysis',
+        path: '/ai-center/run-analysis',
+        component: 'view.ai-center_run-analysis',
+        meta: {
+          title: 'ai-center_run-analysis',
+          i18nKey: 'route.ai-center_run-analysis',
+          icon: 'carbon:chart-line-data',
+          order: 6
+        }
+      }
+    ]
   },
   {
     name: 'api-key-management',
