@@ -6,6 +6,7 @@ import com.smart.kf.model.agent.PromptTemplate;
 import com.smart.kf.service.AgentCenterService;
 import com.smart.kf.utils.pagination.PageQuery;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -31,6 +32,7 @@ public class AgentCenterController {
     }
 
     @GetMapping("/workflows")
+    @PreAuthorize("hasAuthority('agent:read')")
     public ResponseEntity<?> listWorkflows(
         @RequestParam(required = false) String keyword,
         @RequestParam(required = false) Integer page,
@@ -51,11 +53,13 @@ public class AgentCenterController {
     }
 
     @PostMapping("/workflows")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> createWorkflow(@RequestBody AgentWorkflow request) {
         return ok("保存工作流成功", agentCenterService.saveWorkflow(request));
     }
 
     @PutMapping("/workflows/{workflowId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> updateWorkflow(@PathVariable String workflowId, @RequestBody AgentWorkflow request) {
         request.setWorkflowId(workflowId);
         return ok("保存工作流成功", agentCenterService.saveWorkflow(request));
@@ -67,17 +71,20 @@ public class AgentCenterController {
     }
 
     @PostMapping("/workflows/{workflowId}/publish")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> publishWorkflow(@PathVariable String workflowId) {
         return ok("发布工作流成功", agentCenterService.publishWorkflow(workflowId));
     }
 
     @DeleteMapping("/workflows/{workflowId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> deleteWorkflow(@PathVariable String workflowId) {
         agentCenterService.deleteWorkflow(workflowId);
         return ok("删除工作流成功", null);
     }
 
     @PostMapping("/workflows/{workflowId}/debug")
+    @PreAuthorize("hasAuthority('agent:run')")
     public ResponseEntity<?> debugWorkflow(@PathVariable String workflowId, @RequestBody Map<String, Object> input) {
         return ok("调试运行成功", agentCenterService.debugWorkflow(workflowId, input, currentUsername()));
     }
@@ -93,17 +100,20 @@ public class AgentCenterController {
     }
 
     @PostMapping("/prompts")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> savePrompt(@RequestBody PromptTemplate request) {
         return ok("保存Prompt成功", agentCenterService.savePrompt(request));
     }
 
     @PutMapping("/prompts/{templateId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> updatePrompt(@PathVariable String templateId, @RequestBody PromptTemplate request) {
         request.setTemplateId(templateId);
         return ok("保存Prompt成功", agentCenterService.savePrompt(request));
     }
 
     @DeleteMapping("/prompts/{templateId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> deletePrompt(@PathVariable String templateId) {
         agentCenterService.deletePrompt(templateId);
         return ok("删除Prompt成功", null);
@@ -120,6 +130,7 @@ public class AgentCenterController {
     }
 
     @PostMapping("/mcp-tools")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> saveTool(@RequestBody McpToolConfig request) {
         return ok("保存MCP工具成功", agentCenterService.saveTool(request));
     }
@@ -131,6 +142,7 @@ public class AgentCenterController {
     }
 
     @DeleteMapping("/mcp-tools/{toolId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> deleteTool(@PathVariable String toolId) {
         agentCenterService.deleteTool(toolId);
         return ok("删除MCP工具成功", null);

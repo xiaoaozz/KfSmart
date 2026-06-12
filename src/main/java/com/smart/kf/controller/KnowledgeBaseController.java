@@ -1,12 +1,14 @@
 package com.smart.kf.controller;
 
 import com.smart.kf.service.KnowledgeBaseService;
+import com.smart.kf.service.RbacService;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -30,10 +32,14 @@ public class KnowledgeBaseController {
     @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private RbacService rbacService;
+
     /**
      * 创建知识库
      */
     @PostMapping
+    @PreAuthorize("hasAuthority('kb:write')")
     public ResponseEntity<?> createKnowledgeBase(
             @RequestHeader("Authorization") String token,
             @RequestBody CreateKbRequest request) {
@@ -254,6 +260,7 @@ public class KnowledgeBaseController {
      * 更新知识库
      */
     @PutMapping("/{kbId}")
+    @PreAuthorize("hasAuthority('kb:write')")
     public ResponseEntity<?> updateKnowledgeBase(
             @RequestHeader("Authorization") String token,
             @PathVariable String kbId,
@@ -302,6 +309,7 @@ public class KnowledgeBaseController {
      * 删除知识库
      */
     @DeleteMapping("/{kbId}")
+    @PreAuthorize("hasAuthority('kb:delete')")
     public ResponseEntity<?> deleteKnowledgeBase(
             @RequestHeader("Authorization") String token,
             @PathVariable String kbId) {
@@ -391,4 +399,80 @@ public class KnowledgeBaseController {
                 .body(Map.of("code", 500, "message", "获取知识库文档失败: " + e.getMessage()));
         }
     }
+
+    // ========== 知识库资源权限管理接口 ==========
+
+    /**
+     * 查看知识库权限列表（仅知识库管理员或系统管理员可查）
+     */
+    @GetMapping("/{kbId}/permissions")
+    @PreAuthorize("hasAuthority('kb:admin') or hasAuthority('system:admin')")
+    public ResponseEntity<?> listKbPermissions(@PathVariable String kbId) {
+        try {
+            var perms = rbacService.listResourcePermissions("kb", kbId);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取成功", "data", perms));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "获取权限列表失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 授权：给用户/角色/组织授予对某知识库的访问权限
+     * 需要知识库管理员权限（kb:admin）
+     */
+    @PostMapping("/{kbId}/permissions")
+    @PreAuthorize("hasAuthority('kb:admin') or hasAuthority('system:admin')")
+    public ResponseEntity<?> grantKbPermission(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String kbId,
+            @RequestBody GrantPermRequest request) {
+        String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            String userIdStr = jwtUtils.extractUserIdFromToken(token.replace("Bearer ", ""));
+            Long grantedBy = userIdStr != null ? Long.parseLong(userIdStr) : null;
+
+            var rp = rbacService.grantResourcePermission(
+                "kb", kbId,
+                request.granteeType(), request.granteeId(),
+                request.permission(), grantedBy
+            );
+            LogUtils.logBusiness("GRANT_KB_PERM", username, "知识库授权: kbId=%s, granteeType=%s, granteeId=%s, perm=%s",
+                kbId, request.granteeType(), request.granteeId(), request.permission());
+            return ResponseEntity.ok(Map.of("code", 200, "message", "授权成功", "data", rp));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "授权失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 撤销授权
+     * 需要知识库管理员权限（kb:admin）
+     */
+    @DeleteMapping("/{kbId}/permissions")
+    @PreAuthorize("hasAuthority('kb:admin') or hasAuthority('system:admin')")
+    public ResponseEntity<?> revokeKbPermission(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String kbId,
+            @RequestParam String granteeType,
+            @RequestParam String granteeId) {
+        String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            rbacService.revokeResourcePermission("kb", kbId, granteeType, granteeId);
+            LogUtils.logBusiness("REVOKE_KB_PERM", username, "撤销知识库授权: kbId=%s, granteeType=%s, granteeId=%s",
+                kbId, granteeType, granteeId);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "撤销授权成功"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "撤销授权失败: " + e.getMessage()));
+        }
+    }
+
+    /** 授权请求体 */
+    public record GrantPermRequest(
+        String granteeType,   // user、role、org
+        String granteeId,     // 用户ID/角色编码/组织标签
+        String permission     // read、write、delete、admin
+    ) {}
 }

@@ -34,9 +34,18 @@ export function createRouteGuard(router: Router) {
     const isLogin = Boolean(localStg.get('token'));
     const needLogin = !to.meta.constant;
     const routeRoles = to.meta.roles || [];
+    const routePermissions = (to.meta as any).permissions as string[] | undefined;
 
-    const hasRole = routeRoles.includes(authStore.userInfo.role);
-    const hasAuth = authStore.isStaticSuper || !routeRoles.length || hasRole;
+    // 优先检查细粒度权限（permissions），回退到 roles 检查
+    let hasAuth: boolean;
+    if (routePermissions && routePermissions.length > 0) {
+      // 使用 RBAC 权限编码判断（任一满足即可访问）
+      hasAuth = authStore.isStaticSuper || authStore.hasAnyPermission(routePermissions);
+    } else {
+      // 旧版角色检查（兼容过渡期）
+      const hasRole = routeRoles.includes(authStore.userInfo.role);
+      hasAuth = authStore.isStaticSuper || !routeRoles.length || hasRole;
+    }
 
     // if it is login route when logged in, then switch to the root page
     if (to.name === loginRoute && isLogin) {

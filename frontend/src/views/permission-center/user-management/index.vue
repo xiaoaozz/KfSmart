@@ -1,7 +1,7 @@
 <script setup lang="tsx">
-import { NButton, NInput, NPagination, NSelect, NTag, NSpace } from 'naive-ui';
-import OrgTagSettingDialog from './modules/org-tag-setting-dialog.vue';
-import RoleSettingDialog from './modules/role-setting-dialog.vue';
+import { NButton, NInput, NPagination, NSelect, NTag } from 'naive-ui';
+import OrgTagSettingDialog from '@/views/user/modules/org-tag-setting-dialog.vue';
+import RoleSettingDialog from '@/views/user/modules/role-setting-dialog.vue';
 import { enableStatusOptions } from '@/constants/common';
 import debounce from 'lodash-es/debounce';
 
@@ -17,11 +17,6 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
     status: null
   },
   columns: () => [
-    {
-      key: 'index',
-      title: '序号',
-      width: 64
-    },
     {
       key: 'username',
       title: '用户名',
@@ -67,15 +62,17 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       key: 'operate',
       title: '操作',
       width: 200,
+      align: 'center',
+      titleAlign: 'center',
       render: row => (
-        <NSpace size="small">
-          <NButton type="primary" ghost size="small" onClick={() => handleOrgTag(row)}>
+        <div class="flex items-center justify-center gap-2">
+          <NButton text size="small" type="primary" onClick={() => handleOrgTag(row)}>
             分配标签
           </NButton>
-          <NButton type="info" ghost size="small" onClick={() => handleRole(row)}>
+          <NButton text size="small" type="info" onClick={() => handleRole(row)}>
             分配角色
           </NButton>
-        </NSpace>
+        </div>
       )
     }
   ]
@@ -172,4 +169,19 @@ function handleRole(row: Api.User.Item) {
   </div>
 </template>
 
-<style scoped></style>
+<style scoped lang="scss">
+/* 表格行间距优化 */
+:deep(.n-data-table) {
+  .n-data-table-th,
+  .n-data-table-td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  // 首列左侧留白与右侧操作列对称
+  th:first-child,
+  td:first-child {
+    padding-left: 40px !important;
+  }
+}
+</style>

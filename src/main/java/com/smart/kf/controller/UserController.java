@@ -8,6 +8,7 @@ import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.UserRepository;
+import com.smart.kf.service.RbacService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
@@ -58,6 +59,8 @@ public class UserController {
     @Autowired
     private FileUploadRepository fileUploadRepository;
 
+    @Autowired
+    private RbacService rbacService;
     @Autowired
     private KnowledgeBaseRepository knowledgeBaseRepository;
 
@@ -187,6 +190,10 @@ public class UserController {
             // 添加主组织标签信息
             displayUserData.put("primaryOrg", user.getPrimaryOrg());
             displayUserData.put("avatar", user.getAvatarUrl());
+            
+            // 添加 RBAC 权限编码列表（用于前端菜单/按钮权限控制）
+            Set<String> permissions = rbacService.getUserPermissions(username);
+            displayUserData.put("permissions", new java.util.ArrayList<>(permissions));
             
             displayUserData.put("createdAt", user.getCreatedAt());
             displayUserData.put("updatedAt", user.getUpdatedAt());

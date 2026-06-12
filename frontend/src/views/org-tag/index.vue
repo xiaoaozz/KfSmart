@@ -1,6 +1,8 @@
 <script setup lang="tsx">
-import { NButton, NPagination, NPopconfirm } from 'naive-ui';
+import { NButton, NPagination, NPopconfirm, NInput } from 'naive-ui';
 import OrgTagOperateDialog from './modules/org-tag-operate-dialog.vue';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import debounce from 'lodash-es/debounce';
 
 const { columns, columnChecks, data, loading, getData, mobilePagination } = useTable({
   apiFn: fetchGetOrgTagList,
@@ -19,25 +21,32 @@ const { columns, columnChecks, data, loading, getData, mobilePagination } = useT
       minWidth: 200,
       ellipsis: {
         tooltip: true
-      }
+      },
+      render: (row: Api.OrgTag.Item) => (
+        <span class="text-gray-500 dark:text-gray-400">
+          {row.description || '暂无描述'}
+        </span>
+      )
     },
     {
       key: 'operate',
       title: '操作',
-      width: 240,
-      render: row => (
-        <div class="flex gap-2">
-          <NButton type="success" ghost size="small" onClick={() => addChild(row)}>
+      width: 220,
+      align: 'center' as const,
+      titleAlign: 'center' as const,
+      render: (row: Api.OrgTag.Item) => (
+        <div class="flex items-center justify-center gap-2">
+          <NButton text size="small" type="success" onClick={() => addChild(row)}>
             新增下级
           </NButton>
-          <NButton type="primary" ghost size="small" onClick={() => edit(row)}>
+          <NButton text size="small" type="primary" onClick={() => edit(row)}>
             编辑
           </NButton>
           <NPopconfirm onPositiveClick={() => handleDelete(row.tagId!)}>
             {{
               default: () => '确认删除当前标签吗？',
               trigger: () => (
-                <NButton type="error" ghost size="small">
+                <NButton text size="small" type="error">
                   删除
                 </NButton>
               )
@@ -57,8 +66,35 @@ const {
   handleAddChild,
   handleEdit,
   onDeleted
-  // closeDrawer
 } = useTableOperate<Api.OrgTag.Item>(getData);
+
+/** 搜索关键词 */
+const keyword = ref('');
+
+/** 过滤后的数据 */
+const filteredData = computed(() => {
+  const kw = keyword.value.trim().toLowerCase();
+  if (!kw) return data.value;
+  return data.value.filter(
+    (item: Api.OrgTag.Item) =>
+      item.name?.toLowerCase().includes(kw) ||
+      item.description?.toLowerCase().includes(kw)
+  );
+});
+
+/** 分页状态 */
+const page = ref(1);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
+
+/** 当前页数据 */
+const pagedData = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filteredData.value.slice(start, start + pageSize.value);
+});
+
+const debouncedSearch = debounce(() => {
+  page.value = 1;
+}, 300);
 
 function addChild(row: Api.OrgTag.Item) {
   handleAddChild(row);
@@ -84,22 +120,34 @@ async function handleDelete(tagId: string) {
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">组织管理</h1>
 
       <!-- 工具栏 -->
-      <div class="flex items-center justify-between mb-4">
-        <TableColumnSetting v-model:columns="columnChecks" />
-        <div class="flex items-center gap-3">
-          <NButton :loading="loading" @click="getData">
-            <template #icon>
-              <icon-carbon:renew />
-            </template>
-            刷新
-          </NButton>
-          <NButton type="primary" @click="handleAdd">
-            <template #icon>
-              <icon-carbon:add />
-            </template>
-            新增标签
-          </NButton>
-        </div>
+      <div class="flex items-center gap-3 mb-4">
+        <NInput
+          v-model:value="keyword"
+          placeholder="搜索标签名称或描述"
+          clearable
+          class="max-w-220px"
+          @input="debouncedSearch"
+          @clear="debouncedSearch"
+        >
+          <template #prefix>
+            <icon-carbon:search class="text-gray-400" />
+          </template>
+        </NInput>
+
+        <div class="flex-1" />
+
+        <NButton :loading="loading" @click="getData">
+          <template #icon>
+            <icon-carbon:renew />
+          </template>
+          刷新
+        </NButton>
+        <NButton type="primary" @click="handleAdd">
+          <template #icon>
+            <icon-carbon:add />
+          </template>
+          新增标签
+        </NButton>
       </div>
 
       <!-- 表格 -->
@@ -107,7 +155,7 @@ async function handleDelete(tagId: string) {
         <NDataTable
           remote
           :columns="columns"
-          :data="data"
+          :data="pagedData"
           size="small"
           :scroll-x="962"
           :loading="loading"
@@ -115,7 +163,15 @@ async function handleDelete(tagId: string) {
           :row-key="item => item.tagId"
         />
         <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-          <NPagination v-bind="mobilePagination" />
+          <NPagination
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            :item-count="filteredData.length"
+            :page-sizes="PAGINATION_PAGE_SIZE_OPTIONS"
+            show-size-picker
+            show-quick-jumper
+            :page-slot="5"
+          />
         </div>
       </div>
     </div>
@@ -129,4 +185,19 @@ async function handleDelete(tagId: string) {
   </div>
 </template>
 
-<style scoped></style>
+<style scoped lang="scss">
+/* 表格行间距优化 */
+:deep(.n-data-table) {
+  .n-data-table-th,
+  .n-data-table-td {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  // 首列左侧留白与右侧操作列对称
+  th:first-child,
+  td:first-child {
+    padding-left: 40px !important;
+  }
+}
+</style>

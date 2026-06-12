@@ -30,8 +30,9 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   chat: () => import("@/views/chat/index.vue"),
   "document-management": () => import("@/views/document-management/index.vue"),
   "knowledge-base": () => import("@/views/knowledge-base/index.vue"),
-  "org-tag": () => import("@/views/org-tag/index.vue"),
+  "permission-center_org-management": () => import("@/views/org-tag/index.vue"),
+  "permission-center_role-management": () => import("@/views/permission-center/role-management/index.vue"),
+  "permission-center_user-management": () => import("@/views/permission-center/user-management/index.vue"),
   "personal-center": () => import("@/views/personal-center/index.vue"),
   "system-overview": () => import("@/views/system-overview/index.vue"),
-  user: () => import("@/views/user/index.vue"),
 };

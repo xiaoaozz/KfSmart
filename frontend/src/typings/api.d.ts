@@ -50,6 +50,8 @@ declare namespace Api {
       primaryOrg: string;
       avatar?: string | null;
       avatarVersion?: number;
+      /** RBAC 权限编码列表（如 ['kb:read', 'kb:write', 'chat:use']） */
+      permissions: string[];
     }
   }
 
@@ -88,6 +90,23 @@ declare namespace Api {
       primaryOrg: string;
       orgTagDetails: Details[];
     };
+  }
+
+  /** RBAC 角色与权限类型 */
+  namespace Rbac {
+    interface Permission {
+      permCode: string;
+      permName: string;
+    }
+
+    interface Role {
+      id: number;
+      roleCode: string;
+      roleName: string;
+      description: string;
+      isSystem: boolean;
+      permissions?: Permission[];
+    }
   }
 
   namespace User {

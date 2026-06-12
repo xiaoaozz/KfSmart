@@ -414,11 +414,11 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
   }
 }
 
-/* 第一列与分页区域左侧对齐，保持 16px 左内边距 */
+/* 首列左侧与页面边距对齐，和文档管理保持一致 */
 :deep(.kb-table) {
   th:first-child,
   td:first-child {
-    padding-left: 16px !important;
+    padding-left: 40px !important;
   }
 }
 </style>

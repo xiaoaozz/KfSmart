@@ -173,10 +173,12 @@ const local: App.I18n.Schema = {
     'ai-center_model-management': '模型管理',
     'ai-center_agent-marketplace': 'Agent广场',
     'ai-center_run-analysis': '运行分析',
-    'org-tag': '组织标签',
-    user: '用户管理',
     'personal-center': '个人中心',
-    'api-key-management': 'API Key 管理'
+    'api-key-management': 'API Key 管理',
+    'permission-center': '权限管理',
+    'permission-center_user-management': '用户管理',
+    'permission-center_role-management': '角色管理',
+    'permission-center_org-management': '组织管理'
   },
   page: {
     login: {

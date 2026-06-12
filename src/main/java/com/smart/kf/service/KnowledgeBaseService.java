@@ -45,6 +45,9 @@ public class KnowledgeBaseService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private RbacService rbacService;
+
     private static final int CHUNK_SIZE_BYTES = 4096;
 
     /**
@@ -86,7 +89,7 @@ public class KnowledgeBaseService {
     }
     
     /**
-     * 判断用户是否可访问该知识库
+     * 判断用户是否可访问该知识库（结合 RBAC 资源权限和旧 org_tag 兼容逻辑）
      */
     private boolean isAccessible(KnowledgeBase kb, String username, Set<String> userOrgTags) {
         // 用户创建的知识库
@@ -97,7 +100,17 @@ public class KnowledgeBaseService {
         if (kb.isPublic()) {
             return true;
         }
-        // 用户所属组织标签关联的知识库
+        // 通过 RbacService 检查资源级权限（resource_permissions 表）
+        // 此处 isPublic 传 false，因为公开知识库已在上方提前返回 true
+        boolean hasResourcePerm = rbacService.hasResourcePermission(
+            username, "kb", kb.getKbId(), "read",
+            kb.getCreatedBy() != null ? kb.getCreatedBy().getUsername() : null,
+            kb.getOrgTag(), false
+        );
+        if (hasResourcePerm) {
+            return true;
+        }
+        // 兼容旧 org_tag 逻辑
         return kb.getOrgTag() != null && userOrgTags.contains(kb.getOrgTag());
     }
 
@@ -365,6 +378,9 @@ public class KnowledgeBaseService {
                 }
             }
         }
+        
+        // 清除知识库的所有资源权限记录（RBAC 行级权限）
+        rbacService.deleteAllResourcePermissions("kb", kbId);
         
         knowledgeBaseRepository.delete(kb);
         LogUtils.logBusiness("DELETE_KB", operatorUsername, "知识库删除完成: kbId=%s", kbId);

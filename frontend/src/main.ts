@@ -5,6 +5,7 @@ import { setupAppVersionNotification, setupDayjs, setupIconifyOffline, setupLoad
 import { setupStore } from './store';
 import { setupRouter } from './router';
 import { setupI18n } from './locales';
+import { setupDirectives } from './directives';
 import App from './App.vue';
 async function setupApp() {
   setupLoading();
@@ -22,6 +23,9 @@ async function setupApp() {
   await setupRouter(app);
 
   setupI18n(app);
+
+  // 注册全局自定义指令（含 v-permission）
+  setupDirectives(app);
 
   setupAppVersionNotification();
 

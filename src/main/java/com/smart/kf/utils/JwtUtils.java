@@ -8,16 +8,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.smart.kf.model.Permission;
+import com.smart.kf.model.Role;
 import com.smart.kf.model.User;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.TokenCacheService;
 
 import javax.crypto.SecretKey;
-import java.util.Base64;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.Set;
 
 @Component
 public class JwtUtils {
@@ -74,6 +73,12 @@ public class JwtUtils {
         if (user.getPrimaryOrg() != null && !user.getPrimaryOrg().isEmpty()) {
             claims.put("primaryOrg", user.getPrimaryOrg());
         }
+        
+        // 添加用户权限编码列表（RBAC，用于前端菜单/按钮渲染）
+        Set<String> permissions = buildUserPermissions(user);
+        if (!permissions.isEmpty()) {
+            claims.put("permissions", String.join(",", permissions));
+        }
 
         String token = Jwts.builder()
                 .setClaims(claims)
@@ -117,7 +122,7 @@ public class JwtUtils {
             return true;
         } catch (ExpiredJwtException e) {
             logger.warn("Token expired: {}", e.getClaims().get("tokenId", String.class));
-        } catch (SignatureException e) {
+        } catch (io.jsonwebtoken.security.SecurityException e) {
             logger.warn("Invalid token signature");
         } catch (Exception e) {
             logger.error("Error validating token", e);
@@ -353,7 +358,7 @@ public class JwtUtils {
             return true;
         } catch (ExpiredJwtException e) {
             logger.warn("Refresh token expired: {}", e.getClaims().get("refreshTokenId", String.class));
-        } catch (SignatureException e) {
+        } catch (io.jsonwebtoken.security.SecurityException e) {
             logger.warn("Invalid refresh token signature");
         } catch (Exception e) {
             logger.error("Error validating refresh token", e);
@@ -429,5 +434,57 @@ public class JwtUtils {
         } catch (Exception e) {
             logger.error("Error invalidating all user tokens: {}", userId, e);
         }
+    }
+
+    /**
+     * 从 JWT Token 中提取权限编码列表
+     */
+    @SuppressWarnings("unused")
+    public Set<String> extractPermissionsFromToken(String token) {
+        try {
+            Claims claims = extractClaimsIgnoreExpiration(token);
+            if (claims == null) return new java.util.HashSet<>();
+            String permsStr = claims.get("permissions", String.class);
+            if (permsStr == null || permsStr.isEmpty()) return new java.util.HashSet<>();
+            return new java.util.HashSet<>(Arrays.asList(permsStr.split(",")));
+        } catch (Exception e) {
+            logger.error("Error extracting permissions from token", e);
+            return new java.util.HashSet<>();
+        }
+    }
+
+    /**
+     * 构建用户权限编码集合（用于写入 JWT）
+     */
+    private Set<String> buildUserPermissions(User user) {
+        Set<String> perms = new java.util.HashSet<>();
+        if (user.getRoles() != null && !user.getRoles().isEmpty()) {
+            for (Role role : user.getRoles()) {
+                for (Permission perm : role.getPermissions()) {
+                    perms.add(perm.getPermCode());
+                }
+            }
+        } else {
+            // 兼容旧 legacyRole
+            @SuppressWarnings("deprecation")
+            User.Role legacy = user.getLegacyRole();
+            if (legacy == User.Role.ADMIN) {
+                perms.addAll(java.util.Arrays.asList(
+                    "kb:read", "kb:write", "kb:delete", "kb:admin",
+                    "doc:read", "doc:write", "doc:delete",
+                    "agent:read", "agent:write", "agent:run",
+                    "user:read", "user:write",
+                    "system:admin", "chat:use"
+                ));
+            } else {
+                perms.addAll(java.util.Arrays.asList(
+                    "kb:read", "kb:write",
+                    "doc:read", "doc:write", "doc:delete",
+                    "agent:read", "agent:write", "agent:run",
+                    "chat:use"
+                ));
+            }
+        }
+        return perms;
     }
 }
