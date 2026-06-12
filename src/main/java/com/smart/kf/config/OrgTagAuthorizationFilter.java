@@ -2,6 +2,7 @@ package com.smart.kf.config;
 
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.service.RbacService;
 import com.smart.kf.utils.JwtUtils;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,296 +15,198 @@ import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.util.Arrays;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
- * 组织标签授权过滤器
- * 用于实现基于组织标签的数据访问控制
- * 支持多级访问控制：
- * 1. 用户私人空间：仅资源创建者可访问
- * 2. 组织资源：组织成员可访问
- * 3. 公开资源：所有用户可访问
- * 实现说明：
- * 本过滤器主要解决两类请求的授权需求：
- * 1. 基于资源ID的权限验证：对特定资源的访问需验证用户是否有权限
- * 2. 基于用户身份的简单授权：某些API只需验证用户身份并传递用户ID
- *    - 如上传文件、获取文档列表等接口，不涉及特定资源的权限检查
- *    - 这类API的控制器方法通过@RequestAttribute("userId")获取用户ID
- *    - 由本过滤器负责从JWT令牌中提取用户ID并设置为请求属性
+ * 组织标签授权过滤器（重构版）
+ * 职责简化为两类：
+ *   1. 为需要用户ID但不需要资源权限检查的 API，从 JWT 中提取并注入 userId/username/role 请求属性
+ *   2. 对包含资源ID的请求，委托 RbacService 进行统一的资源级权限判断
+ * 权限判断逻辑已全部迁移到 RbacService，不再在本过滤器中直接查询数据库或手动比对 org_tag。
  */
 @Component
 public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
 
     private static final Logger logger = LoggerFactory.getLogger(OrgTagAuthorizationFilter.class);
-    private static final String DEFAULT_ORG_TAG = "default"; // 默认组织标签
-    private static final String PRIVATE_TAG_PREFIX = "PRIVATE_"; // 私人组织标签前缀
 
     @Autowired
     private JwtUtils jwtUtils;
-    
+
     @Autowired
     private FileUploadRepository fileUploadRepository;
 
+    @Autowired
+    private RbacService rbacService;
+
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain) {
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain) {
         try {
             String path = request.getRequestURI();
-            
-            // 需要用户ID但不需要资源权限检查的API路径
-            // 这些API只需要用户身份验证，不需要对特定资源进行权限检查
-            // 控制器方法通过@RequestAttribute("userId")获取用户ID
-            if (path.matches(".*/upload/chunk.*") || 
-                path.matches(".*/upload/merge.*") || 
-                path.matches(".*/documents/uploads.*") ||
-                path.matches(".*/search/hybrid.*") ||
-                (path.matches(".*/documents/[a-fA-F0-9]{32}.*") && "DELETE".equals(request.getMethod()))) {
-                
-                String operation = "未知操作";
-                if (path.contains("/chunk")) {
-                    operation = "分片上传";
-                } else if (path.contains("/merge")) {
-                    operation = "合并分片";
-                } else if (path.contains("/uploads")) {
-                    operation = "获取用户文档";
-                } else if (path.contains("/search/hybrid")) {
-                    operation = "混合检索";
-                } else if ("DELETE".equals(request.getMethod()) && path.matches(".*/documents/[a-fA-F0-9]{32}.*")) {
-                    operation = "删除文档";
-                }
-                
-                logger.info("处理{}请求: {}", operation, path);
-                
-                // 将用户ID、用户名和角色设置为请求属性，供控制器方法使用
-                String token = extractToken(request);
-                if (token != null) {
-                    String userId = jwtUtils.extractUserIdFromToken(token);
-                    String username = jwtUtils.extractUsernameFromToken(token);
-                    String role = jwtUtils.extractRoleFromToken(token);
-                    if (userId != null) {
-                        request.setAttribute("userId", userId);
-                        request.setAttribute("username", username);
-                        request.setAttribute("role", role);
-                        logger.debug("为{}请求设置userId属性: {}, username: {}, role: {}", operation, userId, username, role);
-                    } else {
-                        logger.warn("{}请求中无法从token提取userId", operation);
-                    }
-                } else {
-                    logger.warn("{}请求中未找到有效token", operation);
-                }
-                
-                filterChain.doFilter(request, response);
+
+            // ===== 第一类：仅需注入 userId 的 API，不做资源权限校验 =====
+            if (isUserIdOnlyPath(path, request)) {
+                injectUserAttributesFromToken(request, response, filterChain);
                 return;
             }
-            
-            boolean isChunkUpload = path.matches(".*/upload/chunk.*");
-            logger.debug("请求路径: {}, 是否为分片上传: {}", path, isChunkUpload);
-            
-            // 获取路径中的资源ID
+
+            // ===== 提取资源ID =====
             String resourceId = extractResourceIdFromPath(request);
-            
-            // 如果URL不含资源ID，直接放行
             if (resourceId == null) {
-                logger.debug("未找到资源ID，直接放行");
+                // URL 不含资源ID，直接放行（方法级 @PreAuthorize 会做进一步控制）
+                logger.debug("未找到资源ID，直接放行: {}", path);
                 filterChain.doFilter(request, response);
                 return;
             }
-            
-            // 获取资源的组织标签
+
+            // ===== 查询资源基础信息 =====
             ResourceInfo resourceInfo = getResourceInfo(resourceId);
-            
-            // 如果是分片上传并且资源未找到(首次上传)，允许请求通过
-            if (isChunkUpload && resourceInfo == null) {
-                logger.debug("分片上传 - 首次上传文件(无记录)，放行请求: {}", resourceId);
-                filterChain.doFilter(request, response);
-                return;
-            }
-            
-            // 如果资源未找到，返回404
             if (resourceInfo == null) {
-                logger.debug("资源未找到，返回404: {}", resourceId);
+                logger.debug("资源未找到: {}", resourceId);
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
             }
-            
-            String resourceOrgTag = resourceInfo.getOrgTag();
-            
-            // 如果是公开资源、资源没有组织标签、或属于默认组织，直接放行
-            if (resourceInfo.isPublic() || 
-                resourceOrgTag == null || 
-                resourceOrgTag.isEmpty() || 
-                DEFAULT_ORG_TAG.equals(resourceOrgTag)) {
-                logger.debug("资源是公开的或无组织标签或属于默认组织，放行请求");
+
+            // ===== 公开资源直接放行（read 类操作）=====
+            if (resourceInfo.isPublic()) {
+                logger.debug("公开资源，直接放行: {}", resourceId);
                 filterChain.doFilter(request, response);
                 return;
             }
-            
-            // 从请求头获取token
+
+            // ===== 委托 RbacService 做统一权限判断 =====
             String token = extractToken(request);
             if (token == null) {
-                logger.debug("未找到Token，返回401");
+                logger.debug("未找到 Token，返回 401");
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
-            
-            // 获取用户名和角色
+
             String username = jwtUtils.extractUsernameFromToken(token);
-            String role = jwtUtils.extractRoleFromToken(token);
-            
-            // 如果是资源拥有者，直接放行
-            if (username != null && username.equals(resourceInfo.getOwner())) {
-                logger.debug("用户是资源拥有者，放行请求");
-                filterChain.doFilter(request, response);
-                return;
-            }
-            
-            // 如果是管理员，直接放行
-            if ("ADMIN".equals(role)) {
-                logger.debug("用户是管理员，放行请求");
-                filterChain.doFilter(request, response);
-                return;
-            }
-            
-            // 检查是否为私人组织标签资源
-            if (resourceOrgTag.startsWith(PRIVATE_TAG_PREFIX)) {
-                // 私人标签资源只允许拥有者访问，此处已排除拥有者和管理员，拒绝访问
-                logger.debug("私人资源，且用户不是拥有者或管理员，拒绝访问");
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                return;
-            }
-            
-            // 获取用户的组织标签
-            String userOrgTags = jwtUtils.extractOrgTagsFromToken(token);
-            if (userOrgTags == null || userOrgTags.isEmpty()) {
-                logger.debug("用户没有组织标签，拒绝访问");
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                return;
-            }
-            
-            // 检查用户是否有权限访问该资源
-            if (isUserAuthorized(userOrgTags, resourceOrgTag)) {
-                logger.debug("用户有访问权限，放行请求");
+            String requiredPerm = httpMethodToPermission(request.getMethod());
+
+            boolean allowed = rbacService.hasResourcePermission(
+                username,
+                "doc",          // 当前过滤器主要处理文件/文档资源
+                resourceId,
+                requiredPerm,
+                resourceInfo.getOwner(),
+                resourceInfo.getOrgTag(),
+                resourceInfo.isPublic()
+            );
+
+            if (allowed) {
+                // 注入请求属性供后续 Controller 使用
+                String userId = jwtUtils.extractUserIdFromToken(token);
+                String role = jwtUtils.extractRoleFromToken(token);
+                if (userId != null) {
+                    request.setAttribute("userId", userId);
+                    request.setAttribute("username", username);
+                    request.setAttribute("role", role);
+                }
                 filterChain.doFilter(request, response);
             } else {
-                logger.debug("用户组织标签不匹配资源组织，拒绝访问");
+                logger.debug("用户 {} 无权访问资源 {} (requiredPerm={})", username, resourceId, requiredPerm);
                 response.setStatus(HttpServletResponse.SC_FORBIDDEN);
             }
+
         } catch (Exception e) {
-            logger.error("组织标签授权过滤器发生错误: {}", e.getMessage(), e);
+            logger.error("资源授权过滤器错误: {}", e.getMessage(), e);
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
-    
+
+    /**
+     * 判断请求路径是否只需注入用户ID（不需要资源权限校验）
+     */
+    private boolean isUserIdOnlyPath(String path, HttpServletRequest request) {
+        return path.matches(".*/upload/chunk.*")
+            || path.matches(".*/upload/merge.*")
+            || path.matches(".*/documents/uploads.*")
+            || path.matches(".*/search/hybrid.*")
+            || (path.matches(".*/documents/[a-fA-F0-9]{32}.*") && "DELETE".equals(request.getMethod()));
+    }
+
+    /**
+     * 从 JWT 中提取 userId/username/role 并设置为请求属性，然后放行
+     */
+    private void injectUserAttributesFromToken(HttpServletRequest request,
+                                                HttpServletResponse response,
+                                                FilterChain filterChain) throws Exception {
+        String token = extractToken(request);
+        if (token != null) {
+            String userId = jwtUtils.extractUserIdFromToken(token);
+            String username = jwtUtils.extractUsernameFromToken(token);
+            String role = jwtUtils.extractRoleFromToken(token);
+            if (userId != null) {
+                request.setAttribute("userId", userId);
+                request.setAttribute("username", username);
+                request.setAttribute("role", role);
+                logger.debug("注入用户属性: userId={}, username={}, role={}", userId, username, role);
+            }
+        }
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 将 HTTP 方法映射到权限操作
+     */
+    private String httpMethodToPermission(String method) {
+        return switch (method.toUpperCase()) {
+            case "GET"  -> "read";
+            case "POST" -> "write";
+            case "PUT", "PATCH" -> "write";
+            case "DELETE" -> "delete";
+            default -> "read";
+        };
+    }
+
     /**
      * 从路径中提取资源ID
      */
     private String extractResourceIdFromPath(HttpServletRequest request) {
         String path = request.getRequestURI();
-        logger.debug("提取资源ID，请求路径: {}", path);
-        
-        // 提取不同类型资源的ID
-        // 1. 文件资源: /api/v1/files/{fileMd5}
+
+        // 文件资源: /api/v1/files/{fileMd5}
         if (path.matches(".*/files/[^/]+.*")) {
-            String fileId = path.replaceAll(".*/files/([^/]+).*", "$1");
-            logger.debug("检测到文件资源请求，提取ID: {}", fileId);
-            return fileId;
+            return path.replaceAll(".*/files/([^/]+).*", "$1");
         }
-        
-        // 2. 文档删除资源: /api/v1/documents/{file_md5}
+        // 文档删除资源: /api/v1/documents/{file_md5} (MD5格式)
         if (path.matches(".*/documents/[a-fA-F0-9]{32}.*")) {
-            String fileMd5 = path.replaceAll(".*/documents/([a-fA-F0-9]{32}).*", "$1");
-            logger.debug("检测到文档删除请求，提取文件MD5: {}", fileMd5);
-            return fileMd5;
+            return path.replaceAll(".*/documents/([a-fA-F0-9]{32}).*", "$1");
         }
-        
-        // 3. 文档资源: /api/v1/documents/{docId} (数字ID)
+        // 文档资源: /api/v1/documents/{docId} (数字ID)
         if (path.matches(".*/documents/\\d+.*")) {
-            String docId = path.replaceAll(".*/documents/(\\d+).*", "$1");
-            logger.debug("检测到文档资源请求，提取ID: {}", docId);
-            return docId;
+            return path.replaceAll(".*/documents/(\\d+).*", "$1");
         }
-        
-        // 4. 上传分片: /api/v1/upload/chunk
+        // 上传分片: 从请求头取文件MD5
         if (path.matches(".*/upload/chunk.*")) {
-            String fileMd5 = request.getHeader("X-File-MD5");
-            logger.debug("检测到分片上传请求，从请求头提取文件MD5: {}", fileMd5);
-            return fileMd5;
+            return request.getHeader("X-File-MD5");
         }
-        
-        // 5. 知识库资源: /api/v1/knowledge/{resourceId}
-        if (path.matches(".*/knowledge/[^/]+.*")) {
-            String knowledgeId = path.replaceAll(".*/knowledge/([^/]+).*", "$1");
-            logger.debug("检测到知识库资源请求，提取ID: {}", knowledgeId);
-            return knowledgeId;
-        }
-        
-        logger.debug("未匹配到任何资源类型，返回null");
         return null;
     }
-    
-    /**
-     * 获取资源信息
-     * 实际项目中应该根据不同资源类型查询对应的数据库表
-     */
-    private ResourceInfo getResourceInfo(String resourceId) {
-        if (resourceId == null) {
-            logger.debug("资源ID为空，无法获取资源信息");
-            return null;
-        }
-        
-        logger.debug("尝试获取资源信息，资源ID: {}", resourceId);
-        
-        // 尝试从文件上传表中获取资源信息
-        Optional<FileUpload> fileUpload = fileUploadRepository.findByFileMd5(resourceId);
-        if (fileUpload.isPresent()) {
-            FileUpload file = fileUpload.get();
-            ResourceInfo info = new ResourceInfo(
-                file.getUserId(),
-                file.getOrgTag(),
-                file.isPublic()
-            );
-            logger.debug("成功找到文件资源信息 => 资源ID: {}, 拥有者: {}, 组织标签: {}, 是否公开: {}", 
-                        resourceId, info.getOwner(), info.getOrgTag(), info.isPublic());
-            return info;
-        } else {
-            logger.debug("在文件上传表中未找到资源 => 资源ID: {}", resourceId);
-        }
-        
-        // TODO: 如果需要支持其他类型的资源，可以在这里添加查询逻辑
-        
-        // 如果未找到资源，返回null
-        logger.debug("未找到任何资源信息 => 资源ID: {}", resourceId);
-        return null;
-    }
-    
 
     /**
-     * 从请求头中提取 JWT Token
+     * 查询资源基础信息（从 file_upload 表）
+     */
+    private ResourceInfo getResourceInfo(String resourceId) {
+        if (resourceId == null) return null;
+        Optional<FileUpload> fileUpload = fileUploadRepository.findByFileMd5(resourceId);
+        return fileUpload.map(f -> new ResourceInfo(f.getUserId(), f.getOrgTag(), f.isPublic())).orElse(null);
+    }
+
+    /**
+     * 从请求头提取 JWT Token
      */
     private String extractToken(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
-        }
-        return null;
+        return (bearerToken != null && bearerToken.startsWith("Bearer "))
+            ? bearerToken.substring(7) : null;
     }
-    
+
     /**
-     * 检查用户是否有权限访问该资源
-     */
-    private boolean isUserAuthorized(String userOrgTags, String resourceOrgTag) {
-        // 将用户的组织标签字符串转换为集合
-        Set<String> userTags = Arrays.stream(userOrgTags.split(","))
-                .collect(Collectors.toSet());
-        
-        // 检查用户的组织标签是否包含资源的组织标签
-        return userTags.contains(resourceOrgTag);
-    }
-    
-    /**
-     * 资源信息类，用于封装资源的权限相关信息
+     * 资源基础信息（内部封装类）
      */
     @Getter
     private static class ResourceInfo {
@@ -317,4 +220,4 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
             this.isPublic = isPublic;
         }
     }
-} 
+}

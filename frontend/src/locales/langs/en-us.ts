@@ -173,10 +173,12 @@ const local: App.I18n.Schema = {
     'ai-center_model-management': 'Model Management',
     'ai-center_agent-marketplace': 'Agent Marketplace',
     'ai-center_run-analysis': 'Run Analysis',
-    'org-tag': 'Organization Tag',
-    user: 'User Management',
     'personal-center': 'Personal Center',
-    'api-key-management': 'API Key Management'
+    'api-key-management': 'API Key Management',
+    'permission-center': 'Permission Center',
+    'permission-center_user-management': 'User Management',
+    'permission-center_role-management': 'Role Management',
+    'permission-center_org-management': 'Organization Management'
   },
   page: {
     login: {

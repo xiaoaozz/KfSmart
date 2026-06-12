@@ -27,10 +27,24 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     orgTags: [],
     primaryOrg: '',
     avatar: '',
-    avatarVersion: Date.now()
+    avatarVersion: Date.now(),
+    permissions: [] as string[] // RBAC 权限编码列表
   });
 
   const isAdmin = computed(() => userInfo.role === 'ADMIN');
+
+  /** 判断用户是否拥有指定权限（支持单个和多个权限码） */
+  const hasPermission = (permCode: string | string[]): boolean => {
+    if (Array.isArray(permCode)) {
+      return permCode.every(code => userInfo.permissions.includes(code));
+    }
+    return userInfo.permissions.includes(permCode);
+  };
+
+  /** 判断用户是否拥有任意一个指定权限 */
+  const hasAnyPermission = (permCodes: string[]): boolean => {
+    return permCodes.some(code => userInfo.permissions.includes(code));
+  };
 
   /** is super role in static route */
   const isStaticSuper = computed(() => {
@@ -206,6 +220,8 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     isStaticSuper,
     isLogin,
     isAdmin,
+    hasPermission,
+    hasAnyPermission,
     loginLoading,
     resetStore,
     login,

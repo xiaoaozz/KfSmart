@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -13,88 +14,54 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * 配置Spring Security的类
- * 该类定义了应用的安全配置，包括请求的授权规则、CSRF保护的配置以及会话管理策略
+ * Spring Security 配置
+ * 权限设计分三层：
+ *   1. URL路由级：公开白名单 / 需认证 / 管理员专属（通过 authorizeHttpRequests 配置）
+ *   2. 方法级：通过 @PreAuthorize("hasAuthority('permCode')") 注解控制（已开启 @EnableMethodSecurity）
+ *   3. 数据行级：通过 RbacService.hasResourcePermission() 在 Service 层做数据过滤
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity // 开启 @PreAuthorize / @PostAuthorize 注解支持（prePostEnabled 默认为 true）
 public class SecurityConfig {
 
-    // 日志记录器，用于记录安全配置的相关信息
     private static final Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
 
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
-    
+
     @Autowired
     private OrgTagAuthorizationFilter orgTagAuthorizationFilter;
 
-    /**
-     * 配置SecurityFilterChain bean的方法
-     * 该方法主要用于配置应用的安全规则，包括哪些请求需要授权、CSRF保护的启用或禁用、会话管理策略等
-     *
-     * @param http HttpSecurity对象，用于配置应用的安全规则
-     * @return SecurityFilterChain对象，代表配置好的安全过滤链
-     * @throws Exception 如果配置过程中发生错误，会抛出异常
-     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         try {
-            // 禁用CSRF保护
             http.csrf(AbstractHttpConfigurer::disable)
-                    // 配置请求的授权规则
-                    .authorizeHttpRequests(authorize -> authorize
-                            // 允许错误处理路径（防止404等错误转发时丢失认证上下文变成403）
-                            .requestMatchers("/error").permitAll()
-                            // 允许静态资源访问
-                            .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/avatars/**", "/*.js", "/*.css", "/*.ico").permitAll()
-                            // 允许 WebSocket 连接
-                            .requestMatchers("/chat/**", "/ws/**").permitAll()
-                            // 允许登录注册接口
-                            .requestMatchers("/api/v1/users/register", "/api/v1/users/login").permitAll()
-                            // 允许测试接口
-                            .requestMatchers("/api/v1/test/**").permitAll()
-                            // 文件上传和下载相关接口 - 普通用户和管理员都可访问
-                            .requestMatchers("/api/v1/upload/**", "/api/v1/parse", "/api/v1/documents/download", "/api/v1/documents/preview").hasAnyRole("USER", "ADMIN")
-                            // 对话历史相关接口 - 用户只能查看自己的历史，管理员可以查看所有
-                            .requestMatchers("/api/v1/users/conversation/**").hasAnyRole("USER", "ADMIN")
-                            // 搜索接口 - 普通用户和管理员都可访问
-                            .requestMatchers("/api/search/**", "/api/v1/search/**").hasAnyRole("USER", "ADMIN")
-                            // 聊天相关接口 - WebSocket停止Token获取 (允许匿名访问)
-                            .requestMatchers("/api/v1/chat/websocket-token").permitAll()
-                            // 聊天模型配置列表（普通用户和管理员均可访问，脱敏数据）
-                            .requestMatchers("/api/v1/chat/model-configs").hasAnyRole("USER", "ADMIN")
-                            // 管理员专属接口 - 知识库管理、系统状态、用户活动监控
-                            .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
-                            // 知识库管理接口 - 用户和管理员都可访问（自己创建的或公开的知识库）
-                            .requestMatchers("/api/v1/knowledge-bases/**").hasAnyRole("USER", "ADMIN")
-                            // AI能力中心 - Agent工作流、MCP工具、Prompt、运行分析
-                            .requestMatchers("/api/v1/agent-center/**").hasAnyRole("USER", "ADMIN")
-                            // 用户通知接口 - 用户和管理员都可访问（只能看到自己的通知）
-                            .requestMatchers("/api/v1/notifications/**").hasAnyRole("USER", "ADMIN")
-                            // 登录记录和统计接口 - 用户和管理员都可访问
-                            .requestMatchers("/api/v1/users/login-records", "/api/v1/users/login-stats", "/api/v1/users/usage-stats").hasAnyRole("USER", "ADMIN")
-                            // 用户组织标签管理接口 - 包括查看组织标签树、设置主组织等
-                            .requestMatchers("/api/v1/users/org-tags/**", "/api/v1/users/primary-org").hasAnyRole("USER", "ADMIN")
-                            // 其他请求需要认证
-                            .anyRequest().authenticated())
-                    // 配置会话管理策略
-                    // 设置会话创建策略为STATELESS，表示不会创建会话，通常用于无状态的API应用
-                    .sessionManagement(session -> session
-                            .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                    // 添加JWT认证过滤器
-                    .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                    // 添加组织标签授权过滤器
-                    .addFilterAfter(orgTagAuthorizationFilter, JwtAuthenticationFilter.class);
+                .authorizeHttpRequests(authorize -> authorize
+                    // ===== 公开路径（无需认证）=====
+                    .requestMatchers("/error").permitAll()
+                    .requestMatchers("/", "/test.html", "/static/test.html", "/static/**",
+                                     "/avatars/**", "/*.js", "/*.css", "/*.ico").permitAll()
+                    .requestMatchers("/chat/**", "/ws/**").permitAll()
+                    .requestMatchers("/api/v1/users/register", "/api/v1/users/login").permitAll()
+                    .requestMatchers("/api/v1/test/**").permitAll()
+                    .requestMatchers("/api/v1/chat/websocket-token").permitAll()
 
-            // 记录安全配置加载成功的信息
-            logger.info("Security configuration loaded successfully.");
-            // 返回配置好的安全过滤链
+                    // ===== 管理员专属路径（URL级粗粒度保护，细粒度由 @PreAuthorize 控制）=====
+                    .requestMatchers("/api/v1/admin/**").hasAuthority("system:admin")
+
+                    // ===== 其他路径：只需登录认证，细粒度权限由方法级 @PreAuthorize 控制 =====
+                    .anyRequest().authenticated()
+                )
+                .sessionManagement(session -> session
+                    .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(orgTagAuthorizationFilter, JwtAuthenticationFilter.class);
+
+            logger.info("Security configuration loaded successfully (RBAC mode).");
             return http.build();
         } catch (Exception e) {
-            // 记录配置安全过滤链失败的错误信息
             logger.error("Failed to configure security filter chain", e);
-            // 抛出异常，以便外部处理
             throw e;
         }
     }
