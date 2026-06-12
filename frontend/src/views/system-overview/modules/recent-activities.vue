@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import { request } from '@/service/request';
 
@@ -24,7 +25,8 @@ const activities = ref<Activity[]>([]);
 const loading = ref(false);
 const activeType = ref<ActivityType>('all');
 const currentPage = ref(1);
-const pageSize = 5;
+const pageSize = ref(DEFAULT_PAGE_SIZE);
+const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const activityStats = ref({
   todayActivities: 0,
   weekActivities: 0,
@@ -44,8 +46,8 @@ const filteredActivities = computed(() =>
 );
 
 const visibleActivities = computed(() => {
-  const start = (currentPage.value - 1) * pageSize;
-  return filteredActivities.value.slice(start, start + pageSize);
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredActivities.value.slice(start, start + pageSize.value);
 });
 
 function getTimeValue(dateStr?: string): number {
@@ -203,12 +205,17 @@ watch(activeType, () => {
   currentPage.value = 1;
 });
 
-watch(filteredActivities, list => {
-  const maxPage = Math.max(1, Math.ceil(list.length / pageSize));
+watch([filteredActivities, pageSize], ([list]) => {
+  const maxPage = Math.max(1, Math.ceil(list.length / pageSize.value));
   if (currentPage.value > maxPage) {
     currentPage.value = maxPage;
   }
 });
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
+}
 
 const getColorClasses = (color: string) => {
   const colorMap: Record<string, { icon: string; bg: string }> = {
@@ -322,8 +329,11 @@ const getColorClasses = (color: string) => {
               v-model:page="currentPage"
               :item-count="filteredActivities.length"
               :page-size="pageSize"
+              :page-sizes="pageSizeOptions"
               :disabled="filteredActivities.length === 0"
               size="small"
+              show-size-picker
+              @update:page-size="handlePageSizeChange"
             />
           </div>
         </div>

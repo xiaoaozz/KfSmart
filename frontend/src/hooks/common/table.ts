@@ -3,6 +3,7 @@ import type { Ref } from 'vue';
 import type { PaginationProps } from 'naive-ui';
 import { jsonClone } from '@sa/utils';
 import { useBoolean, useHookTable } from '@sa/hooks';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import { useAppStore } from '@/store/modules/app';
 import { $t } from '@/locales';
 
@@ -38,12 +39,12 @@ export function useTable<A extends NaiveUI.TableApiFn>(config: NaiveUI.NaiveTabl
     apiParams,
     columns: config.columns,
     transformer: res => {
-      const { number, page, size = 10, totalElements, total } = res.data || {};
+      const { number, page, size = DEFAULT_PAGE_SIZE, totalElements, total } = res.data || {};
       const currentPage = number || page || 1;
       const records = res.data?.records || res.data?.data || res.data?.content || [];
       const totalCount = totalElements ?? total ?? records.length;
       // Ensure that the size is greater than 0, If it is less than 0, it will cause paging calculation errors.
-      const pageSize = size <= 0 ? 10 : size;
+      const pageSize = size <= 0 ? DEFAULT_PAGE_SIZE : size;
 
       const recordsWithIndex = records.map((item, index) => {
         return {
@@ -119,10 +120,10 @@ export function useTable<A extends NaiveUI.TableApiFn>(config: NaiveUI.NaiveTabl
 
   const pagination: PaginationProps = reactive({
     page: 1,
-    pageSize: 10,
+    pageSize: DEFAULT_PAGE_SIZE,
     showSizePicker: true,
     itemCount: 0,
-    pageSizes: [10, 50, 100],
+    pageSizes: PAGINATION_PAGE_SIZE_OPTIONS,
     onUpdatePage: async (page: number) => {
       pagination.page = page;
 

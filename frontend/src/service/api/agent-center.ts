@@ -1,4 +1,4 @@
-import { request } from '../request';
+import { fakePaginationRequest, request } from '../request';
 
 type PageParams = {
   page?: number;
@@ -87,4 +87,11 @@ export function fetchRunAnalysis() {
 
 export function fetchAgentModels() {
   return request<Api.AgentCenter.ModelConfig[]>({ url: '/agent-center/models' });
+}
+
+export function fetchAgentModelsPage(params?: PageParams) {
+  return fakePaginationRequest<Api.Common.PaginatingQueryRecord<Api.AgentCenter.ModelConfig>>({
+    url: '/agent-center/models',
+    params
+  });
 }

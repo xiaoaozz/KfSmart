@@ -68,7 +68,7 @@ export default function useHookTable<A extends ApiFn, T, C>(config: TableConfig<
 
   const { apiFn, apiParams, transformer, immediate = true, getColumnChecks, getColumns } = config;
 
-  const searchParams: NonNullable<Parameters<A>[0]> = reactive(jsonClone({ page: 1, size: 20, ...apiParams }));
+  const searchParams: NonNullable<Parameters<A>[0]> = reactive(jsonClone({ page: 1, size: 10, ...apiParams }));
 
   const allColumns = ref(config.columns()) as Ref<C[]>;
 

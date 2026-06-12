@@ -1,5 +1,6 @@
 <script setup lang="tsx">
 import { NButton, NPopconfirm, NTag, NTooltip } from 'naive-ui';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import ApiKeyOperateDialog from './modules/api-key-operate-dialog.vue';
 
 interface ApiKeyItem {
@@ -25,9 +26,9 @@ const dialogVisible = ref(false);
 const operateType = ref<'add' | 'edit'>('add');
 const editingData = ref<ApiKeyItem | null>(null);
 const activatingId = ref<number | null>(null);
-const pageSizeOptions = [10, 50, 100];
+const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const pagedData = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return data.value.slice(start, start + pageSize.value);

@@ -3,6 +3,7 @@ import { NButton, NDataTable, NInput, NModal, NPagination, NTag, NTooltip } from
 
 import type { DataTableColumns } from 'naive-ui';
 import { fetchGetKnowledgeBases, fetchDeleteKnowledgeBase, fetchGetKnowledgeBaseStats } from '@/service/api/knowledge-base';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 import debounce from 'lodash-es/debounce';
 
@@ -20,9 +21,9 @@ const loading = ref(false);
 const searchKeyword = ref('');
 
 // --------- 分页 ---------
-const pageSizeOptions = [10, 50, 100];
+const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const totalCount = ref(0);
 
 // --------- 新建/编辑知识库 ---------

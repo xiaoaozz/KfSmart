@@ -1,6 +1,5 @@
 <script setup lang="tsx">
-import { NButton, NDataTable, NInput, NInputNumber, NModal, NSelect, NSpace, NTabPane, NTabs, NTag } from 'naive-ui';
-import type { DataTableColumns } from 'naive-ui';
+import { NButton, NDataTable, NEmpty, NInput, NInputNumber, NModal, NPagination, NSelect, NSpace, NTabPane, NTabs, NTag } from 'naive-ui';
 import {
   fetchAgentModels,
   fetchAgentWorkflowStats,
@@ -42,12 +41,11 @@ const stats = ref<Api.AgentCenter.WorkflowStats>({
   successRate: 100,
   avgDurationMs: 0
 });
-const workflows = ref<Api.AgentCenter.Workflow[]>([]);
+const selectedWorkflow = ref<Api.AgentCenter.Workflow | null>(null);
 const knowledgeBaseOptions = ref<SelectOption[]>([]);
 const promptOptions = ref<SelectOption[]>([]);
 const mcpToolOptions = ref<SelectOption[]>([]);
 const modelOptions = ref<SelectOption[]>([]);
-const loading = ref(false);
 const keyword = ref('');
 const activeTab = ref('list');
 const pendingTab = ref('');
@@ -55,7 +53,7 @@ const designerSnapshot = ref('');
 const selectedWorkflowId = ref('');
 const saving = ref(false);
 const debugLoading = ref(false);
-const testQuery = ref('公司年假政策是什么');
+const testQuery = ref('');
 const debugResult = ref<Api.AgentCenter.DebugResult | null>(null);
 const createVisible = ref(false);
 const createForm = ref({ name: '', type: '工作流', description: '' });
@@ -70,20 +68,20 @@ const viewport = reactive({
 
 const designer = reactive({
   workflowId: '',
-  name: '新建工作流',
+  name: '',
   description: '',
-  type: '工作流',
-  status: '草稿',
-  ownerName: 'admin',
-  permissionScope: '组织内',
+  type: '',
+  status: '',
+  ownerName: '',
+  permissionScope: '',
   tags: '',
   knowledgeBases: '',
   promptRefs: '',
   mcpTools: '',
   models: '',
-  selectedNodeId: 'start',
-  nodes: defaultNodes(),
-  edges: defaultEdges()
+  selectedNodeId: '',
+  nodes: [] as WorkflowNode[],
+  edges: [] as WorkflowEdge[]
 });
 
 const nodeGroups = [
@@ -93,7 +91,7 @@ const nodeGroups = [
   { title: '企业节点', nodes: ['审批', '消息通知', '邮件发送', 'Webhook', '飞书通知', '企业微信通知'] }
 ];
 
-const selectedWorkflow = computed(() => workflows.value.find(item => item.workflowId === selectedWorkflowId.value) || null);
+const hasSelectedWorkflow = computed(() => Boolean(selectedWorkflowId.value && designer.workflowId));
 const selectedNode = computed(() => designer.nodes.find(item => item.id === designer.selectedNodeId) || designer.nodes[0]);
 const viewportStyle = computed(() => ({
   transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
@@ -101,95 +99,106 @@ const viewportStyle = computed(() => ({
 }));
 const designerDirty = computed(() => designerSnapshot.value !== getDesignerSnapshot());
 
-const columns: DataTableColumns<Api.AgentCenter.Workflow> = [
-  {
-    key: 'name',
-    title: '名称',
-    width: 180,
-    render: row => (
-      <div class="flex flex-col">
-        <span class="font-medium text-gray-900 dark:text-white">{row.name}</span>
-        <span class="text-xs text-gray-500">{row.description || '-'}</span>
-      </div>
-    )
-  },
-  { key: 'type', title: '类型', width: 110 },
-  {
-    key: 'status',
-    title: '状态',
-    width: 90,
-    render: row => <NTag type={row.status === '运行中' ? 'success' : 'warning'} size="small">{row.status}</NTag>
-  },
-  { key: 'callCount', title: '调用量', width: 90, align: 'center' },
-  {
-    key: 'updatedAt',
-    title: '更新时间',
-    width: 150,
-    render: row => row.updatedAt ? dayjs(row.updatedAt).format('YYYY-MM-DD HH:mm') : '-'
-  },
-  {
-    key: 'operate',
-    title: '操作',
-    width: 240,
-    render: row => (
-      <div class="flex items-center gap-2">
-        <NButton text size="small" type="primary" onClick={() => editWorkflow(row)}>编辑</NButton>
-        <NButton text size="small" onClick={() => copyWorkflow(row.workflowId)}>复制</NButton>
-        <NButton text size="small" type="success" onClick={() => publishWorkflow(row.workflowId)}>发布</NButton>
-        <NButton text size="small" type="error" onClick={() => deleteWorkflow(row.workflowId)}>删除</NButton>
-      </div>
-    )
-  }
-];
+const { columns, data: workflows, getData: getWorkflowData, getDataByPage, loading, mobilePagination, updateSearchParams } = useTable({
+  apiFn: fetchAgentWorkflows,
+  immediate: false,
+  columns: () => [
+    {
+      key: 'name',
+      title: '名称',
+      width: 180,
+      render: row => (
+        <div class="flex flex-col">
+          <span class="font-medium text-gray-900 dark:text-white">{row.name}</span>
+          <span class="text-xs text-gray-500">{row.description || '-'}</span>
+        </div>
+      )
+    },
+    { key: 'type', title: '类型', width: 110 },
+    {
+      key: 'status',
+      title: '状态',
+      width: 90,
+      render: row => <NTag type={row.status === '运行中' ? 'success' : 'warning'} size="small">{row.status}</NTag>
+    },
+    { key: 'callCount', title: '调用量', width: 90, align: 'center' },
+    {
+      key: 'updatedAt',
+      title: '更新时间',
+      width: 150,
+      render: row => row.updatedAt ? dayjs(row.updatedAt).format('YYYY-MM-DD HH:mm') : '-'
+    },
+    {
+      key: 'operate',
+      title: '操作',
+      width: 240,
+      render: row => (
+        <div class="flex items-center gap-2">
+          <NButton text size="small" type="primary" onClick={() => editWorkflow(row)}>编辑</NButton>
+          <NButton text size="small" onClick={() => copyWorkflow(row.workflowId)}>复制</NButton>
+          <NButton text size="small" type="success" onClick={() => publishWorkflow(row.workflowId)}>发布</NButton>
+          <NButton text size="small" type="error" onClick={() => deleteWorkflow(row.workflowId)}>删除</NButton>
+        </div>
+      )
+    }
+  ]
+});
 
 async function loadData() {
-  loading.value = true;
-  try {
-    const [listRes, statsRes, kbRes, promptRes, toolRes, modelRes] = await Promise.all([
-      fetchAgentWorkflows({ keyword: keyword.value || undefined, page: 1, size: 100 }),
-      fetchAgentWorkflowStats(),
-      fetchGetKnowledgeBases({ page: 1, size: 100 }),
-      fetchPromptTemplates({ page: 1, size: 100 }),
-      fetchMcpTools({ page: 1, size: 100 }),
-      fetchAgentModels()
-    ]);
-    if (!listRes.error && listRes.data) {
-      workflows.value = getPageRecords<Api.AgentCenter.Workflow>(listRes.data);
-      if (!selectedWorkflowId.value && workflows.value.length) {
-        selectedWorkflowId.value = workflows.value[0].workflowId;
-        applyWorkflow(workflows.value[0]);
-      }
+  const [statsRes, kbRes, promptRes, toolRes, modelRes] = await Promise.all([
+    fetchAgentWorkflowStats(),
+    fetchGetKnowledgeBases({ page: 1, size: 100 }),
+    fetchPromptTemplates({ page: 1, size: 100 }),
+    fetchMcpTools({ page: 1, size: 100 }),
+    fetchAgentModels(),
+    getWorkflowData()
+  ]);
+
+  if (!selectedWorkflowId.value) {
+    const nextSelected = workflows.value[0];
+    if (nextSelected) {
+      selectedWorkflowId.value = nextSelected.workflowId;
+      applyWorkflow(nextSelected);
+    } else {
+      resetDesigner();
     }
-    if (!statsRes.error && statsRes.data) {
-      stats.value = statsRes.data;
-    }
-    if (!kbRes.error && kbRes.data) {
-      knowledgeBaseOptions.value = getPageRecords<Api.KnowledgeBase.KnowledgeBaseInfo>(kbRes.data).map(item => ({
-        label: item.name,
-        value: item.name
-      }));
-    }
-    if (!promptRes.error && promptRes.data) {
-      promptOptions.value = getPageRecords<Api.AgentCenter.PromptTemplate>(promptRes.data).map(item => ({
-        label: `${item.name} ${item.version || ''}`.trim(),
-        value: item.name
-      }));
-    }
-    if (!toolRes.error && toolRes.data) {
-      mcpToolOptions.value = getPageRecords<Api.AgentCenter.McpTool>(toolRes.data).map(item => ({
-        label: item.name,
-        value: item.name
-      }));
-    }
-    if (!modelRes.error && modelRes.data) {
-      modelOptions.value = modelRes.data.map(item => ({
-        label: item.modelName || item.name,
-        value: item.modelName || item.name
-      }));
-    }
-  } finally {
-    loading.value = false;
+  } else if (selectedWorkflow.value) {
+    const updatedSelected = workflows.value.find(item => item.workflowId === selectedWorkflowId.value);
+    if (updatedSelected) applyWorkflow(updatedSelected);
   }
+
+  if (!statsRes.error && statsRes.data) {
+    stats.value = statsRes.data;
+  }
+  if (!kbRes.error && kbRes.data) {
+    knowledgeBaseOptions.value = getPageRecords<Api.KnowledgeBase.KnowledgeBaseInfo>(kbRes.data).map(item => ({
+      label: item.name,
+      value: item.name
+    }));
+  }
+  if (!promptRes.error && promptRes.data) {
+    promptOptions.value = getPageRecords<Api.AgentCenter.PromptTemplate>(promptRes.data).map(item => ({
+      label: `${item.name} ${item.version || ''}`.trim(),
+      value: item.name
+    }));
+  }
+  if (!toolRes.error && toolRes.data) {
+    mcpToolOptions.value = getPageRecords<Api.AgentCenter.McpTool>(toolRes.data).map(item => ({
+      label: item.name,
+      value: item.name
+    }));
+  }
+  if (!modelRes.error && modelRes.data) {
+    modelOptions.value = modelRes.data.map(item => ({
+      label: item.modelName || item.name,
+      value: item.modelName || item.name
+    }));
+  }
+}
+
+async function searchWorkflows() {
+  updateSearchParams({ keyword: keyword.value || undefined });
+  await getDataByPage();
 }
 
 function getPageRecords<T>(data: Api.Common.PaginatingQueryRecord<T> | { records?: T[]; content?: T[]; data?: T[] }): T[] {
@@ -234,6 +243,7 @@ function editWorkflow(row: Api.AgentCenter.Workflow) {
 }
 
 function applyWorkflow(row: Api.AgentCenter.Workflow) {
+  selectedWorkflow.value = { ...row };
   designer.workflowId = row.workflowId;
   designer.name = row.name;
   designer.description = row.description;
@@ -246,13 +256,42 @@ function applyWorkflow(row: Api.AgentCenter.Workflow) {
   designer.promptRefs = row.promptRefs || '';
   designer.mcpTools = row.mcpTools || '';
   designer.models = row.models || '';
-  designer.nodes = safeJson(row.nodesJson, defaultNodes());
+  designer.nodes = safeJson<WorkflowNode[]>(row.nodesJson, defaultNodes()).map(n => ({
+    ...n,
+    config: n.config ?? defaultNodeConfig(n.type)
+  }));
   designer.edges = safeJson(row.edgesJson, defaultEdges());
   designer.selectedNodeId = designer.nodes[0]?.id || '';
   captureDesignerSnapshot();
 }
 
+function resetDesigner() {
+  selectedWorkflowId.value = '';
+  selectedWorkflow.value = null;
+  designer.workflowId = '';
+  designer.name = '';
+  designer.description = '';
+  designer.type = '';
+  designer.status = '';
+  designer.ownerName = '';
+  designer.permissionScope = '';
+  designer.tags = '';
+  designer.knowledgeBases = '';
+  designer.promptRefs = '';
+  designer.mcpTools = '';
+  designer.models = '';
+  designer.nodes = [];
+  designer.edges = [];
+  designer.selectedNodeId = '';
+  debugResult.value = null;
+  captureDesignerSnapshot();
+}
+
 async function saveDesigner() {
+  if (!designer.workflowId) {
+    window.$message?.warning('请先选择一个后端工作流，或新建后再编辑');
+    return;
+  }
   saving.value = true;
   try {
     const { error, data } = await fetchSaveAgentWorkflow({
@@ -283,6 +322,7 @@ async function saveDesigner() {
 }
 
 async function saveDesignerSilently() {
+  if (!designer.workflowId) return false;
   saving.value = true;
   try {
     const { error, data } = await fetchSaveAgentWorkflow({
@@ -418,10 +458,63 @@ async function deleteWorkflow(workflowId: string) {
   });
 }
 
+function defaultNodeConfig(type: string): Record<string, any> {
+  switch (type) {
+    case '开始':
+      return { triggerType: '手动触发', inputSchema: '{"query": "string"}', timeout: 300 };
+    case '结束':
+      return { outputMode: '直接输出', outputTemplate: '{{llm.output}}' };
+    case '变量':
+      return { varName: '', varType: 'string', varValue: '', scope: '全局' };
+    case '条件判断':
+      return { conditionExpr: '{{input.type}} == "A"', trueLabel: '是', falseLabel: '否', elseEnabled: false };
+    case '循环':
+      return { loopType: '列表循环', iterateVar: '{{input.items}}', loopVar: 'item', maxIterations: 100 };
+    case '延迟':
+      return { delayMs: 1000, delayType: '固定延迟', unit: 'ms' };
+    case 'LLM':
+      return { model: '', temperature: 0.7, maxTokens: 2048, topP: 1.0, systemPrompt: '', stream: true, timeout: 60 };
+    case '知识库检索':
+      return { knowledgeBase: '', searchMode: '混合检索', topK: 5, scoreThreshold: 0.5, rerankEnabled: false };
+    case 'Prompt模板':
+      return { templateId: '', templateContent: '', inputVars: '{"query": "{{input.query}}"}' };
+    case 'Agent调用':
+      return { agentId: '', inputMapping: '{"query": "{{input.query}}"}', outputMapping: '{"result": "{{agent.output}}"}', timeout: 120 };
+    case 'MCP工具':
+      return { toolId: '', inputMapping: '{"query": "{{input.query}}"}', outputField: 'result', retryCount: 1, timeout: 30 };
+    case 'HTTP请求':
+      return { url: '', method: 'GET', headers: '{"Content-Type": "application/json"}', body: '', authType: 'none', timeout: 30, retryCount: 1 };
+    case 'SQL查询':
+      return { datasource: '', sql: 'SELECT * FROM table WHERE id = {{input.id}}', resultType: '列表', maxRows: 100 };
+    case 'Python执行':
+      return { code: '# 可使用 input 变量\nresult = input.get("query", "")', requirements: '', timeout: 30, inputVars: 'input', outputVar: 'result' };
+    case '代码执行':
+      return { language: 'JavaScript', code: '// 可使用 input 变量\nconst result = input.query;\nreturn { result };', timeout: 30 };
+    case '审批':
+      return { approvers: '', approvalType: '任一审批', formFields: '{"reason": "string"}', timeout: 86400, autoApprove: false };
+    case '消息通知':
+      return { channel: '系统通知', recipients: '', title: '', content: '{{input.message}}', priority: '普通' };
+    case '邮件发送':
+      return { to: '', cc: '', subject: '', body: '', bodyType: 'html', attachments: '' };
+    case 'Webhook':
+      return { url: '', method: 'POST', headers: '{"Content-Type": "application/json"}', payload: '{{input}}', secret: '', retryCount: 2 };
+    case '飞书通知':
+      return { webhookUrl: '', msgType: 'text', title: '', content: '{{input.message}}', atAll: false, atUsers: '' };
+    case '企业微信通知':
+      return { webhookUrl: '', msgType: 'text', content: '{{input.message}}', atUsers: '', atAll: false };
+    default:
+      return {};
+  }
+}
+
 function addNode(type: string) {
+  if (!designer.workflowId) {
+    window.$message?.warning('请先选择一个后端工作流，或新建后再编辑');
+    return;
+  }
   const index = designer.nodes.length + 1;
   const id = `${type}_${Date.now()}`;
-  designer.nodes.push({ id, type, name: type, x: 120 + index * 48, y: 120 + index * 72, description: '' });
+  designer.nodes.push({ id, type, name: type, x: 120 + index * 48, y: 120 + index * 72, description: '', config: defaultNodeConfig(type) });
   const previous = designer.nodes[designer.nodes.length - 2];
   if (previous) {
     designer.edges.push({ source: previous.id, target: id });
@@ -520,6 +613,7 @@ function resetViewport() {
 }
 
 function deleteSelectedNode() {
+  if (!designer.workflowId) return;
   if (!designer.selectedNodeId) return;
   const node = designer.nodes.find(item => item.id === designer.selectedNodeId);
   if (!node || node.type.includes('开始')) {
@@ -532,6 +626,7 @@ function deleteSelectedNode() {
 }
 
 function autoLayout() {
+  if (!designer.workflowId) return;
   const canvasWidth = canvasRef.value?.clientWidth || 900;
   const nodeWidth = 136;
   const nodeHeight = 68;
@@ -650,11 +745,11 @@ function safeJson<T>(value: string, fallback: T): T {
 
 function defaultNodes(): WorkflowNode[] {
   return [
-    { id: 'start', type: '开始', name: '开始', x: 80, y: 140 },
-    { id: 'kb', type: '知识库检索', name: '知识库检索', x: 280, y: 140 },
-    { id: 'mcp', type: 'MCP工具', name: 'MCP工具', x: 480, y: 140 },
-    { id: 'llm', type: 'LLM', name: 'LLM生成', x: 680, y: 140 },
-    { id: 'end', type: '结束', name: '输出结果', x: 880, y: 140 }
+    { id: 'start', type: '开始', name: '开始', x: 80, y: 140, config: defaultNodeConfig('开始') },
+    { id: 'kb', type: '知识库检索', name: '知识库检索', x: 280, y: 140, config: defaultNodeConfig('知识库检索') },
+    { id: 'mcp', type: 'MCP工具', name: 'MCP工具', x: 480, y: 140, config: defaultNodeConfig('MCP工具') },
+    { id: 'llm', type: 'LLM', name: 'LLM生成', x: 680, y: 140, config: defaultNodeConfig('LLM') },
+    { id: 'end', type: '结束', name: '输出结果', x: 880, y: 140, config: defaultNodeConfig('结束') }
   ];
 }
 
@@ -721,7 +816,7 @@ onBeforeUnmount(() => {
         <NTabs :value="activeTab" type="line" animated class="h-full px-5 pt-3" @update:value="switchTab">
           <NTabPane name="list" tab="工作流列表">
             <div class="mb-4 flex items-center justify-between">
-              <NInput v-model:value="keyword" clearable placeholder="搜索工作流名称或类型" class="max-w-280px" @keyup.enter="loadData">
+              <NInput v-model:value="keyword" clearable placeholder="搜索工作流名称或类型" class="max-w-280px" @keyup.enter="searchWorkflows">
                 <template #prefix><icon-carbon:search class="text-gray-400" /></template>
               </NInput>
               <NSpace>
@@ -729,7 +824,10 @@ onBeforeUnmount(() => {
                 <NButton>导出</NButton>
               </NSpace>
             </div>
-            <NDataTable :columns="columns" :data="workflows" :loading="loading" :row-key="row => row.workflowId" :pagination="{ pageSize: 10 }" size="small" striped />
+            <NDataTable :columns="columns" :data="workflows" :loading="loading" :row-key="row => row.workflowId" :pagination="false" size="small" striped />
+            <div class="flex justify-end border-t border-gray-100 px-4 py-3 dark:border-gray-700">
+              <NPagination v-bind="mobilePagination" />
+            </div>
           </NTabPane>
 
           <NTabPane name="designer" tab="工作流设计器">
@@ -757,18 +855,18 @@ onBeforeUnmount(() => {
               <main class="flex min-w-0 flex-col bg-white dark:bg-gray-950">
                 <div class="flex h-14 shrink-0 items-center justify-between border-b border-gray-100 px-4 dark:border-gray-700">
                   <div class="flex items-center gap-3">
-                    <NInput v-model:value="designer.name" class="max-w-220px" />
-                    <NTag type="info" size="small">{{ designer.type }}</NTag>
-                    <NTag :type="designer.status === '运行中' ? 'success' : 'warning'" size="small">{{ designer.status }}</NTag>
+                    <NInput v-model:value="designer.name" class="max-w-220px" :disabled="!hasSelectedWorkflow" placeholder="请选择工作流" />
+                    <NTag v-if="designer.type" type="info" size="small">{{ designer.type }}</NTag>
+                    <NTag v-if="designer.status" :type="designer.status === '运行中' ? 'success' : 'warning'" size="small">{{ designer.status }}</NTag>
                   </div>
                   <NSpace>
-                    <NButton @click="autoLayout">自动布局</NButton>
-                    <NButton @click="zoomCanvas(0.9)">缩小</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" @click="autoLayout">自动布局</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" @click="zoomCanvas(0.9)">缩小</NButton>
                     <NTag size="small">{{ Math.round(viewport.scale * 100) }}%</NTag>
-                    <NButton @click="zoomCanvas(1.1)">放大</NButton>
-                    <NButton @click="resetViewport">重置视图</NButton>
-                    <NButton :loading="saving" type="primary" @click="saveDesigner">保存</NButton>
-                    <NButton :loading="debugLoading" @click="runDebug">调试运行</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" @click="zoomCanvas(1.1)">放大</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" @click="resetViewport">重置视图</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" :loading="saving" type="primary" @click="saveDesigner">保存</NButton>
+                    <NButton :disabled="!hasSelectedWorkflow" :loading="debugLoading" @click="runDebug">调试运行</NButton>
                   </NSpace>
                 </div>
                 <div
@@ -778,7 +876,7 @@ onBeforeUnmount(() => {
                   @mousedown="startCanvasPan"
                   @wheel="handleCanvasWheel"
                 >
-                  <div class="absolute left-0 top-0 h-2400px w-3200px" :style="viewportStyle">
+                  <div v-if="hasSelectedWorkflow" class="absolute left-0 top-0 h-2400px w-3200px" :style="viewportStyle">
                     <svg class="absolute inset-0 h-full w-full pointer-events-none">
                       <defs>
                         <marker id="workflow-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="8" refY="4">
@@ -810,7 +908,11 @@ onBeforeUnmount(() => {
                     </button>
                   </div>
                   <div v-if="!designer.nodes.length" class="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-                    从左侧节点库添加节点
+                    <NEmpty :description="hasSelectedWorkflow ? '从左侧节点库添加节点' : '暂无后端工作流数据'">
+                      <template #extra>
+                        <NButton size="small" type="primary" @click="openCreate">新建工作流</NButton>
+                      </template>
+                    </NEmpty>
                   </div>
                   <div class="pointer-events-none absolute bottom-3 left-3 rounded border border-gray-200 bg-white/90 px-3 py-2 text-xs text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900/90">
                     拖动画布平移 · 滚轮缩放 · Delete 删除节点
@@ -821,58 +923,385 @@ onBeforeUnmount(() => {
               <aside class="overflow-y-auto border-l border-gray-100 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
                 <div class="mb-4 flex items-center justify-between">
                   <div class="text-sm font-semibold text-gray-900 dark:text-white">属性配置</div>
-                  <NButton size="tiny" type="error" ghost :disabled="!selectedNode" @click="deleteSelectedNode">删除</NButton>
+                  <NButton size="tiny" type="error" ghost :disabled="!hasSelectedWorkflow || !selectedNode" @click="deleteSelectedNode">删除</NButton>
                 </div>
-                <div v-if="selectedNode" class="space-y-3">
-                  <NInput v-model:value="selectedNode.name" placeholder="节点名称" />
-                  <NInput :value="selectedNode.id" disabled placeholder="节点ID" />
-                  <NInput v-model:value="selectedNode.description" type="textarea" placeholder="节点描述" />
-                  <div class="grid grid-cols-2 gap-2">
-                    <NInputNumber v-model:value="selectedNode.x" :min="0" class="w-full" placeholder="X" />
-                    <NInputNumber v-model:value="selectedNode.y" :min="0" class="w-full" placeholder="Y" />
+                <div v-if="hasSelectedWorkflow && selectedNode" class="space-y-3">
+                  <!-- 通用属性 -->
+                  <div class="border-b border-gray-100 pb-3 dark:border-gray-700">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">基本信息</div>
+                    <NInput v-model:value="selectedNode.name" class="mb-2" placeholder="节点名称" />
+                    <NInput :value="selectedNode.id" disabled class="mb-2" placeholder="节点ID" />
+                    <NInput v-model:value="selectedNode.description" type="textarea" :rows="2" placeholder="节点描述（可选）" />
                   </div>
-                  <template v-if="selectedNode.type.includes('LLM')">
+
+                  <!-- 坐标 -->
+                  <div class="border-b border-gray-100 pb-3 dark:border-gray-700">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">位置</div>
+                    <div class="grid grid-cols-2 gap-2">
+                      <NInputNumber v-model:value="selectedNode.x" :min="0" class="w-full" placeholder="X" />
+                      <NInputNumber v-model:value="selectedNode.y" :min="0" class="w-full" placeholder="Y" />
+                    </div>
+                  </div>
+
+                  <!-- 开始节点 -->
+                  <template v-if="selectedNode.type === '开始'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">触发配置</div>
                     <NSelect
-                      v-model:value="designer.models"
+                      v-model:value="selectedNode.config!.triggerType"
+                      :options="['手动触发', '定时触发', 'API触发', 'Webhook触发'].map(v => ({ label: v, value: v }))"
+                      placeholder="触发方式"
+                    />
+                    <NInput v-model:value="selectedNode.config!.inputSchema" type="textarea" :rows="3" placeholder="输入参数 Schema（JSON）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="3600" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- 结束节点 -->
+                  <template v-if="selectedNode.type === '结束'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">输出配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.outputMode"
+                      :options="['直接输出', '模板渲染', '变量映射'].map(v => ({ label: v, value: v }))"
+                      placeholder="输出模式"
+                    />
+                    <NInput v-model:value="selectedNode.config!.outputTemplate" type="textarea" :rows="3" placeholder="输出模板，支持 {{变量}} 语法" />
+                  </template>
+
+                  <!-- 变量节点 -->
+                  <template v-if="selectedNode.type === '变量'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">变量配置</div>
+                    <NInput v-model:value="selectedNode.config!.varName" placeholder="变量名称（如：userInput）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.varType"
+                      :options="['string', 'number', 'boolean', 'array', 'object'].map(v => ({ label: v, value: v }))"
+                      placeholder="变量类型"
+                    />
+                    <NInput v-model:value="selectedNode.config!.varValue" type="textarea" :rows="2" placeholder="默认值（可使用 {{上游变量}} 引用）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.scope"
+                      :options="['全局', '流程内', '当前节点'].map(v => ({ label: v, value: v }))"
+                      placeholder="作用域"
+                    />
+                  </template>
+
+                  <!-- 条件判断节点 -->
+                  <template v-if="selectedNode.type === '条件判断'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">条件配置</div>
+                    <NInput v-model:value="selectedNode.config!.conditionExpr" type="textarea" :rows="2" placeholder="条件表达式，如：{{input.score}} >= 60" />
+                    <div class="grid grid-cols-2 gap-2">
+                      <NInput v-model:value="selectedNode.config!.trueLabel" placeholder="是（True）分支名" />
+                      <NInput v-model:value="selectedNode.config!.falseLabel" placeholder="否（False）分支名" />
+                    </div>
+                  </template>
+
+                  <!-- 循环节点 -->
+                  <template v-if="selectedNode.type === '循环'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">循环配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.loopType"
+                      :options="['列表循环', '计数循环', '条件循环'].map(v => ({ label: v, value: v }))"
+                      placeholder="循环类型"
+                    />
+                    <NInput v-model:value="selectedNode.config!.iterateVar" placeholder="迭代变量（如：{{input.items}}）" />
+                    <NInput v-model:value="selectedNode.config!.loopVar" placeholder="循环项变量名（如：item）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0">最大迭代次数</span>
+                      <NInputNumber v-model:value="selectedNode.config!.maxIterations" :min="1" :max="10000" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- 延迟节点 -->
+                  <template v-if="selectedNode.type === '延迟'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">延迟配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.delayType"
+                      :options="['固定延迟', '随机延迟'].map(v => ({ label: v, value: v }))"
+                      placeholder="延迟类型"
+                    />
+                    <div class="flex items-center gap-2">
+                      <NInputNumber v-model:value="selectedNode.config!.delayMs" :min="0" :max="300000" class="flex-1" placeholder="延迟时长" />
+                      <NSelect
+                        v-model:value="selectedNode.config!.unit"
+                        class="w-20"
+                        :options="['ms', 's', 'min'].map(v => ({ label: v, value: v }))"
+                      />
+                    </div>
+                  </template>
+
+                  <!-- LLM 节点 -->
+                  <template v-if="selectedNode.type === 'LLM'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">模型配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.model"
                       clearable
                       :options="modelOptions.length ? modelOptions : emptyOptions('暂无可用模型')"
-                      placeholder="选择后端已配置模型"
+                      placeholder="选择模型"
                     />
-                    <NInputNumber :default-value="0.3" :min="0" :max="2" :step="0.1" class="w-full" placeholder="Temperature" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">Temperature</span>
+                      <NInputNumber v-model:value="selectedNode.config!.temperature" :min="0" :max="2" :step="0.1" :precision="1" class="flex-1" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">最大Token数</span>
+                      <NInputNumber v-model:value="selectedNode.config!.maxTokens" :min="1" :max="32768" class="flex-1" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">Top P</span>
+                      <NInputNumber v-model:value="selectedNode.config!.topP" :min="0" :max="1" :step="0.05" :precision="2" class="flex-1" />
+                    </div>
+                    <NInput v-model:value="selectedNode.config!.systemPrompt" type="textarea" :rows="4" placeholder="系统提示词（System Prompt）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="600" class="flex-1" />
+                    </div>
                   </template>
-                  <template v-if="selectedNode.type.includes('知识库')">
+
+                  <!-- 知识库检索节点 -->
+                  <template v-if="selectedNode.type === '知识库检索'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">检索配置</div>
                     <NSelect
-                      v-model:value="designer.knowledgeBases"
+                      v-model:value="selectedNode.config!.knowledgeBase"
                       clearable
                       filterable
                       :options="knowledgeBaseOptions.length ? knowledgeBaseOptions : emptyOptions('暂无可访问知识库')"
-                      placeholder="选择可访问知识库"
+                      placeholder="选择知识库"
                     />
-                    <NSelect default-value="混合检索" :options="['向量检索', '关键词检索', '混合检索'].map(v => ({ label: v, value: v }))" />
-                  </template>
-                  <template v-if="selectedNode.type.includes('Prompt')">
                     <NSelect
-                      v-model:value="designer.promptRefs"
+                      v-model:value="selectedNode.config!.searchMode"
+                      :options="['向量检索', '关键词检索', '混合检索'].map(v => ({ label: v, value: v }))"
+                      placeholder="检索模式"
+                    />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">返回条数 (TopK)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.topK" :min="1" :max="20" class="flex-1" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">相似度阈值</span>
+                      <NInputNumber v-model:value="selectedNode.config!.scoreThreshold" :min="0" :max="1" :step="0.05" :precision="2" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- Prompt模板节点 -->
+                  <template v-if="selectedNode.type === 'Prompt模板'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Prompt 配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.templateId"
                       clearable
                       filterable
                       :options="promptOptions.length ? promptOptions : emptyOptions('暂无Prompt模板')"
-                      placeholder="选择Prompt模板"
+                      placeholder="选择已有模板（可选）"
                     />
+                    <NInput v-model:value="selectedNode.config!.templateContent" type="textarea" :rows="5" placeholder="Prompt 内容，支持 {{变量}} 语法" />
+                    <NInput v-model:value="selectedNode.config!.inputVars" type="textarea" :rows="2" placeholder="输入变量映射（JSON）" />
                   </template>
-                  <template v-if="selectedNode.type.includes('MCP') || selectedNode.type.includes('HTTP')">
+
+                  <!-- Agent调用节点 -->
+                  <template v-if="selectedNode.type === 'Agent调用'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Agent 配置</div>
+                    <NInput v-model:value="selectedNode.config!.agentId" placeholder="Agent ID 或名称" />
+                    <NInput v-model:value="selectedNode.config!.inputMapping" type="textarea" :rows="2" placeholder="输入变量映射（JSON）" />
+                    <NInput v-model:value="selectedNode.config!.outputMapping" type="textarea" :rows="2" placeholder="输出变量映射（JSON）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-16">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="600" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- MCP工具节点 -->
+                  <template v-if="selectedNode.type === 'MCP工具'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">工具配置</div>
                     <NSelect
-                      v-model:value="designer.mcpTools"
+                      v-model:value="selectedNode.config!.toolId"
                       clearable
                       filterable
                       :options="mcpToolOptions.length ? mcpToolOptions : emptyOptions('暂无MCP工具')"
-                      placeholder="选择MCP工具"
+                      placeholder="选择 MCP 工具"
+                    />
+                    <NInput v-model:value="selectedNode.config!.inputMapping" type="textarea" :rows="2" placeholder="输入参数映射（JSON）" />
+                    <NInput v-model:value="selectedNode.config!.outputField" placeholder="输出字段名（如：result）" />
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 shrink-0">重试次数</span>
+                        <NInputNumber v-model:value="selectedNode.config!.retryCount" :min="0" :max="5" class="flex-1" />
+                      </div>
+                      <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 shrink-0">超时(秒)</span>
+                        <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="300" class="flex-1" />
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- HTTP请求节点 -->
+                  <template v-if="selectedNode.type === 'HTTP请求'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">HTTP 配置</div>
+                    <div class="flex gap-2">
+                      <NSelect
+                        v-model:value="selectedNode.config!.method"
+                        class="w-28 shrink-0"
+                        :options="['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(v => ({ label: v, value: v }))"
+                      />
+                      <NInput v-model:value="selectedNode.config!.url" class="flex-1" placeholder="请求 URL" />
+                    </div>
+                    <NInput v-model:value="selectedNode.config!.headers" type="textarea" :rows="2" placeholder="请求头（JSON）" />
+                    <NInput v-model:value="selectedNode.config!.body" type="textarea" :rows="3" placeholder="请求体（JSON/文本，支持 {{变量}}）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.authType"
+                      :options="['none', 'Bearer Token', 'Basic Auth', 'API Key'].map(v => ({ label: v, value: v }))"
+                      placeholder="认证方式"
+                    />
+                    <div class="grid grid-cols-2 gap-2">
+                      <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 shrink-0">超时(秒)</span>
+                        <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="300" class="flex-1" />
+                      </div>
+                      <div class="flex items-center gap-1">
+                        <span class="text-xs text-gray-500 shrink-0">重试次数</span>
+                        <NInputNumber v-model:value="selectedNode.config!.retryCount" :min="0" :max="5" class="flex-1" />
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- SQL查询节点 -->
+                  <template v-if="selectedNode.type === 'SQL查询'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">SQL 配置</div>
+                    <NInput v-model:value="selectedNode.config!.datasource" placeholder="数据源名称/连接标识" />
+                    <NInput v-model:value="selectedNode.config!.sql" type="textarea" :rows="5" placeholder="SQL 语句（支持 {{变量}} 参数）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.resultType"
+                      :options="['列表', '单行', '单值', '影响行数'].map(v => ({ label: v, value: v }))"
+                      placeholder="结果类型"
+                    />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-16">最大行数</span>
+                      <NInputNumber v-model:value="selectedNode.config!.maxRows" :min="1" :max="10000" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- Python执行节点 -->
+                  <template v-if="selectedNode.type === 'Python执行'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Python 配置</div>
+                    <NInput v-model:value="selectedNode.config!.code" type="textarea" :rows="7" placeholder="Python 代码（可使用 input 变量）" style="font-family: monospace; font-size: 12px;" />
+                    <NInput v-model:value="selectedNode.config!.requirements" placeholder="依赖包（逗号分隔，如：requests,pandas）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-16">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="300" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- 代码执行节点 -->
+                  <template v-if="selectedNode.type === '代码执行'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">代码配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.language"
+                      :options="['JavaScript', 'TypeScript', 'Python', 'Shell'].map(v => ({ label: v, value: v }))"
+                      placeholder="执行语言"
+                    />
+                    <NInput v-model:value="selectedNode.config!.code" type="textarea" :rows="7" placeholder="代码内容" style="font-family: monospace; font-size: 12px;" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-16">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="1" :max="300" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- 审批节点 -->
+                  <template v-if="selectedNode.type === '审批'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">审批配置</div>
+                    <NInput v-model:value="selectedNode.config!.approvers" placeholder="审批人（用户名/角色，逗号分隔）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.approvalType"
+                      :options="['任一审批', '全部审批', '顺序审批'].map(v => ({ label: v, value: v }))"
+                      placeholder="审批类型"
+                    />
+                    <NInput v-model:value="selectedNode.config!.formFields" type="textarea" :rows="3" placeholder="审批表单字段（JSON Schema）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-24">超时(秒)</span>
+                      <NInputNumber v-model:value="selectedNode.config!.timeout" :min="60" :max="2592000" class="flex-1" placeholder="默认86400(1天)" />
+                    </div>
+                  </template>
+
+                  <!-- 消息通知节点 -->
+                  <template v-if="selectedNode.type === '消息通知'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">通知配置</div>
+                    <NSelect
+                      v-model:value="selectedNode.config!.channel"
+                      :options="['系统通知', '站内信', 'SMS短信'].map(v => ({ label: v, value: v }))"
+                      placeholder="通知渠道"
+                    />
+                    <NInput v-model:value="selectedNode.config!.recipients" placeholder="接收人（用户名/角色，逗号分隔）" />
+                    <NInput v-model:value="selectedNode.config!.title" placeholder="消息标题" />
+                    <NInput v-model:value="selectedNode.config!.content" type="textarea" :rows="3" placeholder="消息内容（支持 {{变量}}）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.priority"
+                      :options="['普通', '紧急', '非常紧急'].map(v => ({ label: v, value: v }))"
+                      placeholder="优先级"
                     />
                   </template>
-                  <NInput type="textarea" value="{&quot;query&quot;:&quot;{{input.query}}&quot;}" placeholder="输入参数" />
-                  <NInput type="textarea" value="{&quot;answer&quot;:&quot;&quot;,&quot;documents&quot;:[]}" placeholder="输出变量" />
+
+                  <!-- 邮件发送节点 -->
+                  <template v-if="selectedNode.type === '邮件发送'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">邮件配置</div>
+                    <NInput v-model:value="selectedNode.config!.to" placeholder="收件人（邮箱，逗号分隔）" />
+                    <NInput v-model:value="selectedNode.config!.cc" placeholder="抄送（邮箱，可选）" />
+                    <NInput v-model:value="selectedNode.config!.subject" placeholder="邮件主题（支持 {{变量}}）" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.bodyType"
+                      :options="['html', 'text'].map(v => ({ label: v === 'html' ? 'HTML' : '纯文本', value: v }))"
+                      placeholder="正文格式"
+                    />
+                    <NInput v-model:value="selectedNode.config!.body" type="textarea" :rows="5" placeholder="邮件正文（支持 {{变量}}）" />
+                  </template>
+
+                  <!-- Webhook节点 -->
+                  <template v-if="selectedNode.type === 'Webhook'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">Webhook 配置</div>
+                    <div class="flex gap-2">
+                      <NSelect
+                        v-model:value="selectedNode.config!.method"
+                        class="w-24 shrink-0"
+                        :options="['POST', 'GET', 'PUT'].map(v => ({ label: v, value: v }))"
+                      />
+                      <NInput v-model:value="selectedNode.config!.url" class="flex-1" placeholder="Webhook URL" />
+                    </div>
+                    <NInput v-model:value="selectedNode.config!.headers" type="textarea" :rows="2" placeholder="请求头（JSON）" />
+                    <NInput v-model:value="selectedNode.config!.payload" type="textarea" :rows="3" placeholder="请求体（JSON，支持 {{变量}}）" />
+                    <NInput v-model:value="selectedNode.config!.secret" placeholder="签名密钥（可选，用于验签）" />
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 w-16">重试次数</span>
+                      <NInputNumber v-model:value="selectedNode.config!.retryCount" :min="0" :max="5" class="flex-1" />
+                    </div>
+                  </template>
+
+                  <!-- 飞书通知节点 -->
+                  <template v-if="selectedNode.type === '飞书通知'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">飞书配置</div>
+                    <NInput v-model:value="selectedNode.config!.webhookUrl" placeholder="飞书自定义机器人 Webhook URL" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.msgType"
+                      :options="['text', 'post', 'interactive'].map(v => ({ label: v === 'text' ? '文本' : v === 'post' ? '富文本' : '卡片消息', value: v }))"
+                      placeholder="消息类型"
+                    />
+                    <NInput v-if="selectedNode.config!.msgType !== 'text'" v-model:value="selectedNode.config!.title" placeholder="消息标题" />
+                    <NInput v-model:value="selectedNode.config!.content" type="textarea" :rows="3" placeholder="消息内容（支持 {{变量}}）" />
+                    <NInput v-model:value="selectedNode.config!.atUsers" placeholder="@指定成员（user_id，逗号分隔）" />
+                  </template>
+
+                  <!-- 企业微信通知节点 -->
+                  <template v-if="selectedNode.type === '企业微信通知'">
+                    <div class="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">企业微信配置</div>
+                    <NInput v-model:value="selectedNode.config!.webhookUrl" placeholder="企业微信群机器人 Webhook URL" />
+                    <NSelect
+                      v-model:value="selectedNode.config!.msgType"
+                      :options="['text', 'markdown', 'news'].map(v => ({ label: v === 'text' ? '文本' : v === 'markdown' ? 'Markdown' : '图文', value: v }))"
+                      placeholder="消息类型"
+                    />
+                    <NInput v-model:value="selectedNode.config!.content" type="textarea" :rows="3" placeholder="消息内容（支持 {{变量}}）" />
+                    <NInput v-model:value="selectedNode.config!.atUsers" placeholder="@成员（企业微信账号，逗号分隔）" />
+                  </template>
                 </div>
                 <div v-else class="rounded-lg border border-dashed border-gray-200 py-10 text-center text-sm text-gray-400">
-                  请选择一个节点
+                  {{ hasSelectedWorkflow ? '请选择一个节点' : '暂无可配置节点' }}
                 </div>
               </aside>
             </div>
@@ -883,7 +1312,7 @@ onBeforeUnmount(() => {
               <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900">
                 <div class="mb-3 text-sm font-semibold">输入区</div>
                 <NInput v-model:value="testQuery" type="textarea" placeholder="请输入测试问题" />
-                <NButton block type="primary" class="mt-3" :loading="debugLoading" @click="runDebug">执行</NButton>
+                <NButton block type="primary" class="mt-3" :disabled="!hasSelectedWorkflow" :loading="debugLoading" @click="runDebug">执行</NButton>
               </div>
               <div class="rounded-lg border border-gray-100 p-4 dark:border-gray-700">
                 <div class="mb-3 text-sm font-semibold">执行轨迹</div>
@@ -918,24 +1347,35 @@ onBeforeUnmount(() => {
             <div class="grid grid-cols-3 gap-5">
               <div class="rounded-lg border border-gray-100 p-5 dark:border-gray-700">
                 <div class="mb-4 text-sm font-semibold">基础信息</div>
-                <div class="space-y-2 text-sm text-gray-600">
-                  <div>名称：{{ selectedWorkflow?.name || designer.name }}</div>
-                  <div>描述：{{ selectedWorkflow?.description || designer.description || '-' }}</div>
-                  <div>负责人：{{ selectedWorkflow?.ownerName || designer.ownerName || '-' }}</div>
-                  <div>标签：{{ selectedWorkflow?.tags || designer.tags || '-' }}</div>
+                <div v-if="hasSelectedWorkflow" class="space-y-2 text-sm text-gray-600">
+                  <div>名称：{{ selectedWorkflow?.name }}</div>
+                  <div>描述：{{ selectedWorkflow?.description || '-' }}</div>
+                  <div>负责人：{{ selectedWorkflow?.ownerName || '-' }}</div>
+                  <div>标签：{{ selectedWorkflow?.tags || '-' }}</div>
+                </div>
+                <div v-else class="py-8 text-center text-sm text-gray-400">
+                  暂无后端工作流数据
                 </div>
               </div>
               <div class="rounded-lg border border-gray-100 p-5 dark:border-gray-700">
                 <div class="mb-4 text-sm font-semibold">权限配置</div>
-                <NSelect v-model:value="designer.permissionScope" :options="['公开', '组织内', '指定角色', '指定用户'].map(v => ({ label: v, value: v }))" />
+                <NSelect
+                  v-model:value="designer.permissionScope"
+                  :disabled="!hasSelectedWorkflow"
+                  :options="['公开', '组织内', '指定角色', '指定用户'].map(v => ({ label: v, value: v }))"
+                  placeholder="暂无权限配置"
+                />
               </div>
               <div class="rounded-lg border border-gray-100 p-5 dark:border-gray-700">
                 <div class="mb-4 text-sm font-semibold">关联资源</div>
-                <div class="space-y-2 text-sm text-gray-600">
+                <div v-if="hasSelectedWorkflow" class="space-y-2 text-sm text-gray-600">
                   <div>知识库：{{ designer.knowledgeBases || '-' }}</div>
                   <div>Prompt：{{ designer.promptRefs || '-' }}</div>
                   <div>MCP工具：{{ designer.mcpTools || '-' }}</div>
                   <div>模型：{{ designer.models || '-' }}</div>
+                </div>
+                <div v-else class="py-8 text-center text-sm text-gray-400">
+                  暂无关联资源
                 </div>
               </div>
             </div>
