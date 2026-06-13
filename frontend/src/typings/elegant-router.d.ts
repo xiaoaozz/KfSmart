@@ -21,24 +21,31 @@ declare module "@elegant-router/types" {
     "404": "/404";
     "500": "/500";
     "ai-center": "/ai-center";
+    "ai-center_agent-management": "/ai-center/agent-management";
     "ai-center_agent-marketplace": "/ai-center/agent-marketplace";
     "ai-center_agent-workflow": "/ai-center/agent-workflow";
+    "ai-center_debug-center": "/ai-center/debug-center";
     "ai-center_mcp-tools": "/ai-center/mcp-tools";
     "ai-center_model-management": "/ai-center/model-management";
     "ai-center_prompt-management": "/ai-center/prompt-management";
     "ai-center_run-analysis": "/ai-center/run-analysis";
+    "ai-center_workflow": "/ai-center/workflow";
+    "ai-assistant": "/ai-assistant";
+    "ai-assistant_chat": "/ai-assistant/chat";
+    "ai-assistant_document-management": "/ai-assistant/document-management";
+    "ai-assistant_knowledge-base": "/ai-assistant/knowledge-base";
     "api-key-management": "/api-key-management";
-    "chat": "/chat";
-    "document-management": "/document-management";
+    "home": "/home";
     "iframe-page": "/iframe-page/:url";
-    "knowledge-base": "/knowledge-base";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
+    "org-tag": "/org-tag";
     "permission-center": "/permission-center";
     "permission-center_org-management": "/permission-center/org-management";
     "permission-center_role-management": "/permission-center/role-management";
     "permission-center_user-management": "/permission-center/user-management";
     "personal-center": "/personal-center";
     "system-overview": "/system-overview";
+    "user": "/user";
   };
 
   /**
@@ -73,16 +80,17 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "ai-assistant"
     | "ai-center"
     | "api-key-management"
-    | "chat"
-    | "document-management"
+    | "home"
     | "iframe-page"
-    | "knowledge-base"
     | "login"
+    | "org-tag"
     | "permission-center"
     | "personal-center"
     | "system-overview"
+    | "user"
   >;
 
   /**
@@ -104,21 +112,27 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "ai-assistant_chat"
+    | "ai-assistant_document-management"
+    | "ai-assistant_knowledge-base"
+    | "ai-center_agent-management"
     | "ai-center_agent-marketplace"
     | "ai-center_agent-workflow"
+    | "ai-center_debug-center"
     | "ai-center_mcp-tools"
     | "ai-center_model-management"
     | "ai-center_prompt-management"
     | "ai-center_run-analysis"
+    | "ai-center_workflow"
     | "api-key-management"
-    | "chat"
-    | "document-management"
-    | "knowledge-base"
+    | "home"
+    | "org-tag"
     | "permission-center_org-management"
     | "permission-center_role-management"
     | "permission-center_user-management"
     | "personal-center"
     | "system-overview"
+    | "user"
   >;
 
   /**
