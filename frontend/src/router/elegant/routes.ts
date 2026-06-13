@@ -51,6 +51,17 @@ export const generatedRoutes = [
     },
     children: [
       {
+        name: 'ai-center_agent-management',
+        path: '/ai-center/agent-management',
+        component: 'view.ai-center_agent-management',
+        meta: {
+          title: 'ai-center_agent-management',
+          i18nKey: 'route.ai-center_agent-management',
+          icon: 'carbon:bot',
+          order: 1
+        }
+      },
+      {
         name: 'ai-center_agent-marketplace',
         path: '/ai-center/agent-marketplace',
         component: 'view.ai-center_agent-marketplace',
@@ -58,7 +69,7 @@ export const generatedRoutes = [
           title: 'ai-center_agent-marketplace',
           i18nKey: 'route.ai-center_agent-marketplace',
           icon: 'carbon:store',
-          order: 5
+          order: 6
         }
       },
       {
@@ -73,6 +84,17 @@ export const generatedRoutes = [
         }
       },
       {
+        name: 'ai-center_debug-center',
+        path: '/ai-center/debug-center',
+        component: 'view.ai-center_debug-center',
+        meta: {
+          title: 'ai-center_debug-center',
+          i18nKey: 'route.ai-center_debug-center',
+          icon: 'carbon:debug',
+          order: 7
+        }
+      },
+      {
         name: 'ai-center_mcp-tools',
         path: '/ai-center/mcp-tools',
         component: 'view.ai-center_mcp-tools',
@@ -80,7 +102,7 @@ export const generatedRoutes = [
           title: 'ai-center_mcp-tools',
           i18nKey: 'route.ai-center_mcp-tools',
           icon: 'carbon:tool-kit',
-          order: 2
+          order: 3
         }
       },
       {
@@ -91,7 +113,7 @@ export const generatedRoutes = [
           title: 'ai-center_model-management',
           i18nKey: 'route.ai-center_model-management',
           icon: 'carbon:model',
-          order: 4
+          order: 5
         }
       },
       {
@@ -102,7 +124,7 @@ export const generatedRoutes = [
           title: 'ai-center_prompt-management',
           i18nKey: 'route.ai-center_prompt-management',
           icon: 'carbon:text-annotation-toggle',
-          order: 3
+          order: 4
         }
       },
       {
@@ -113,7 +135,18 @@ export const generatedRoutes = [
           title: 'ai-center_run-analysis',
           i18nKey: 'route.ai-center_run-analysis',
           icon: 'carbon:chart-line-data',
-          order: 6
+          order: 8
+        }
+      },
+      {
+        name: 'ai-center_workflow',
+        path: '/ai-center/workflow',
+        component: 'view.ai-center_workflow',
+        meta: {
+          title: 'ai-center_workflow',
+          i18nKey: 'route.ai-center_workflow',
+          icon: 'carbon:flow',
+          order: 2
         }
       }
     ]
@@ -132,25 +165,58 @@ export const generatedRoutes = [
     }
   },
   {
-    name: 'chat',
-    path: '/chat',
-    component: 'layout.base$view.chat',
+    name: 'ai-assistant',
+    path: '/ai-assistant',
+    component: 'layout.base',
     meta: {
-      title: 'chat',
-      i18nKey: 'route.chat',
+      title: 'ai-assistant',
+      i18nKey: 'route.ai-assistant',
       icon: 'solar:chat-round-call-line-duotone',
       order: 1
-    }
+    },
+    children: [
+      {
+        name: 'ai-assistant_chat',
+        path: '/ai-assistant/chat',
+        component: 'view.ai-assistant_chat',
+        meta: {
+          title: 'ai-assistant_chat',
+          i18nKey: 'route.ai-assistant_chat',
+          icon: 'solar:chat-round-call-line-duotone',
+          order: 1
+        }
+      },
+      {
+        name: 'ai-assistant_knowledge-base',
+        path: '/ai-assistant/knowledge-base',
+        component: 'view.ai-assistant_knowledge-base',
+        meta: {
+          title: 'ai-assistant_knowledge-base',
+          i18nKey: 'route.ai-assistant_knowledge-base',
+          icon: 'solar:folder-line-duotone',
+          order: 2
+        }
+      },
+      {
+        name: 'ai-assistant_document-management',
+        path: '/ai-assistant/document-management',
+        component: 'view.ai-assistant_document-management',
+        meta: {
+          title: 'ai-assistant_document-management',
+          i18nKey: 'route.ai-assistant_document-management',
+          icon: 'carbon:document',
+          order: 3
+        }
+      }
+    ]
   },
   {
-    name: 'document-management',
-    path: '/document-management',
-    component: 'layout.base$view.document-management',
+    name: 'home',
+    path: '/home',
+    component: 'layout.base$view.home',
     meta: {
-      title: 'document-management',
-      i18nKey: 'route.document-management',
-      icon: 'carbon:document',
-      order: 3.1
+      title: 'home',
+      i18nKey: 'route.home'
     }
   },
   {
@@ -166,17 +232,7 @@ export const generatedRoutes = [
       keepAlive: true
     }
   },
-  {
-    name: 'knowledge-base',
-    path: '/knowledge-base',
-    component: 'layout.base$view.knowledge-base',
-    meta: {
-      title: 'knowledge-base',
-      i18nKey: 'route.knowledge-base',
-      icon: 'solar:folder-line-duotone',
-      order: 3
-    }
-  },
+
   {
     name: 'login',
     path: '/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?',
@@ -186,6 +242,16 @@ export const generatedRoutes = [
       title: 'login',
       i18nKey: 'route.login',
       constant: true,
+      hideInMenu: true
+    }
+  },
+  {
+    name: 'org-tag',
+    path: '/org-tag',
+    component: 'layout.base$view.org-tag',
+    meta: {
+      title: 'org-tag',
+      i18nKey: 'route.org-tag',
       hideInMenu: true
     }
   },
@@ -264,4 +330,14 @@ export const generatedRoutes = [
       order: 0
     }
   },
+  {
+    name: 'user',
+    path: '/user',
+    component: 'layout.base$view.user',
+    meta: {
+      title: 'user',
+      i18nKey: 'route.user',
+      hideInMenu: true
+    }
+  }
 ];
