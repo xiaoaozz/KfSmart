@@ -179,12 +179,13 @@ const routeMap: RouteMap = {
   "iframe-page": "/iframe-page/:url",
   "knowledge-base": "/knowledge-base",
   "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",
+  "org-tag": "/org-tag",
   "permission-center": "/permission-center",
-  "permission-center_org-management": "/permission-center/org-management",
   "permission-center_role-management": "/permission-center/role-management",
   "permission-center_user-management": "/permission-center/user-management",
   "personal-center": "/personal-center",
-  "system-overview": "/system-overview"
+  "system-overview": "/system-overview",
+  "user": "/user"
 };
 
 /**

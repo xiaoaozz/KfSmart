@@ -190,6 +190,15 @@ export const generatedRoutes = [
     }
   },
   {
+    name: 'org-tag',
+    path: '/org-tag',
+    component: 'layout.base$view.org-tag',
+    meta: {
+      title: 'org-tag',
+      i18nKey: 'route.org-tag'
+    }
+  },
+  {
     name: 'permission-center',
     path: '/permission-center',
     component: 'layout.base',
@@ -202,19 +211,6 @@ export const generatedRoutes = [
       order: 5
     },
     children: [
-      {
-        name: 'permission-center_org-management',
-        path: '/permission-center/org-management',
-        component: 'view.permission-center_org-management',
-        meta: {
-          title: 'permission-center_org-management',
-          i18nKey: 'route.permission-center_org-management',
-          icon: 'solar:buildings-line-duotone',
-          roles: ['ADMIN'],
-          permissions: ['system:admin'],
-          order: 1
-        }
-      },
       {
         name: 'permission-center_role-management',
         path: '/permission-center/role-management',
@@ -264,4 +260,13 @@ export const generatedRoutes = [
       order: 0
     }
   },
+  {
+    name: 'user',
+    path: '/user',
+    component: 'layout.base$view.user',
+    meta: {
+      title: 'user',
+      i18nKey: 'route.user'
+    }
+  }
 ];
