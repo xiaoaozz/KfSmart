@@ -136,6 +136,18 @@ public class AgentCenterService {
         Map<String, Object> variables = new HashMap<>(input == null ? Map.of() : input);
         variables.putIfAbsent("query", "");
 
+        // 提取前端传入的多轮历史消息
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> history = (List<Map<String, String>>) variables.remove("history");
+        if (history == null) history = new ArrayList<>();
+
+        // 即时调试：前端表单中填写的 systemPrompt 直接生效，无需保存
+        String debugSystemPrompt = (String) variables.remove("systemPrompt");
+        String originalSystemPrompt = workflow.getSystemPrompt(); // 保留原值，防止写库
+        if (debugSystemPrompt != null && !debugSystemPrompt.isBlank()) {
+            workflow.setSystemPrompt(debugSystemPrompt);
+        }
+
         boolean success = true;
         String errorMessage = null;
         long startedAt = System.currentTimeMillis();
@@ -143,7 +155,7 @@ public class AgentCenterService {
         for (WorkflowNode node : sortNodes(workflow)) {
             long nodeStarted = System.currentTimeMillis();
             try {
-                executeNode(node, workflow, variables, username);
+                executeNode(node, workflow, variables, username, history);
                 trace.add(trace(node.name(), System.currentTimeMillis() - nodeStarted, "success", null));
             } catch (Exception e) {
                 success = false;
@@ -162,6 +174,8 @@ public class AgentCenterService {
             workflow.setFailureCount(workflow.getFailureCount() + 1);
         }
         workflow.setAvgDurationMs(Math.round((workflow.getAvgDurationMs() * oldCalls + duration) * 1.0 / workflow.getCallCount()));
+        // 还原临时 systemPrompt，确保只更新统计字段，不污染数据库中的提示词
+        workflow.setSystemPrompt(originalSystemPrompt);
         workflowRepository.save(workflow);
 
         Map<String, Object> tokens = new HashMap<>();
@@ -308,6 +322,25 @@ public class AgentCenterService {
         target.setModels(source.getModels());
         target.setNodesJson(isBlank(source.getNodesJson()) ? defaultNodes() : source.getNodesJson());
         target.setEdgesJson(isBlank(source.getEdgesJson()) ? defaultEdges() : source.getEdgesJson());
+        // 扩展字段
+        if (!isBlank(source.getSystemPrompt())) {
+            target.setSystemPrompt(source.getSystemPrompt());
+        }
+        if (!isBlank(source.getAvatarEmoji())) {
+            target.setAvatarEmoji(source.getAvatarEmoji());
+        }
+        if (source.getTemperature() != null) {
+            target.setTemperature(source.getTemperature());
+        }
+        if (source.getTopP() != null) {
+            target.setTopP(source.getTopP());
+        }
+        if (source.getMaxTokens() != null) {
+            target.setMaxTokens(source.getMaxTokens());
+        }
+        if (!isBlank(source.getMemoryTypes())) {
+            target.setMemoryTypes(source.getMemoryTypes());
+        }
     }
 
     private Map<String, Object> trace(String name, long durationMs, String status, String errorMessage) {
@@ -412,19 +445,25 @@ public class AgentCenterService {
         return true;
     }
 
-    private void executeNode(WorkflowNode node, AgentWorkflow workflow, Map<String, Object> variables, String username) {
+    private void executeNode(WorkflowNode node, AgentWorkflow workflow, Map<String, Object> variables, String username, List<Map<String, String>> history) {
         String type = node.type();
         if (type.contains("开始") || type.contains("变量")) {
             variables.putIfAbsent("query", "");
             return;
         }
         if (type.contains("知识库")) {
+            // 未绑定知识库时跳过，不执行检索
+            if (isBlank(workflow.getKnowledgeBases())) {
+                variables.putIfAbsent("documents", List.of());
+                variables.putIfAbsent("context", "");
+                return;
+            }
             String query = String.valueOf(variables.getOrDefault("query", ""));
             List<SearchResult> documents = hybridSearchService.searchWithPermission(query, username, 5);
             variables.put("documents", documents);
             variables.put("context", documents.stream()
                 .map(doc -> "来源：" + (doc.getFileName() == null ? doc.getFileMd5() : doc.getFileName()) + "\n" + doc.getTextContent())
-                .toList());
+                .collect(java.util.stream.Collectors.joining("\n\n")));
             return;
         }
         if (type.contains("Prompt")) {
@@ -432,6 +471,11 @@ public class AgentCenterService {
             return;
         }
         if (type.contains("MCP") || type.contains("HTTP")) {
+            // 未绑定 MCP 工具时跳过该节点，不发起网络请求
+            if (isBlank(workflow.getMcpTools())) {
+                variables.putIfAbsent("toolResult", null);
+                return;
+            }
             variables.put("toolResult", executeTool(workflow, variables));
             return;
         }
@@ -440,9 +484,13 @@ public class AgentCenterService {
             if (activeConfig.isEmpty()) {
                 throw new IllegalStateException("未配置激活模型，请先在模型管理/API Key 管理中激活模型");
             }
+            // 优先使用 llmPrompt（来自 Prompt 节点），否则用原始 query
             String query = String.valueOf(variables.getOrDefault("llmPrompt", variables.getOrDefault("query", "")));
-            String context = String.join("\n\n", ((List<?>) variables.getOrDefault("context", List.of())).stream().map(String::valueOf).toList());
-            String answer = modelClient.chat(query, context, List.of(), activeConfig.get());
+            // context 只在绑定了知识库时才有实质内容
+            String context = String.valueOf(variables.getOrDefault("context", ""));
+            // 构建 Agent 专用 system prompt：基础能力说明 + 用户自定义
+            String systemPrompt = buildAgentSystemPrompt(workflow);
+            String answer = modelClient.chat(query, context, history, activeConfig.get(), systemPrompt);
             variables.put("answer", answer);
             return;
         }
@@ -460,12 +508,17 @@ public class AgentCenterService {
         McpToolConfig tool = toolRepository.findAll().stream()
             .filter(item -> isBlank(configuredName) || item.getName().equals(configuredName) || configuredName.contains(item.getName()))
             .findFirst()
-            .orElseThrow(() -> new IllegalStateException("未配置可用 MCP 工具"));
+            .orElseThrow(() -> new IllegalStateException("未配置可用 MCP 工具，请在工具绑定中选择工具"));
         if (isBlank(tool.getEndpoint())) {
-            throw new IllegalStateException("MCP 工具 Endpoint 未配置");
+            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 的 Endpoint 未配置");
+        }
+        // 校验 endpoint 必须是合法 http/https URL，拒绝占位域名
+        String endpoint = tool.getEndpoint().trim();
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 的 Endpoint 格式无效，必须以 http:// 或 https:// 开头");
         }
         Object result = webClient.post()
-            .uri(tool.getEndpoint())
+            .uri(endpoint)
             .headers(headers -> {
                 if (!isBlank(tool.getApiKey())) {
                     String authType = tool.getAuthType() == null ? "" : tool.getAuthType().toLowerCase();
@@ -485,13 +538,73 @@ public class AgentCenterService {
         return result;
     }
 
+    /**
+     * 构建 Agent 专用 System Prompt。
+     * 层级：基础能力说明（根据绑定配置自动生成）+ 用户自定义 systemPrompt
+     */
+    private String buildAgentSystemPrompt(AgentWorkflow workflow) {
+        // ── 用户填写了自定义 System Prompt：以用户指令为主，完全交由用户控制角色定义 ──
+        if (!isBlank(workflow.getSystemPrompt())) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(workflow.getSystemPrompt());
+
+            // 有知识库时追加检索说明（不影响角色定义）
+            if (!isBlank(workflow.getKnowledgeBases())) {
+                sb.append("\n\n你具备知识库检索能力，会优先根据检索到的参考资料回答问题。");
+                sb.append("\n若参考资料中包含相关内容，请在回答末尾标注来源；若无相关内容，请基于自身知识回答，不要捏造信息。");
+            }
+
+            // 有 MCP 工具时追加工具说明
+            if (!isBlank(workflow.getMcpTools())) {
+                sb.append("\n\n你可以调用外部工具（").append(workflow.getMcpTools()).append("）来获取实时数据或执行操作。");
+            }
+
+            return sb.toString();
+        }
+
+        // ── 未填写自定义 System Prompt：使用自动生成的基础能力说明 ──
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是一个名为「").append(workflow.getName()).append("」的 AI Agent。\n");
+        if (!isBlank(workflow.getDescription())) {
+            sb.append("你的职责：").append(workflow.getDescription()).append("\n");
+        }
+
+        // 有知识库时说明会提供检索结果
+        if (!isBlank(workflow.getKnowledgeBases())) {
+            sb.append("\n你具备知识库检索能力，会优先根据检索到的参考资料回答问题。\n");
+            sb.append("若参考资料中包含相关内容，请在回答末尾标注来源；若无相关内容，请基于自身知识回答，不要捏造信息。\n");
+        }
+
+        // 有 MCP 工具时说明工具调用
+        if (!isBlank(workflow.getMcpTools())) {
+            sb.append("\n你可以调用外部工具（").append(workflow.getMcpTools()).append("）来获取实时数据或执行操作。\n");
+        }
+
+        // 有 Prompt 模板时说明
+        if (!isBlank(workflow.getPromptRefs())) {
+            sb.append("\n你会按照预设的 Prompt 模板来组织回答格式。\n");
+        }
+
+        sb.append("\n请用简洁、准确的语言回答用户问题，保持专业友好的态度。");
+        return sb.toString();
+    }
+
     private String renderPrompt(AgentWorkflow workflow, Map<String, Object> variables) {
         String promptName = workflow.getPromptRefs();
         PromptTemplate template = promptRepository.findAll().stream()
-            .filter(item -> isBlank(promptName) || item.getName().equals(promptName) || promptName.contains(item.getName()))
+            .filter(item -> !isBlank(promptName) && (item.getName().equals(promptName) || promptName.contains(item.getName())))
             .findFirst()
             .orElse(null);
-        String content = template == null ? "{{query}}\n\n{{context}}" : template.getContent();
+
+        String content;
+        if (template != null) {
+            content = template.getContent();
+        } else {
+            // 无 Prompt 模板时：有知识库上下文则带上，否则只用 query
+            String context = String.valueOf(variables.getOrDefault("context", ""));
+            content = (context.isBlank()) ? "{{query}}" : "{{query}}\n\n{{context}}";
+        }
+
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
             content = content.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
         }

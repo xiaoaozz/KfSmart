@@ -89,3 +89,73 @@ CREATE TABLE user_notifications (
     INDEX idx_recipient (recipient_username) COMMENT '接收者用户名索引',
     INDEX idx_recipient_unread (recipient_username, is_read) COMMENT '未读通知查询索引'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户通知表';
+
+-- ===== Agent 能力中心相关表 =====
+
+CREATE TABLE agent_workflows (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    workflow_id     VARCHAR(64) NOT NULL COMMENT 'Agent 唯一标识',
+    name            VARCHAR(100) NOT NULL COMMENT 'Agent 名称',
+    description     TEXT COMMENT '描述',
+    type            VARCHAR(50) NOT NULL DEFAULT '工作流' COMMENT '类型',
+    status          VARCHAR(20) NOT NULL DEFAULT '草稿' COMMENT '状态：草稿/运行中/已停止',
+    owner_name      VARCHAR(100) COMMENT '负责人',
+    tags            VARCHAR(255) COMMENT '标签，逗号分隔',
+    call_count      BIGINT NOT NULL DEFAULT 0 COMMENT '调用次数',
+    success_count   BIGINT NOT NULL DEFAULT 0 COMMENT '成功次数',
+    failure_count   BIGINT NOT NULL DEFAULT 0 COMMENT '失败次数',
+    avg_duration_ms BIGINT NOT NULL DEFAULT 0 COMMENT '平均响应时间(ms)',
+    install_count   BIGINT NOT NULL DEFAULT 0 COMMENT '安装次数',
+    permission_scope VARCHAR(20) NOT NULL DEFAULT '组织内' COMMENT '权限范围：公开/组织内/指定部门',
+    knowledge_bases TEXT COMMENT '关联知识库，逗号分隔名称',
+    prompt_refs     TEXT COMMENT '关联 Prompt 模板，逗号分隔名称',
+    mcp_tools       TEXT COMMENT '关联 MCP 工具，逗号分隔名称',
+    models          TEXT COMMENT '关联模型，逗号分隔',
+    nodes_json      LONGTEXT COMMENT '工作流节点 JSON',
+    edges_json      LONGTEXT COMMENT '工作流边 JSON',
+    system_prompt   TEXT COMMENT 'System Prompt 内容',
+    avatar_emoji    VARCHAR(32) DEFAULT '🤖' COMMENT '头像 Emoji',
+    temperature     DOUBLE DEFAULT 0.7 COMMENT '模型温度参数',
+    top_p           DOUBLE DEFAULT 0.8 COMMENT '模型 Top-P 参数',
+    max_tokens      INT DEFAULT 4000 COMMENT '最大输出 Token 数',
+    memory_types    VARCHAR(255) COMMENT '记忆类型，逗号分隔',
+    published_at    TIMESTAMP NULL COMMENT '发布时间',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_workflow_id (workflow_id),
+    INDEX idx_status (status),
+    INDEX idx_type (type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent 工作流表';
+
+CREATE TABLE prompt_templates (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    template_id VARCHAR(64) NOT NULL COMMENT 'Prompt 模板唯一标识',
+    name        VARCHAR(100) NOT NULL COMMENT '模板名称',
+    category    VARCHAR(50) COMMENT '分类',
+    version     VARCHAR(20) DEFAULT 'v1.0' COMMENT '版本',
+    content     LONGTEXT COMMENT '模板内容（支持 {{变量}} 占位符）',
+    variables   VARCHAR(500) COMMENT '变量列表，逗号分隔',
+    status      VARCHAR(20) DEFAULT '启用' COMMENT '状态：启用/禁用',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_template_id (template_id),
+    INDEX idx_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Prompt 模板表';
+
+CREATE TABLE mcp_tool_configs (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    tool_id     VARCHAR(64) NOT NULL COMMENT 'MCP 工具唯一标识',
+    name        VARCHAR(100) NOT NULL COMMENT '工具名称',
+    type        VARCHAR(50) DEFAULT 'MCP' COMMENT '类型：MCP/HTTP',
+    status      VARCHAR(20) DEFAULT '在线' COMMENT '状态：在线/离线',
+    endpoint    VARCHAR(500) COMMENT '工具 Endpoint URL',
+    auth_type   VARCHAR(50) COMMENT '鉴权类型：API Key/Bearer Token/无鉴权',
+    api_key     VARCHAR(500) COMMENT 'API Key（加密存储）',
+    description TEXT COMMENT '工具描述',
+    call_count  BIGINT NOT NULL DEFAULT 0 COMMENT '调用次数',
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_tool_id (tool_id),
+    INDEX idx_type (type),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='MCP 工具配置表';

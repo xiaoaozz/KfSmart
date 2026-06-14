@@ -450,6 +450,7 @@ declare namespace Api {
       successCount: number;
       failureCount: number;
       avgDurationMs: number;
+      successRate: number;
       installCount: number;
       permissionScope: string;
       knowledgeBases: string;
@@ -458,6 +459,12 @@ declare namespace Api {
       models: string;
       nodesJson: string;
       edgesJson: string;
+      systemPrompt: string;
+      avatarEmoji: string;
+      temperature: number;
+      topP: number;
+      maxTokens: number;
+      memoryTypes: string;
       createdAt: string;
       updatedAt: string;
       publishedAt: string | null;

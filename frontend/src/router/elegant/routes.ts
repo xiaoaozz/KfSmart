@@ -40,6 +40,52 @@ export const generatedRoutes = [
     }
   },
   {
+    name: 'ai-assistant',
+    path: '/ai-assistant',
+    component: 'layout.base',
+    meta: {
+      title: 'ai-assistant',
+      i18nKey: 'route.ai-assistant',
+      icon: 'solar:chat-round-call-line-duotone',
+      order: 1
+    },
+    children: [
+      {
+        name: 'ai-assistant_chat',
+        path: '/ai-assistant/chat',
+        component: 'view.ai-assistant_chat',
+        meta: {
+          title: 'ai-assistant_chat',
+          i18nKey: 'route.ai-assistant_chat',
+          icon: 'solar:chat-round-call-line-duotone',
+          order: 1
+        }
+      },
+      {
+        name: 'ai-assistant_document-management',
+        path: '/ai-assistant/document-management',
+        component: 'view.ai-assistant_document-management',
+        meta: {
+          title: 'ai-assistant_document-management',
+          i18nKey: 'route.ai-assistant_document-management',
+          icon: 'carbon:document',
+          order: 3
+        }
+      },
+      {
+        name: 'ai-assistant_knowledge-base',
+        path: '/ai-assistant/knowledge-base',
+        component: 'view.ai-assistant_knowledge-base',
+        meta: {
+          title: 'ai-assistant_knowledge-base',
+          i18nKey: 'route.ai-assistant_knowledge-base',
+          icon: 'solar:folder-line-duotone',
+          order: 2
+        }
+      }
+    ]
+  },
+  {
     name: 'ai-center',
     path: '/ai-center',
     component: 'layout.base',
@@ -70,17 +116,6 @@ export const generatedRoutes = [
           i18nKey: 'route.ai-center_agent-marketplace',
           icon: 'carbon:store',
           order: 6
-        }
-      },
-      {
-        name: 'ai-center_agent-workflow',
-        path: '/ai-center/agent-workflow',
-        component: 'view.ai-center_agent-workflow',
-        meta: {
-          title: 'ai-center_agent-workflow',
-          i18nKey: 'route.ai-center_agent-workflow',
-          icon: 'carbon:flow',
-          order: 1
         }
       },
       {
@@ -165,52 +200,6 @@ export const generatedRoutes = [
     }
   },
   {
-    name: 'ai-assistant',
-    path: '/ai-assistant',
-    component: 'layout.base',
-    meta: {
-      title: 'ai-assistant',
-      i18nKey: 'route.ai-assistant',
-      icon: 'solar:chat-round-call-line-duotone',
-      order: 1
-    },
-    children: [
-      {
-        name: 'ai-assistant_chat',
-        path: '/ai-assistant/chat',
-        component: 'view.ai-assistant_chat',
-        meta: {
-          title: 'ai-assistant_chat',
-          i18nKey: 'route.ai-assistant_chat',
-          icon: 'solar:chat-round-call-line-duotone',
-          order: 1
-        }
-      },
-      {
-        name: 'ai-assistant_knowledge-base',
-        path: '/ai-assistant/knowledge-base',
-        component: 'view.ai-assistant_knowledge-base',
-        meta: {
-          title: 'ai-assistant_knowledge-base',
-          i18nKey: 'route.ai-assistant_knowledge-base',
-          icon: 'solar:folder-line-duotone',
-          order: 2
-        }
-      },
-      {
-        name: 'ai-assistant_document-management',
-        path: '/ai-assistant/document-management',
-        component: 'view.ai-assistant_document-management',
-        meta: {
-          title: 'ai-assistant_document-management',
-          i18nKey: 'route.ai-assistant_document-management',
-          icon: 'carbon:document',
-          order: 3
-        }
-      }
-    ]
-  },
-  {
     name: 'home',
     path: '/home',
     component: 'layout.base$view.home',
@@ -232,7 +221,6 @@ export const generatedRoutes = [
       keepAlive: true
     }
   },
-
   {
     name: 'login',
     path: '/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?',

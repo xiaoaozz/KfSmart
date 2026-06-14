@@ -8,7 +8,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -79,6 +82,24 @@ public class AgentWorkflow {
     @Column(name = "edges_json", columnDefinition = "LONGTEXT")
     private String edgesJson;
 
+    @Column(name = "system_prompt", columnDefinition = "TEXT")
+    private String systemPrompt;
+
+    @Column(name = "avatar_emoji", length = 32)
+    private String avatarEmoji = "🤖";
+
+    @Column(name = "temperature")
+    private Double temperature = 0.7;
+
+    @Column(name = "top_p")
+    private Double topP = 0.8;
+
+    @Column(name = "max_tokens")
+    private Integer maxTokens = 4000;
+
+    @Column(name = "memory_types")
+    private String memoryTypes;
+
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
@@ -96,5 +117,15 @@ public class AgentWorkflow {
         if (installCount == null) {
             installCount = 0L;
         }
+    }
+
+    /** 计算字段：成功率（百分比），不持久化到数据库 */
+    @Transient
+    @Getter(AccessLevel.NONE)
+    private Long successRate;
+
+    public Long getSuccessRate() {
+        if (successRate != null) return successRate;
+        return callCount == 0 ? 100L : Math.round(successCount * 100.0 / callCount);
     }
 }

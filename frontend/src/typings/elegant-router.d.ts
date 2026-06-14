@@ -20,20 +20,19 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "ai-assistant": "/ai-assistant";
+    "ai-assistant_chat": "/ai-assistant/chat";
+    "ai-assistant_document-management": "/ai-assistant/document-management";
+    "ai-assistant_knowledge-base": "/ai-assistant/knowledge-base";
     "ai-center": "/ai-center";
     "ai-center_agent-management": "/ai-center/agent-management";
     "ai-center_agent-marketplace": "/ai-center/agent-marketplace";
-    "ai-center_agent-workflow": "/ai-center/agent-workflow";
     "ai-center_debug-center": "/ai-center/debug-center";
     "ai-center_mcp-tools": "/ai-center/mcp-tools";
     "ai-center_model-management": "/ai-center/model-management";
     "ai-center_prompt-management": "/ai-center/prompt-management";
     "ai-center_run-analysis": "/ai-center/run-analysis";
     "ai-center_workflow": "/ai-center/workflow";
-    "ai-assistant": "/ai-assistant";
-    "ai-assistant_chat": "/ai-assistant/chat";
-    "ai-assistant_document-management": "/ai-assistant/document-management";
-    "ai-assistant_knowledge-base": "/ai-assistant/knowledge-base";
     "api-key-management": "/api-key-management";
     "home": "/home";
     "iframe-page": "/iframe-page/:url";
@@ -117,7 +116,6 @@ declare module "@elegant-router/types" {
     | "ai-assistant_knowledge-base"
     | "ai-center_agent-management"
     | "ai-center_agent-marketplace"
-    | "ai-center_agent-workflow"
     | "ai-center_debug-center"
     | "ai-center_mcp-tools"
     | "ai-center_model-management"
