@@ -171,7 +171,50 @@ public class ModelClient {
     }
 
     /**
-     * 非流式对话接口，供工作流引擎等同步执行场景使用。
+     * 非流式对话接口，支持传入 Agent 自定义 systemPrompt，供工作流引擎等同步执行场景使用。
+     * 当 systemPrompt 不为空时，替换全局 AiProperties 配置作为 system 消息。
+     */
+    public String chat(String userMessage,
+                       String context,
+                       List<Map<String, String>> history,
+                       ApiKeyConfig apiKeyConfig,
+                       String systemPrompt) {
+        WebClient client;
+        String model;
+
+        if (apiKeyConfig != null) {
+            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
+            model = apiKeyConfig.getModelName();
+        } else {
+            client = defaultWebClient;
+            model = defaultModel;
+        }
+
+        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
+                ? apiKeyConfig.getAuthType().toLowerCase()
+                : "bearer";
+        Map<String, Object> requestBody = buildRequest(userMessage, context, history, model, apiKeyConfig, systemPrompt);
+        requestBody.put("stream", false);
+        String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
+
+        String response = client.post()
+                .uri(resolvedUri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(
+                        HttpStatusCode::isError,
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> Mono.error(new RuntimeException(parseErrorMessage(errorBody))))
+                )
+                .bodyToMono(String.class)
+                .block();
+
+        return "anthropic".equals(authType) ? parseAnthropicText(response) : parseOpenAiText(response);
+    }
+
+    /**
+     * 非流式对话接口（不带自定义 systemPrompt），供工作流引擎等同步执行场景使用。
      */
     public String chat(String userMessage,
                        String context,
@@ -271,6 +314,15 @@ public class ModelClient {
                                              List<Map<String, String>> history,
                                              String model,
                                              ApiKeyConfig apiKeyConfig) {
+        return buildRequest(userMessage, context, history, model, apiKeyConfig, null);
+    }
+
+    private Map<String, Object> buildRequest(String userMessage,
+                                             String context,
+                                             List<Map<String, String>> history,
+                                             String model,
+                                             ApiKeyConfig apiKeyConfig,
+                                             String systemPrompt) {
         logger.info("构建请求，model={}，用户消息长度={}，上下文长度={}，历史消息数={}",
                 model,
                 userMessage != null ? userMessage.length() : 0,
@@ -282,12 +334,12 @@ public class ModelClient {
                 : "bearer";
 
         if ("anthropic".equals(authType)) {
-            return buildAnthropicRequest(userMessage, context, history, model, apiKeyConfig);
+            return buildAnthropicRequest(userMessage, context, history, model, apiKeyConfig, systemPrompt);
         }
 
         Map<String, Object> request = new HashMap<>();
         request.put("model", model);
-        request.put("messages", buildMessages(userMessage, context, history));
+        request.put("messages", buildMessages(userMessage, context, history, systemPrompt));
         request.put("stream", true);
 
         // 优先使用数据库配置的生成参数；否则使用 YAML 配置
@@ -324,7 +376,8 @@ public class ModelClient {
                                                        String context,
                                                        List<Map<String, String>> history,
                                                        String model,
-                                                       ApiKeyConfig apiKeyConfig) {
+                                                       ApiKeyConfig apiKeyConfig,
+                                                       String systemPrompt) {
         Map<String, Object> request = new HashMap<>();
         request.put("model", model);
         request.put("stream", true);
@@ -345,7 +398,7 @@ public class ModelClient {
         }
 
         // 将 system 消息单独提取出来（Anthropic 要求顶层 system 字段）
-        List<Map<String, String>> allMessages = buildMessages(userMessage, context, history);
+        List<Map<String, String>> allMessages = buildMessages(userMessage, context, history, systemPrompt);
         List<Map<String, String>> userMessages = new ArrayList<>();
         for (Map<String, String> msg : allMessages) {
             if ("system".equals(msg.get("role"))) {
@@ -360,39 +413,49 @@ public class ModelClient {
 
     private List<Map<String, String>> buildMessages(String userMessage,
                                                     String context,
-                                                    List<Map<String, String>> history) {
+                                                    List<Map<String, String>> history,
+                                                    String systemPrompt) {
         List<Map<String, String>> messages = new ArrayList<>();
-        AiProperties.Prompt promptCfg = aiProperties.getPrompt();
 
-        // 1. 构建统一的 system 指令（规则 + 参考信息）
-        StringBuilder sysBuilder = new StringBuilder();
-        String rules = promptCfg.getRules();
-        if (rules != null) {
-            sysBuilder.append(rules).append("\n\n");
-        }
-
-        String refStart = promptCfg.getRefStart() != null ? promptCfg.getRefStart() : "<<REF>>";
-        String refEnd   = promptCfg.getRefEnd()   != null ? promptCfg.getRefEnd()   : "<<END>>";
-        sysBuilder.append(refStart).append("\n");
-
-        if (context != null && !context.isEmpty()) {
-            sysBuilder.append(context);
+        String systemContent;
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            // Agent 自定义 System Prompt 模式：直接使用，不叠加知识库 RAG 模板
+            // 若有知识库检索上下文，追加到 system 末尾供模型参考
+            if (context != null && !context.isBlank()) {
+                systemContent = systemPrompt + "\n\n以下是检索到的参考资料：\n" + context;
+            } else {
+                systemContent = systemPrompt;
+            }
         } else {
-            String noResult = promptCfg.getNoResultText() != null ? promptCfg.getNoResultText() : "（本轮无检索结果）";
-            sysBuilder.append(noResult).append("\n");
+            // 知识库 RAG 模式：使用全局 AiProperties 模板构建 system
+            AiProperties.Prompt promptCfg = aiProperties.getPrompt();
+            StringBuilder sysBuilder = new StringBuilder();
+            String rules = promptCfg.getRules();
+            if (rules != null) {
+                sysBuilder.append(rules).append("\n\n");
+            }
+            String refStart = promptCfg.getRefStart() != null ? promptCfg.getRefStart() : "<<REF>>";
+            String refEnd   = promptCfg.getRefEnd()   != null ? promptCfg.getRefEnd()   : "<<END>>";
+            sysBuilder.append(refStart).append("\n");
+            if (context != null && !context.isBlank()) {
+                sysBuilder.append(context);
+            } else {
+                String noResult = promptCfg.getNoResultText() != null ? promptCfg.getNoResultText() : "（本轮无检索结果）";
+                sysBuilder.append(noResult).append("\n");
+            }
+            sysBuilder.append(refEnd);
+            systemContent = sysBuilder.toString();
         }
-        sysBuilder.append(refEnd);
 
-        String systemContent = sysBuilder.toString();
         messages.add(Map.of("role", "system", "content", systemContent));
         logger.debug("添加了系统消息，长度: {}", systemContent.length());
 
-        // 2. 追加历史消息（若有）
+        // 追加历史消息（若有）
         if (history != null && !history.isEmpty()) {
             messages.addAll(history);
         }
 
-        // 3. 当前用户问题
+        // 当前用户问题
         messages.add(Map.of("role", "user", "content", userMessage));
 
         return messages;

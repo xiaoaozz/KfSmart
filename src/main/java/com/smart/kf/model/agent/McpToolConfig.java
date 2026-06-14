@@ -33,7 +33,7 @@ public class McpToolConfig {
     @Column(nullable = false)
     private String status = "在线";
 
-    @Column(nullable = false)
+    @Column
     private String endpoint;
 
     @Column(name = "auth_type")

@@ -26,13 +26,25 @@ export function setupElegantRouter() {
 
       const constantRoutes: RouteKey[] = ['login', '403', '404', '500'];
       const aiCenterMeta: Partial<Record<string, Partial<RouteMeta>>> = {
+        'ai-assistant': {
+          icon: 'solar:chat-round-call-line-duotone',
+          order: 1
+        },
+        'ai-assistant_chat': {
+          icon: 'solar:chat-round-call-line-duotone',
+          order: 1
+        },
+        'ai-assistant_knowledge-base': {
+          icon: 'solar:folder-line-duotone',
+          order: 2
+        },
+        'ai-assistant_document-management': {
+          icon: 'carbon:document',
+          order: 3
+        },
         'ai-center': {
           icon: 'carbon:ai-status',
           order: 3.5
-        },
-        'ai-center_agent-workflow': {
-          icon: 'carbon:flow',
-          order: 1
         },
         'ai-center_mcp-tools': {
           icon: 'carbon:tool-kit',

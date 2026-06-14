@@ -3,7 +3,7 @@ import { NButton, NDataTable, NInput, NModal, NPagination, NPopconfirm, NSelect,
 import { fakePaginationRequest } from '@/service/request';
 import { UploadStatus } from '@/enum';
 import FilePreview from '@/components/custom/file-preview.vue';
-import UploadDialog from '@/views/knowledge-base/modules/upload-dialog.vue';
+import UploadDialog from '@/views/ai-assistant/knowledge-base/modules/upload-dialog.vue';
 import { fetchGetKnowledgeBases, fetchGetKnowledgeBaseFilterOptions } from '@/service/api/knowledge-base';
 import { getFileExt } from '@/utils/common';
 import debounce from 'lodash-es/debounce';

@@ -20,6 +20,10 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "ai-assistant": "/ai-assistant";
+    "ai-assistant_chat": "/ai-assistant/chat";
+    "ai-assistant_document-management": "/ai-assistant/document-management";
+    "ai-assistant_knowledge-base": "/ai-assistant/knowledge-base";
     "ai-center": "/ai-center";
     "ai-center_agent-management": "/ai-center/agent-management";
     "ai-center_agent-marketplace": "/ai-center/agent-marketplace";
@@ -31,6 +35,7 @@ declare module "@elegant-router/types" {
     "ai-center_workflow": "/ai-center/workflow";
     "api-key-management": "/api-key-management";
     "home": "/home";
+    "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
     "org-tag": "/org-tag";
     "permission-center": "/permission-center";
@@ -74,6 +79,7 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "ai-assistant"
     | "ai-center"
     | "api-key-management"
     | "home"
@@ -105,6 +111,9 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "ai-assistant_chat"
+    | "ai-assistant_document-management"
+    | "ai-assistant_knowledge-base"
     | "ai-center_agent-management"
     | "ai-center_agent-marketplace"
     | "ai-center_debug-center"
