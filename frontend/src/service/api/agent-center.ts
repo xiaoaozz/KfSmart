@@ -43,11 +43,19 @@ export function fetchDebugAgentWorkflow(workflowId: string, data: Record<string,
   return request<Api.AgentCenter.DebugResult>({ url: `/agent-center/workflows/${workflowId}/debug`, method: 'POST', data });
 }
 
-export function fetchPromptTemplates(params?: { keyword?: string } & PageParams) {
+export function fetchPromptTemplates(params?: { keyword?: string; category?: string } & PageParams) {
   return request<Api.Common.PaginatingQueryRecord<Api.AgentCenter.PromptTemplate>>({
     url: '/agent-center/prompts',
     params
   });
+}
+
+export function fetchPromptCategories() {
+  return request<string[]>({ url: '/agent-center/prompts/categories' });
+}
+
+export function fetchPromptDetail(templateId: string) {
+  return request<Api.AgentCenter.PromptTemplate>({ url: `/agent-center/prompts/${templateId}` });
 }
 
 export function fetchSavePromptTemplate(data: Partial<Api.AgentCenter.PromptTemplate>) {
@@ -56,8 +64,24 @@ export function fetchSavePromptTemplate(data: Partial<Api.AgentCenter.PromptTemp
   return request<Api.AgentCenter.PromptTemplate>({ url, method, data });
 }
 
+export function fetchTogglePromptStatus(templateId: string) {
+  return request({ url: `/agent-center/prompts/${templateId}/toggle-status`, method: 'PUT' });
+}
+
 export function fetchDeletePromptTemplate(templateId: string) {
   return request({ url: `/agent-center/prompts/${templateId}`, method: 'DELETE' });
+}
+
+export function fetchPromptHistories(templateId: string) {
+  return request<Api.AgentCenter.PromptHistory[]>({ url: `/agent-center/prompts/${templateId}/histories` });
+}
+
+export function fetchPromptHistory(templateId: string, snapshotId: number) {
+  return request<Api.AgentCenter.PromptHistory>({ url: `/agent-center/prompts/${templateId}/histories/${snapshotId}` });
+}
+
+export function fetchRollbackPrompt(templateId: string, snapshotId: number) {
+  return request<Api.AgentCenter.PromptTemplate>({ url: `/agent-center/prompts/${templateId}/rollback/${snapshotId}`, method: 'POST' });
 }
 
 export function fetchMcpTools(params?: { keyword?: string } & PageParams) {

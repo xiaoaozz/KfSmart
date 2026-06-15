@@ -8,8 +8,10 @@ import com.smart.kf.model.ApiKeyConfig;
 import com.smart.kf.model.agent.AgentWorkflow;
 import com.smart.kf.model.agent.McpToolConfig;
 import com.smart.kf.model.agent.PromptTemplate;
+import com.smart.kf.model.agent.PromptTemplateHistory;
 import com.smart.kf.repository.agent.AgentWorkflowRepository;
 import com.smart.kf.repository.agent.McpToolConfigRepository;
+import com.smart.kf.repository.agent.PromptTemplateHistoryRepository;
 import com.smart.kf.repository.agent.PromptTemplateRepository;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.pagination.PageResult;
@@ -30,6 +32,7 @@ import java.util.UUID;
 public class AgentCenterService {
     private final AgentWorkflowRepository workflowRepository;
     private final PromptTemplateRepository promptRepository;
+    private final PromptTemplateHistoryRepository historyRepository;
     private final McpToolConfigRepository toolRepository;
     private final HybridSearchService hybridSearchService;
     private final ApiKeyConfigService apiKeyConfigService;
@@ -40,6 +43,7 @@ public class AgentCenterService {
     public AgentCenterService(
         AgentWorkflowRepository workflowRepository,
         PromptTemplateRepository promptRepository,
+        PromptTemplateHistoryRepository historyRepository,
         McpToolConfigRepository toolRepository,
         HybridSearchService hybridSearchService,
         ApiKeyConfigService apiKeyConfigService,
@@ -49,6 +53,7 @@ public class AgentCenterService {
     ) {
         this.workflowRepository = workflowRepository;
         this.promptRepository = promptRepository;
+        this.historyRepository = historyRepository;
         this.toolRepository = toolRepository;
         this.hybridSearchService = hybridSearchService;
         this.apiKeyConfigService = apiKeyConfigService;
@@ -202,15 +207,57 @@ public class AgentCenterService {
         return result;
     }
 
-    public PageResult<PromptTemplate> listPrompts(String keyword, PageQuery query) {
-        List<PromptTemplate> source = isBlank(keyword)
-            ? promptRepository.findAll()
-            : promptRepository.findByNameContainingIgnoreCaseOrCategoryContainingIgnoreCase(keyword, keyword);
+    public PageResult<PromptTemplate> listPrompts(String keyword, String category, PageQuery query) {
+        List<PromptTemplate> source;
+        if (!isBlank(category) && !isBlank(keyword)) {
+            source = promptRepository.findByCategoryAndNameContainingIgnoreCase(category, keyword);
+        } else if (!isBlank(category)) {
+            source = promptRepository.findByCategory(category);
+        } else if (!isBlank(keyword)) {
+            source = promptRepository.findByNameContainingIgnoreCaseOrCategoryContainingIgnoreCase(keyword, keyword);
+        } else {
+            source = promptRepository.findAll();
+        }
         source.sort(Comparator.comparing(PromptTemplate::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return PageResult.fromList(source, query);
     }
 
-    public PromptTemplate savePrompt(PromptTemplate request) {
+    public List<String> listPromptCategories() {
+        return promptRepository.findAll().stream()
+            .map(PromptTemplate::getCategory)
+            .filter(c -> c != null && !c.isBlank())
+            .distinct()
+            .sorted()
+            .toList();
+    }
+
+    public PromptTemplate getPrompt(String templateId) {
+        return promptRepository.findByTemplateId(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
+    }
+
+    @Transactional
+    public PromptTemplate savePrompt(PromptTemplate request, String username) {
+        if (!isBlank(request.getTemplateId())) {
+            // 创建历史版本快照
+            PromptTemplate existing = promptRepository.findByTemplateId(request.getTemplateId()).orElse(null);
+            if (existing != null) {
+                PromptTemplateHistory snapshot = new PromptTemplateHistory();
+                snapshot.setTemplateId(existing.getTemplateId());
+                snapshot.setVersion(existing.getVersion());
+                snapshot.setName(existing.getName());
+                snapshot.setDescription(existing.getDescription());
+                snapshot.setCategory(existing.getCategory());
+                snapshot.setSystemContent(existing.getSystemContent());
+                snapshot.setContent(existing.getContent());
+                snapshot.setVariables(existing.getVariables());
+                snapshot.setTags(existing.getTags());
+                snapshot.setStatus(existing.getStatus());
+                snapshot.setSnapshotBy(username);
+                snapshot.setChangeDescription("编辑保存（" + existing.getVersion() + " → 下一版本）");
+                historyRepository.save(snapshot);
+            }
+        }
         PromptTemplate prompt = isBlank(request.getTemplateId())
             ? new PromptTemplate()
             : promptRepository.findByTemplateId(request.getTemplateId()).orElse(new PromptTemplate());
@@ -218,12 +265,110 @@ public class AgentCenterService {
             prompt.setTemplateId("pt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         }
         prompt.setName(request.getName());
+        prompt.setDescription(request.getDescription());
         prompt.setCategory(request.getCategory());
-        prompt.setVersion(isBlank(request.getVersion()) ? "v1.0" : request.getVersion());
+        // 版本号自动递增：每次保存时版本号自动加 1，不支持用户手动修改
+        String baseVersion = prompt.getVersion();
+        String newVersion;
+        if (isBlank(baseVersion)) {
+            newVersion = "v1";
+        } else if (baseVersion.startsWith("v")) {
+            try {
+                int num = Integer.parseInt(baseVersion.substring(1).split("\\.")[0]);
+                newVersion = "v" + (num + 1);
+            } catch (NumberFormatException e) {
+                newVersion = "v1";
+            }
+        } else {
+            try {
+                int num = Integer.parseInt(baseVersion.split("\\.")[0]);
+                newVersion = "v" + (num + 1);
+            } catch (NumberFormatException e) {
+                newVersion = "v1";
+            }
+        }
+        prompt.setVersion(newVersion);
+        prompt.setSystemContent(request.getSystemContent());
         prompt.setContent(request.getContent());
         prompt.setVariables(request.getVariables());
+        prompt.setTags(request.getTags());
         prompt.setStatus(isBlank(request.getStatus()) ? "启用" : request.getStatus());
         return promptRepository.save(prompt);
+    }
+
+    public List<PromptTemplateHistory> getPromptHistories(String templateId) {
+        return historyRepository.findByTemplateIdOrderBySnapshotAtDesc(templateId);
+    }
+
+    public PromptTemplateHistory getPromptHistory(String templateId, Long snapshotId) {
+        PromptTemplateHistory snapshot = historyRepository.findById(snapshotId)
+            .orElseThrow(() -> new IllegalArgumentException("历史版本不存在"));
+        if (!snapshot.getTemplateId().equals(templateId)) {
+            throw new IllegalArgumentException("历史版本不属于该模板");
+        }
+        return snapshot;
+    }
+
+    @Transactional
+    public PromptTemplate rollbackPrompt(String templateId, Long snapshotId, String username) {
+        PromptTemplateHistory snapshot = historyRepository.findById(snapshotId)
+            .orElseThrow(() -> new IllegalArgumentException("历史版本不存在"));
+        // 安全校验：确认该快照属于目标模板，防止跨模板回滚攻击
+        if (!snapshot.getTemplateId().equals(templateId)) {
+            throw new IllegalArgumentException("历史版本不属于该模板，禁止跨模板回滚");
+        }
+        PromptTemplate template = promptRepository.findByTemplateId(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
+
+        // 回滚前先保存当前状态快照，确保回滚操作可逆
+        PromptTemplateHistory preRollbackSnapshot = new PromptTemplateHistory();
+        preRollbackSnapshot.setTemplateId(template.getTemplateId());
+        preRollbackSnapshot.setVersion(template.getVersion());
+        preRollbackSnapshot.setName(template.getName());
+        preRollbackSnapshot.setDescription(template.getDescription());
+        preRollbackSnapshot.setCategory(template.getCategory());
+        preRollbackSnapshot.setSystemContent(template.getSystemContent());
+        preRollbackSnapshot.setContent(template.getContent());
+        preRollbackSnapshot.setVariables(template.getVariables());
+        preRollbackSnapshot.setTags(template.getTags());
+        preRollbackSnapshot.setStatus(template.getStatus());
+        preRollbackSnapshot.setSnapshotBy(username);
+        preRollbackSnapshot.setChangeDescription("回滚前自动保存（回滚到 " + snapshot.getVersion() + "）");
+        historyRepository.save(preRollbackSnapshot);
+
+        // 回滚到指定版本的内容，但版本号继续递增
+        String oldVersion = template.getVersion();
+        template.setName(snapshot.getName());
+        template.setDescription(snapshot.getDescription());
+        template.setCategory(snapshot.getCategory());
+        template.setSystemContent(snapshot.getSystemContent());
+        template.setContent(snapshot.getContent());
+        template.setVariables(snapshot.getVariables());
+        template.setTags(snapshot.getTags());
+        template.setStatus(snapshot.getStatus());
+
+        // 版本号自动递增（回滚不降低版本号）
+        String newVersion;
+        if (oldVersion != null && oldVersion.startsWith("v")) {
+            try {
+                int num = Integer.parseInt(oldVersion.substring(1).split("\\.")[0]);
+                newVersion = "v" + (num + 1);
+            } catch (NumberFormatException e) {
+                newVersion = "v1";
+            }
+        } else {
+            newVersion = "v1";
+        }
+        template.setVersion(newVersion);
+        return promptRepository.save(template);
+    }
+
+    @Transactional
+    public void togglePromptStatus(String templateId) {
+        PromptTemplate prompt = promptRepository.findByTemplateId(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
+        prompt.setStatus("启用".equals(prompt.getStatus()) ? "禁用" : "启用");
+        promptRepository.save(prompt);
     }
 
     public PageResult<Map<String, Object>> listTools(String keyword, PageQuery query) {
@@ -598,17 +743,36 @@ public class AgentCenterService {
 
         String content;
         if (template != null) {
-            content = template.getContent();
+            // 优先使用 systemContent + content 组合
+            StringBuilder sb = new StringBuilder();
+            if (!isBlank(template.getSystemContent())) {
+                sb.append("[System]\n");
+                // 防止 getSystemContent() 返回 null 导致 NPE
+                String sys = Optional.ofNullable(template.getSystemContent()).orElse("");
+                for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                    sys = sys.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+                }
+                sys = sys.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
+                sb.append(sys).append("\n\n");
+            }
+            // 防止 getContent() 返回 null 导致 NPE
+            String user = Optional.ofNullable(template.getContent()).orElse("");
+            for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                user = user.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+            }
+            user = user.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
+            sb.append("[User]\n").append(user);
+            content = sb.toString();
         } else {
             // 无 Prompt 模板时：有知识库上下文则带上，否则只用 query
             String context = String.valueOf(variables.getOrDefault("context", ""));
             content = (context.isBlank()) ? "{{query}}" : "{{query}}\n\n{{context}}";
+            for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                content = content.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+            }
+            content = content.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
         }
 
-        for (Map.Entry<String, Object> entry : variables.entrySet()) {
-            content = content.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
-        }
-        content = content.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
         return content;
     }
 

@@ -92,24 +92,42 @@ public class AgentCenterController {
     @GetMapping("/prompts")
     public ResponseEntity<?> listPrompts(
         @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String category,
         @RequestParam(required = false) Integer page,
         @RequestParam(required = false) Integer size,
         @RequestParam(required = false) String cursor
     ) {
-        return ok("获取Prompt列表成功", agentCenterService.listPrompts(keyword, PageQuery.of(page, size, cursor)));
+        return ok("获取Prompt列表成功", agentCenterService.listPrompts(keyword, category, PageQuery.of(page, size, cursor)));
+    }
+
+    @GetMapping("/prompts/categories")
+    public ResponseEntity<?> listPromptCategories() {
+        return ok("获取Prompt分类成功", agentCenterService.listPromptCategories());
+    }
+
+    @GetMapping("/prompts/{templateId}")
+    public ResponseEntity<?> getPrompt(@PathVariable String templateId) {
+        return ok("获取Prompt详情成功", agentCenterService.getPrompt(templateId));
     }
 
     @PostMapping("/prompts")
     @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> savePrompt(@RequestBody PromptTemplate request) {
-        return ok("保存Prompt成功", agentCenterService.savePrompt(request));
+        return ok("保存Prompt成功", agentCenterService.savePrompt(request, currentUsername()));
     }
 
     @PutMapping("/prompts/{templateId}")
     @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> updatePrompt(@PathVariable String templateId, @RequestBody PromptTemplate request) {
         request.setTemplateId(templateId);
-        return ok("保存Prompt成功", agentCenterService.savePrompt(request));
+        return ok("保存Prompt成功", agentCenterService.savePrompt(request, currentUsername()));
+    }
+
+    @PutMapping("/prompts/{templateId}/toggle-status")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> togglePromptStatus(@PathVariable String templateId) {
+        agentCenterService.togglePromptStatus(templateId);
+        return ok("切换状态成功", null);
     }
 
     @DeleteMapping("/prompts/{templateId}")
@@ -117,6 +135,24 @@ public class AgentCenterController {
     public ResponseEntity<?> deletePrompt(@PathVariable String templateId) {
         agentCenterService.deletePrompt(templateId);
         return ok("删除Prompt成功", null);
+    }
+
+    @GetMapping("/prompts/{templateId}/histories")
+    @PreAuthorize("hasAuthority('agent:read')")
+    public ResponseEntity<?> listPromptHistories(@PathVariable String templateId) {
+        return ok("获取版本历史成功", agentCenterService.getPromptHistories(templateId));
+    }
+
+    @GetMapping("/prompts/{templateId}/histories/{snapshotId}")
+    @PreAuthorize("hasAuthority('agent:read')")
+    public ResponseEntity<?> getPromptHistory(@PathVariable String templateId, @PathVariable Long snapshotId) {
+        return ok("获取版本详情成功", agentCenterService.getPromptHistory(templateId, snapshotId));
+    }
+
+    @PostMapping("/prompts/{templateId}/rollback/{snapshotId}")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> rollbackPrompt(@PathVariable String templateId, @PathVariable Long snapshotId) {
+        return ok("回滚成功", agentCenterService.rollbackPrompt(templateId, snapshotId, currentUsername()));
     }
 
     @GetMapping("/mcp-tools")

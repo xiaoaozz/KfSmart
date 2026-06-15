@@ -26,6 +26,9 @@ public class PromptTemplate {
     @Column(nullable = false)
     private String name;
 
+    @Column
+    private String description;
+
     @Column(nullable = false)
     private String category;
 
@@ -33,13 +36,22 @@ public class PromptTemplate {
     private String version = "v1.0";
 
     @Column(columnDefinition = "LONGTEXT")
+    private String systemContent;
+
+    @Column(columnDefinition = "LONGTEXT")
     private String content;
 
     @Column(columnDefinition = "TEXT")
     private String variables;
 
+    @Column(columnDefinition = "TEXT")
+    private String tags;
+
     @Column(nullable = false)
     private String status = "启用";
+
+    @Column(name = "is_public", nullable = false)
+    private Boolean isPublic = false;
 
     @CreationTimestamp
     @Column(name = "created_at")

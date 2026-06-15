@@ -10,4 +10,8 @@ public interface PromptTemplateRepository extends JpaRepository<PromptTemplate, 
     Optional<PromptTemplate> findByTemplateId(String templateId);
 
     List<PromptTemplate> findByNameContainingIgnoreCaseOrCategoryContainingIgnoreCase(String name, String category);
+
+    List<PromptTemplate> findByCategory(String category);
+
+    List<PromptTemplate> findByCategoryAndNameContainingIgnoreCase(String category, String name);
 }
