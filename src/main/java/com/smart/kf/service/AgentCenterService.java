@@ -313,6 +313,10 @@ public class AgentCenterService {
     public PromptTemplate rollbackPrompt(String templateId, Long snapshotId, String username) {
         PromptTemplateHistory snapshot = historyRepository.findById(snapshotId)
             .orElseThrow(() -> new IllegalArgumentException("历史版本不存在"));
+        // 安全校验：确认该快照属于目标模板，防止跨模板回滚攻击
+        if (!snapshot.getTemplateId().equals(templateId)) {
+            throw new IllegalArgumentException("历史版本不属于该模板，禁止跨模板回滚");
+        }
         PromptTemplate template = promptRepository.findByTemplateId(templateId)
             .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
 
@@ -743,14 +747,16 @@ public class AgentCenterService {
             StringBuilder sb = new StringBuilder();
             if (!isBlank(template.getSystemContent())) {
                 sb.append("[System]\n");
-                String sys = template.getSystemContent();
+                // 防止 getSystemContent() 返回 null 导致 NPE
+                String sys = Optional.ofNullable(template.getSystemContent()).orElse("");
                 for (Map.Entry<String, Object> entry : variables.entrySet()) {
                     sys = sys.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
                 }
                 sys = sys.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
                 sb.append(sys).append("\n\n");
             }
-            String user = template.getContent();
+            // 防止 getContent() 返回 null 导致 NPE
+            String user = Optional.ofNullable(template.getContent()).orElse("");
             for (Map.Entry<String, Object> entry : variables.entrySet()) {
                 user = user.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
             }

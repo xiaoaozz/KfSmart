@@ -93,7 +93,7 @@ function openCreate() {
   editForm.value = {
     name: '',
     description: '',
-    category: activeCategory.value !== '全部' ? activeCategory.value : defaultCategories[0],
+    category: activeCategory.value !== '全部' ? activeCategory.value : (categories.value[0] ?? defaultCategories[0]),
     version: '',
     systemContent: '',
     content: '',
@@ -262,9 +262,10 @@ function syncVariablesFromContent() {
   const userText = editForm.value.content || '';
   const combined = `${sysText}\n${userText}`;
 
-  const matches = combined.match(/\{\{(\w+)\}\}/g);
+  // 使用 [^}]+ 匹配任意占位符内容（支持 input.query 等含点号的变量名）
+  const matches = combined.match(/\{\{([^}]+)\}\}/g);
   const extracted: string[] = matches
-    ? [...new Set(matches.map(m => m.replace(/^\{\{|\}\}$/g, '')))]
+    ? [...new Set(matches.map(m => m.replace(/^\{\{|\}\}$/g, '').trim()))]
     : [];
 
   editForm.value.variables = extracted.join(', ');
@@ -305,7 +306,7 @@ onMounted(async () => {
                 </div>
               </div>
               <div
-                v-for="cat in defaultCategories"
+                v-for="cat in categories"
                 :key="cat"
                 class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
                 :class="activeCategory === cat
@@ -644,7 +645,7 @@ onMounted(async () => {
                     <div class="mb-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">分类</div>
                     <NSelect
                       v-model:value="editForm.category"
-                      :options="defaultCategories.map(c => ({ label: c, value: c }))"
+                      :options="categories.map(c => ({ label: c, value: c }))"
                       tag
                       placeholder="选择或输入分类"
                     />
