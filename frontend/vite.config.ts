@@ -27,7 +27,21 @@ export default defineConfig(configEnv => {
         }
       }
     },
-    plugins: setupVitePlugins(viteEnv, buildTime),
+    plugins: [
+      ...setupVitePlugins(viteEnv, buildTime),
+      // Suppress WebSocket proxy ECONNRESET noise from chat store autoReconnect
+      {
+        name: 'suppress-ws-proxy-errors',
+        configureServer(server) {
+          const logger = server.config.logger;
+          const originalWarn = logger.warn.bind(logger);
+          logger.warn = (msg, ...args) => {
+            if (msg.includes('ws proxy socket error')) return;
+            originalWarn(msg, ...args);
+          };
+        }
+      }
+    ],
     define: {
       BUILD_TIME: JSON.stringify(buildTime)
     },
