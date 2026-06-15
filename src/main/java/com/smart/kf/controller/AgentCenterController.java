@@ -92,11 +92,22 @@ public class AgentCenterController {
     @GetMapping("/prompts")
     public ResponseEntity<?> listPrompts(
         @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String category,
         @RequestParam(required = false) Integer page,
         @RequestParam(required = false) Integer size,
         @RequestParam(required = false) String cursor
     ) {
-        return ok("获取Prompt列表成功", agentCenterService.listPrompts(keyword, PageQuery.of(page, size, cursor)));
+        return ok("获取Prompt列表成功", agentCenterService.listPrompts(keyword, category, PageQuery.of(page, size, cursor)));
+    }
+
+    @GetMapping("/prompts/categories")
+    public ResponseEntity<?> listPromptCategories() {
+        return ok("获取Prompt分类成功", agentCenterService.listPromptCategories());
+    }
+
+    @GetMapping("/prompts/{templateId}")
+    public ResponseEntity<?> getPrompt(@PathVariable String templateId) {
+        return ok("获取Prompt详情成功", agentCenterService.getPrompt(templateId));
     }
 
     @PostMapping("/prompts")
@@ -110,6 +121,13 @@ public class AgentCenterController {
     public ResponseEntity<?> updatePrompt(@PathVariable String templateId, @RequestBody PromptTemplate request) {
         request.setTemplateId(templateId);
         return ok("保存Prompt成功", agentCenterService.savePrompt(request));
+    }
+
+    @PutMapping("/prompts/{templateId}/toggle-status")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> togglePromptStatus(@PathVariable String templateId) {
+        agentCenterService.togglePromptStatus(templateId);
+        return ok("切换状态成功", null);
     }
 
     @DeleteMapping("/prompts/{templateId}")

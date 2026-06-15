@@ -43,17 +43,29 @@ export function fetchDebugAgentWorkflow(workflowId: string, data: Record<string,
   return request<Api.AgentCenter.DebugResult>({ url: `/agent-center/workflows/${workflowId}/debug`, method: 'POST', data });
 }
 
-export function fetchPromptTemplates(params?: { keyword?: string } & PageParams) {
+export function fetchPromptTemplates(params?: { keyword?: string; category?: string } & PageParams) {
   return request<Api.Common.PaginatingQueryRecord<Api.AgentCenter.PromptTemplate>>({
     url: '/agent-center/prompts',
     params
   });
 }
 
+export function fetchPromptCategories() {
+  return request<string[]>({ url: '/agent-center/prompts/categories' });
+}
+
+export function fetchPromptDetail(templateId: string) {
+  return request<Api.AgentCenter.PromptTemplate>({ url: `/agent-center/prompts/${templateId}` });
+}
+
 export function fetchSavePromptTemplate(data: Partial<Api.AgentCenter.PromptTemplate>) {
   const method = data.templateId ? 'PUT' : 'POST';
   const url = data.templateId ? `/agent-center/prompts/${data.templateId}` : '/agent-center/prompts';
   return request<Api.AgentCenter.PromptTemplate>({ url, method, data });
+}
+
+export function fetchTogglePromptStatus(templateId: string) {
+  return request({ url: `/agent-center/prompts/${templateId}/toggle-status`, method: 'PUT' });
 }
 
 export function fetchDeletePromptTemplate(templateId: string) {

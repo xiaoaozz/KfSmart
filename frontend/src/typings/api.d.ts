@@ -481,11 +481,15 @@ declare namespace Api {
       id: number;
       templateId: string;
       name: string;
+      description: string;
       category: string;
       version: string;
+      systemContent: string;
       content: string;
       variables: string;
+      tags: string;
       status: string;
+      createdAt: string;
       updatedAt: string;
     }
 

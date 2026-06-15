@@ -202,12 +202,33 @@ public class AgentCenterService {
         return result;
     }
 
-    public PageResult<PromptTemplate> listPrompts(String keyword, PageQuery query) {
-        List<PromptTemplate> source = isBlank(keyword)
-            ? promptRepository.findAll()
-            : promptRepository.findByNameContainingIgnoreCaseOrCategoryContainingIgnoreCase(keyword, keyword);
+    public PageResult<PromptTemplate> listPrompts(String keyword, String category, PageQuery query) {
+        List<PromptTemplate> source;
+        if (!isBlank(category) && !isBlank(keyword)) {
+            source = promptRepository.findByCategoryAndNameContainingIgnoreCase(category, keyword);
+        } else if (!isBlank(category)) {
+            source = promptRepository.findByCategory(category);
+        } else if (!isBlank(keyword)) {
+            source = promptRepository.findByNameContainingIgnoreCaseOrCategoryContainingIgnoreCase(keyword, keyword);
+        } else {
+            source = promptRepository.findAll();
+        }
         source.sort(Comparator.comparing(PromptTemplate::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return PageResult.fromList(source, query);
+    }
+
+    public List<String> listPromptCategories() {
+        return promptRepository.findAll().stream()
+            .map(PromptTemplate::getCategory)
+            .filter(c -> c != null && !c.isBlank())
+            .distinct()
+            .sorted()
+            .toList();
+    }
+
+    public PromptTemplate getPrompt(String templateId) {
+        return promptRepository.findByTemplateId(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
     }
 
     public PromptTemplate savePrompt(PromptTemplate request) {
@@ -218,12 +239,23 @@ public class AgentCenterService {
             prompt.setTemplateId("pt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         }
         prompt.setName(request.getName());
+        prompt.setDescription(request.getDescription());
         prompt.setCategory(request.getCategory());
         prompt.setVersion(isBlank(request.getVersion()) ? "v1.0" : request.getVersion());
+        prompt.setSystemContent(request.getSystemContent());
         prompt.setContent(request.getContent());
         prompt.setVariables(request.getVariables());
+        prompt.setTags(request.getTags());
         prompt.setStatus(isBlank(request.getStatus()) ? "启用" : request.getStatus());
         return promptRepository.save(prompt);
+    }
+
+    @Transactional
+    public void togglePromptStatus(String templateId) {
+        PromptTemplate prompt = promptRepository.findByTemplateId(templateId)
+            .orElseThrow(() -> new IllegalArgumentException("Prompt 模板不存在"));
+        prompt.setStatus("启用".equals(prompt.getStatus()) ? "禁用" : "启用");
+        promptRepository.save(prompt);
     }
 
     public PageResult<Map<String, Object>> listTools(String keyword, PageQuery query) {
@@ -598,17 +630,34 @@ public class AgentCenterService {
 
         String content;
         if (template != null) {
-            content = template.getContent();
+            // 优先使用 systemContent + content 组合
+            StringBuilder sb = new StringBuilder();
+            if (!isBlank(template.getSystemContent())) {
+                sb.append("[System]\n");
+                String sys = template.getSystemContent();
+                for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                    sys = sys.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+                }
+                sys = sys.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
+                sb.append(sys).append("\n\n");
+            }
+            String user = template.getContent();
+            for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                user = user.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+            }
+            user = user.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
+            sb.append("[User]\n").append(user);
+            content = sb.toString();
         } else {
             // 无 Prompt 模板时：有知识库上下文则带上，否则只用 query
             String context = String.valueOf(variables.getOrDefault("context", ""));
             content = (context.isBlank()) ? "{{query}}" : "{{query}}\n\n{{context}}";
+            for (Map.Entry<String, Object> entry : variables.entrySet()) {
+                content = content.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
+            }
+            content = content.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
         }
 
-        for (Map.Entry<String, Object> entry : variables.entrySet()) {
-            content = content.replace("{{" + entry.getKey() + "}}", String.valueOf(entry.getValue()));
-        }
-        content = content.replace("{{input.query}}", String.valueOf(variables.getOrDefault("query", "")));
         return content;
     }
 
