@@ -493,6 +493,23 @@ declare namespace Api {
       updatedAt: string;
     }
 
+    interface PromptHistory {
+      id: number;
+      templateId: string;
+      version: string;
+      name: string;
+      description: string;
+      category: string;
+      systemContent: string;
+      content: string;
+      variables: string;
+      tags: string;
+      status: string;
+      snapshotBy: string;
+      changeDescription: string;
+      snapshotAt: string;
+    }
+
     interface McpTool {
       id: number;
       toolId: string;

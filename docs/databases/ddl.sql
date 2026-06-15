@@ -146,6 +146,25 @@ CREATE TABLE prompt_templates (
     INDEX idx_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Prompt 模板表';
 
+CREATE TABLE prompt_template_histories (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    template_id VARCHAR(64) NOT NULL COMMENT '关联的 Prompt 模板 ID',
+    version     VARCHAR(20) NOT NULL COMMENT '快照时的版本号',
+    name        VARCHAR(100) NOT NULL COMMENT '快照时的名称',
+    description VARCHAR(500) COMMENT '快照时的描述',
+    category    VARCHAR(50) COMMENT '快照时的分类',
+    system_content LONGTEXT COMMENT 'System Prompt 内容',
+    content     LONGTEXT COMMENT 'User Prompt 内容',
+    variables   VARCHAR(500) COMMENT '变量列表，逗号分隔',
+    tags        TEXT COMMENT '标签列表，逗号分隔',
+    status      VARCHAR(20) COMMENT '快照时的状态',
+    snapshot_by VARCHAR(100) COMMENT '快照操作人',
+    change_description VARCHAR(500) COMMENT '变更说明',
+    snapshot_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '快照时间',
+    INDEX idx_template_id (template_id),
+    CONSTRAINT fk_history_template_id FOREIGN KEY (template_id) REFERENCES prompt_templates(template_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Prompt 模板版本历史表';
+
 CREATE TABLE mcp_tool_configs (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
     tool_id     VARCHAR(64) NOT NULL COMMENT 'MCP 工具唯一标识',

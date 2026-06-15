@@ -113,14 +113,14 @@ public class AgentCenterController {
     @PostMapping("/prompts")
     @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> savePrompt(@RequestBody PromptTemplate request) {
-        return ok("保存Prompt成功", agentCenterService.savePrompt(request));
+        return ok("保存Prompt成功", agentCenterService.savePrompt(request, currentUsername()));
     }
 
     @PutMapping("/prompts/{templateId}")
     @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> updatePrompt(@PathVariable String templateId, @RequestBody PromptTemplate request) {
         request.setTemplateId(templateId);
-        return ok("保存Prompt成功", agentCenterService.savePrompt(request));
+        return ok("保存Prompt成功", agentCenterService.savePrompt(request, currentUsername()));
     }
 
     @PutMapping("/prompts/{templateId}/toggle-status")
@@ -135,6 +135,24 @@ public class AgentCenterController {
     public ResponseEntity<?> deletePrompt(@PathVariable String templateId) {
         agentCenterService.deletePrompt(templateId);
         return ok("删除Prompt成功", null);
+    }
+
+    @GetMapping("/prompts/{templateId}/histories")
+    @PreAuthorize("hasAuthority('agent:read')")
+    public ResponseEntity<?> listPromptHistories(@PathVariable String templateId) {
+        return ok("获取版本历史成功", agentCenterService.getPromptHistories(templateId));
+    }
+
+    @GetMapping("/prompts/{templateId}/histories/{snapshotId}")
+    @PreAuthorize("hasAuthority('agent:read')")
+    public ResponseEntity<?> getPromptHistory(@PathVariable String templateId, @PathVariable Long snapshotId) {
+        return ok("获取版本详情成功", agentCenterService.getPromptHistory(templateId, snapshotId));
+    }
+
+    @PostMapping("/prompts/{templateId}/rollback/{snapshotId}")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> rollbackPrompt(@PathVariable String templateId, @PathVariable Long snapshotId) {
+        return ok("回滚成功", agentCenterService.rollbackPrompt(templateId, snapshotId, currentUsername()));
     }
 
     @GetMapping("/mcp-tools")

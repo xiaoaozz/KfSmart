@@ -72,6 +72,18 @@ export function fetchDeletePromptTemplate(templateId: string) {
   return request({ url: `/agent-center/prompts/${templateId}`, method: 'DELETE' });
 }
 
+export function fetchPromptHistories(templateId: string) {
+  return request<Api.AgentCenter.PromptHistory[]>({ url: `/agent-center/prompts/${templateId}/histories` });
+}
+
+export function fetchPromptHistory(templateId: string, snapshotId: number) {
+  return request<Api.AgentCenter.PromptHistory>({ url: `/agent-center/prompts/${templateId}/histories/${snapshotId}` });
+}
+
+export function fetchRollbackPrompt(templateId: string, snapshotId: number) {
+  return request<Api.AgentCenter.PromptTemplate>({ url: `/agent-center/prompts/${templateId}/rollback/${snapshotId}`, method: 'POST' });
+}
+
 export function fetchMcpTools(params?: { keyword?: string } & PageParams) {
   return request<Api.Common.PaginatingQueryRecord<Api.AgentCenter.McpTool>>({
     url: '/agent-center/mcp-tools',
