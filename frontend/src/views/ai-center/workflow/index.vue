@@ -777,10 +777,6 @@ onBeforeUnmount(() => {
   <div class="h-full bg-gray-50 dark:bg-gray-900" :class="activeTab === 'designer' ? 'overflow-hidden' : 'overflow-y-auto'">
     <div class="h-full px-8 py-6 flex flex-col">
       <div class="mb-4 flex shrink-0 items-center justify-between">
-        <div>
-          <h1 class="mb-1 text-2xl font-bold text-gray-900 dark:text-white">Workflow工作流</h1>
-          <p class="text-sm text-gray-500">编排知识库、LLM、MCP工具和企业流程节点，实现业务流程自动化</p>
-        </div>
         <NSpace>
           <NButton @click="loadData">
             <template #icon><icon-carbon:renew /></template>

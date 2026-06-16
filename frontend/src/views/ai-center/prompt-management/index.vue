@@ -46,6 +46,18 @@ const selectedHistory = ref<Api.AgentCenter.PromptHistory | null>(null);
 // 通用分类
 const defaultCategories = ['通用指令', '任务执行', '编码任务', '知识库回答'];
 
+// 各分类数量统计
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { '全部': promptList.value.length };
+  promptList.value.forEach(item => {
+    const cat = item.category;
+    if (cat) {
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+  });
+  return counts;
+});
+
 function getPageRecords<T>(data: any): T[] {
   return data?.records || data?.content || data?.data || [];
 }
@@ -300,9 +312,12 @@ onMounted(async () => {
                   : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
                 @click="handleCategoryClick('全部')"
               >
-                <div class="flex items-center gap-2">
-                  <icon-carbon:catalog class="text-base" />
-                  <span>全部</span>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <icon-carbon:catalog class="text-base" />
+                    <span>全部</span>
+                  </div>
+                  <span class="text-xs opacity-60">{{ categoryCounts['全部'] ?? 0 }}</span>
                 </div>
               </div>
               <div
@@ -314,9 +329,12 @@ onMounted(async () => {
                   : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
                 @click="handleCategoryClick(cat)"
               >
-                <div class="flex items-center gap-2">
-                  <icon-carbon:tag class="text-base" />
-                  <span>{{ cat }}</span>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <icon-carbon:tag class="text-base" />
+                    <span>{{ cat }}</span>
+                  </div>
+                  <span class="text-xs opacity-60">{{ categoryCounts[cat] ?? 0 }}</span>
                 </div>
               </div>
             </div>

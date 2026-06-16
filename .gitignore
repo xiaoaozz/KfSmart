@@ -68,3 +68,7 @@ frontend/src/typings/auto-imports.d.ts
 frontend/public/languages
 frontend/public/themes
 src/main/resources/application.yml~
+
+# ai
+.claude
+.myflicker
