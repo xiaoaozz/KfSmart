@@ -4,7 +4,6 @@ import {
   NDivider,
   NEmpty,
   NInput,
-  NPopconfirm,
   NScrollbar,
   NSelect,
   NSpin,
@@ -168,14 +167,22 @@ async function toggleStatus(templateId: string) {
 }
 
 async function deletePrompt(templateId: string) {
-  const { error } = await fetchDeletePromptTemplate(templateId);
-  if (!error) {
-    window.$message?.success('删除成功');
-    if (selectedPrompt.value?.templateId === templateId) {
-      selectedPrompt.value = null;
+  window.$dialog?.warning({
+    title: '删除模板',
+    content: '确认删除该模板吗？此操作不可恢复。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const { error } = await fetchDeletePromptTemplate(templateId);
+      if (!error) {
+        window.$message?.success('删除成功');
+        if (selectedPrompt.value?.templateId === templateId) {
+          selectedPrompt.value = null;
+        }
+        await loadPrompts();
+      }
     }
-    await loadPrompts();
-  }
+  });
 }
 
 // ---- 历史版本功能 ----
@@ -202,18 +209,26 @@ function toggleHistoryPanel() {
 
 async function handleRollback(snapshot: Api.AgentCenter.PromptHistory) {
   if (!editForm.value.templateId) return;
-  const { data, error } = await fetchRollbackPrompt(editForm.value.templateId, snapshot.id);
-  if (!error && data) {
-    window.$message?.success('回滚成功，版本号已自动递增');
-    editForm.value = { ...data };
-    if (editForm.value.templateId) {
-      const { data: refreshed } = await fetchPromptDetail(editForm.value.templateId);
-      if (refreshed) {
-        editForm.value = { ...refreshed };
+  window.$dialog?.warning({
+    title: '回滚版本',
+    content: '确认回滚到此版本？当前版本将自动保存为历史记录，版本号继续递增。',
+    positiveText: '回滚',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const { data, error } = await fetchRollbackPrompt(editForm.value.templateId!, snapshot.id);
+      if (!error && data) {
+        window.$message?.success('回滚成功，版本号已自动递增');
+        editForm.value = { ...data };
+        if (editForm.value.templateId) {
+          const { data: refreshed } = await fetchPromptDetail(editForm.value.templateId);
+          if (refreshed) {
+            editForm.value = { ...refreshed };
+          }
+        }
+        loadHistories();
       }
     }
-    loadHistories();
-  }
+  });
 }
 
 /** 基于历史版本编辑：用历史版本的内容填充编辑表单，但保留当前模板ID和最新版本号 */
@@ -379,7 +394,7 @@ onMounted(async () => {
                   <div
                     v-for="item in promptList"
                     :key="item.templateId"
-                    class="group cursor-pointer rounded-xl border bg-white p-4 transition-all hover:shadow-md dark:bg-[#1e1e22] dark:border-gray-700"
+                    class="cursor-pointer rounded-xl border bg-white p-4 transition-all hover:shadow-md dark:bg-[#1e1e22] dark:border-gray-700"
                     :class="selectedPrompt?.templateId === item.templateId
                       ? 'border-primary-400 shadow-sm ring-1 ring-primary-200 dark:border-primary-500 dark:ring-primary-800'
                       : 'border-gray-200 hover:border-primary-300 dark:border-gray-700 dark:hover:border-primary-600'"
@@ -428,19 +443,6 @@ onMounted(async () => {
                       </div>
                       <span>{{ formatTime(item.updatedAt, 'MM-DD HH:mm') }}</span>
                     </div>
-
-                    <div class="mt-2 flex items-center justify-end gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                      <NButton text size="small" type="primary" @click.stop="openEdit(item)">编辑</NButton>
-                      <NButton text size="small" type="primary" @click.stop="toggleStatus(item.templateId)">
-                        {{ item.status === '启用' ? '禁用' : '启用' }}
-                      </NButton>
-                      <NPopconfirm @positive-click="deletePrompt(item.templateId)">
-                        <template #trigger>
-                          <NButton text size="small" type="error" @click.stop>删除</NButton>
-                        </template>
-                        确认删除该模板吗？
-                      </NPopconfirm>
-                    </div>
                   </div>
                 </div>
               </NSpin>
@@ -451,18 +453,8 @@ onMounted(async () => {
         <!-- 右侧详情面板 -->
         <div class="w-[380px] flex-shrink-0 flex flex-col bg-white dark:bg-[#18181c] border-l border-gray-200 dark:border-gray-700">
           <template v-if="selectedPrompt">
-            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700">
-              <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">模板详情</h2>
-              <div class="flex items-center gap-2">
-                <NButton size="small" type="primary" @click="openEdit(selectedPrompt)">
-                  <template #icon><icon-carbon:edit /></template>
-                  编辑
-                </NButton>
-                <NButton size="small" @click="openEditWithHistory(selectedPrompt)">
-                  <template #icon><icon-carbon:time /></template>
-                  历史版本
-                </NButton>
-              </div>
+            <div class="px-5 py-3 border-b border-gray-100 dark:border-gray-700">
+              <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">模板详情</h2>
             </div>
 
             <NScrollbar class="flex-1">
@@ -533,16 +525,27 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <div class="flex gap-2 pt-1">
-                  <NButton size="small" :type="selectedPrompt.status === '启用' ? 'warning' : 'success'" @click="toggleStatus(selectedPrompt.templateId)">
-                    {{ selectedPrompt.status === '启用' ? '禁用模板' : '启用模板' }}
+                <div class="flex flex-wrap gap-2 pt-1">
+                  <NButton size="small" type="primary" @click="openEdit(selectedPrompt)">
+                    <template #icon><icon-carbon:edit /></template>
+                    编辑
                   </NButton>
-                  <NPopconfirm @positive-click="deletePrompt(selectedPrompt.templateId)">
-                    <template #trigger>
-                      <NButton size="small" type="error" ghost>删除模板</NButton>
+                  <NButton
+                    size="small"
+                    secondary
+                    :type="selectedPrompt.status === '启用' ? 'warning' : 'success'"
+                    @click="toggleStatus(selectedPrompt.templateId)"
+                  >
+                    <template #icon>
+                      <icon-carbon:checkmark-filled v-if="selectedPrompt.status !== '启用'" />
+                      <icon-carbon:close-filled v-else />
                     </template>
-                    确认删除该模板吗？此操作不可恢复。
-                  </NPopconfirm>
+                    {{ selectedPrompt.status === '启用' ? '禁用' : '启用' }}
+                  </NButton>
+                  <NButton size="small" secondary type="error" @click="deletePrompt(selectedPrompt.templateId)">
+                    <template #icon><icon-carbon:trash-can /></template>
+                    删除
+                  </NButton>
                 </div>
               </div>
             </NScrollbar>
@@ -807,15 +810,10 @@ onMounted(async () => {
                           </template>
                           基于此版本内容编辑，版本号将自动递增
                         </NTooltip>
-                        <NPopconfirm @positive-click="handleRollback(h)">
-                          <template #trigger>
-                            <NButton size="tiny" type="warning" ghost @click.stop>
+                        <NButton size="tiny" type="warning" ghost @click.stop="handleRollback(h)">
                               <template #icon><icon-carbon:undo /></template>
                               回滚
                             </NButton>
-                          </template>
-                          确认回滚到此版本？当前版本将自动保存为历史记录，版本号继续递增。
-                        </NPopconfirm>
                       </div>
 
                       <!-- 展开预览 -->
