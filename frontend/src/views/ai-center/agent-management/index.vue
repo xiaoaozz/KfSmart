@@ -13,17 +13,19 @@ import {
   NTooltip
 } from 'naive-ui';
 import {
-  fetchAgentWorkflowStats,
-  fetchAgentWorkflows,
-  fetchCopyAgentWorkflow,
-  fetchDebugAgentWorkflow,
-  fetchDeleteAgentWorkflow,
+  fetchAgentStats as fetchAgentWorkflowStats,
+  fetchAgents as fetchAgentWorkflows,
+  fetchCopyAgent as fetchCopyAgentWorkflow,
+  fetchChatAgent as fetchDebugAgentWorkflow,
+  fetchDeleteAgent as fetchDeleteAgentWorkflow,
+  fetchPublishAgent as fetchPublishAgentWorkflow,
+  fetchSaveAgent as fetchSaveAgentWorkflow
+} from '@/service/api/agent';
+import {
   fetchMcpTools,
   fetchPromptTemplates,
-  fetchPublishAgentWorkflow,
-  fetchSaveAgentWorkflow,
   fetchAgentModels
-} from '@/service/api/agent-center';
+} from '@/service/api/resource';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 
 type SelectOption = {

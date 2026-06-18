@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fetchRunAnalysis } from '@/service/api/agent-center';
+import { fetchRunAnalysis } from '@/service/api/resource';
 
 const data = ref<Api.AgentCenter.RunAnalysis | null>(null);
 

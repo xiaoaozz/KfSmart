@@ -19,23 +19,20 @@ import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "agent_workflows")
-public class AgentWorkflow {
+@Table(name = "agents")
+public class Agent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "workflow_id", nullable = false, unique = true, length = 64)
-    private String workflowId;
+    @Column(name = "agent_id", nullable = false, unique = true, length = 64)
+    private String agentId;
 
     @Column(nullable = false)
     private String name;
 
     @Column(columnDefinition = "TEXT")
     private String description;
-
-    @Column(nullable = false)
-    private String type = "工作流";
 
     @Column(nullable = false)
     private String status = "草稿";
@@ -45,42 +42,6 @@ public class AgentWorkflow {
 
     @Column
     private String tags;
-
-    @Column(name = "call_count")
-    private long callCount = 0;
-
-    @Column(name = "success_count")
-    private long successCount = 0;
-
-    @Column(name = "failure_count")
-    private long failureCount = 0;
-
-    @Column(name = "avg_duration_ms")
-    private long avgDurationMs = 0;
-
-    @Column(name = "install_count", nullable = false)
-    private Long installCount = 0L;
-
-    @Column(name = "permission_scope")
-    private String permissionScope = "组织内";
-
-    @Column(name = "knowledge_bases", columnDefinition = "TEXT")
-    private String knowledgeBases;
-
-    @Column(name = "prompt_refs", columnDefinition = "TEXT")
-    private String promptRefs;
-
-    @Column(name = "mcp_tools", columnDefinition = "TEXT")
-    private String mcpTools;
-
-    @Column(name = "models", columnDefinition = "TEXT")
-    private String models;
-
-    @Column(name = "nodes_json", columnDefinition = "LONGTEXT")
-    private String nodesJson;
-
-    @Column(name = "edges_json", columnDefinition = "LONGTEXT")
-    private String edgesJson;
 
     @Column(name = "system_prompt", columnDefinition = "TEXT")
     private String systemPrompt;
@@ -97,8 +58,41 @@ public class AgentWorkflow {
     @Column(name = "max_tokens")
     private Integer maxTokens = 4000;
 
+    @Column(name = "max_iterations")
+    private Integer maxIterations = 10;
+
     @Column(name = "memory_types")
     private String memoryTypes;
+
+    @Column(name = "permission_scope")
+    private String permissionScope = "组织内";
+
+    @Column(name = "knowledge_bases", columnDefinition = "TEXT")
+    private String knowledgeBases;
+
+    @Column(name = "prompt_refs", columnDefinition = "TEXT")
+    private String promptRefs;
+
+    @Column(name = "mcp_tools", columnDefinition = "TEXT")
+    private String mcpTools;
+
+    @Column(name = "models", columnDefinition = "TEXT")
+    private String models;
+
+    @Column(name = "call_count")
+    private long callCount = 0;
+
+    @Column(name = "success_count")
+    private long successCount = 0;
+
+    @Column(name = "failure_count")
+    private long failureCount = 0;
+
+    @Column(name = "avg_duration_ms")
+    private long avgDurationMs = 0;
+
+    @Column(name = "install_count", nullable = false)
+    private Long installCount = 0L;
 
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
@@ -119,7 +113,6 @@ public class AgentWorkflow {
         }
     }
 
-    /** 计算字段：成功率（百分比），不持久化到数据库 */
     @Transient
     @Getter(AccessLevel.NONE)
     private Long successRate;

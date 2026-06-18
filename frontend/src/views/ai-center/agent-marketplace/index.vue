@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NButton, NTag, NInput } from 'naive-ui';
-import { fetchAgentMarketplace, fetchCopyAgentWorkflow } from '@/service/api/agent-center';
+import { fetchCopyAgent as fetchCopyAgentWorkflow } from '@/service/api/agent';
+import { fetchMarketplace as fetchAgentMarketplace } from '@/service/api/resource';
 
 const items = ref<Api.AgentCenter.MarketplaceItem[]>([]);
 const installingId = ref('');

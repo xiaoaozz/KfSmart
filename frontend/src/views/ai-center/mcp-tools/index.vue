@@ -1,6 +1,6 @@
 <script setup lang="tsx">
 import { NButton, NDataTable, NInput, NModal, NPagination, NSelect, NTag } from 'naive-ui';
-import { fetchDeleteMcpTool, fetchMcpTools, fetchSaveMcpTool } from '@/service/api/agent-center';
+import { fetchDeleteMcpTool, fetchMcpTools, fetchSaveMcpTool } from '@/service/api/resource';
 
 const visible = ref(false);
 const form = ref<Partial<Api.AgentCenter.McpTool>>({ name: '', type: 'MCP', status: '在线', endpoint: '', authType: 'API Key', apiKey: '', description: '' });
