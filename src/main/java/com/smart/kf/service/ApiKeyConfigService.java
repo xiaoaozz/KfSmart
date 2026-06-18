@@ -108,6 +108,11 @@ public class ApiKeyConfigService {
         return repository.findByActiveTrue();
     }
 
+    /** 查询所有配置（完整实体，供内部服务匹配模型使用） */
+    public List<ApiKeyConfig> findAll() {
+        return repository.findAll();
+    }
+
     /** 将配置转换为脱敏后的 Map */
     private Map<String, Object> toMaskedMap(ApiKeyConfig config) {
         Map<String, Object> map = new HashMap<>();

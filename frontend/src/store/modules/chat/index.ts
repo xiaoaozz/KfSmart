@@ -16,14 +16,18 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
   const store = useAuthStore();
   const sessionId = ref<string>('');
 
-  /** 最新一次检索结果 */
   const searchResults = ref<Api.Chat.SearchResultItem[]>([]);
-  /** 检索结果加载状态 */
   const searchLoading = ref<boolean>(false);
   const conversationLoading = ref<boolean>(false);
   const sessionsLoading = ref<boolean>(false);
   const deletingSessionIds = ref<string[]>([]);
   const pinningSessionIds = ref<string[]>([]);
+
+  const wsUrl = computed(() => {
+    const token = store.token;
+    if (!token) return '';
+    return `/proxy-ws/chat/${token}`;
+  });
 
   const {
     status: wsStatus,
@@ -31,9 +35,23 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     send: wsSend,
     open: wsOpen,
     close: wsClose
-  } = useWebSocket(`/proxy-ws/chat/${store.token}`, {
-    autoReconnect: true
+  } = useWebSocket(wsUrl, {
+    immediate: false,
+    autoConnect: false,
+    autoReconnect: {
+      retries: 5,
+      delay: 3000
+    }
   });
+
+  function connectWs() {
+    if (!store.token) return;
+    wsOpen();
+  }
+
+  function disconnectWs() {
+    wsClose();
+  }
 
   let searchLoadingTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -281,6 +299,8 @@ export const useChatStore = defineStore(SetupStoreId.Chat, () => {
     wsSend,
     wsOpen,
     wsClose,
+    connectWs,
+    disconnectWs,
     sessionId,
     scrollToBottom,
     searchResults,

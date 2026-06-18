@@ -4,11 +4,11 @@ import com.smart.kf.model.Conversation;
 import com.smart.kf.model.User;
 import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +16,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class ConversationServiceTest {
 
     @Mock
@@ -27,16 +28,11 @@ class ConversationServiceTest {
     @InjectMocks
     private ConversationService conversationService;
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-    }
-
     @Test
     void testRecordConversation() {
         User user = new User();
         user.setId(1L);
-        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
+    when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
 
         conversationService.recordConversation("testuser", "What is AI?", "AI stands for Artificial Intelligence.");
 

@@ -2,6 +2,7 @@ package com.smart.kf.utils;
 
 import com.smart.kf.model.User;
 import com.smart.kf.repository.UserRepository;
+import com.smart.kf.service.TokenCacheService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.lenient;
 
 /**
@@ -24,27 +26,28 @@ public class JwtUtilsRefreshTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private TokenCacheService tokenCacheService;
+
     @InjectMocks
     private JwtUtils jwtUtils;
 
-    private User testUser;
-    private String testSecretKey = "dGVzdC1zZWNyZXQta2V5LWZvci1qd3QtdG9rZW4tZ2VuZXJhdGlvbi1hbmQtdmVyaWZpY2F0aW9u"; // Base64编码
-
     @BeforeEach
     void setUp() {
-        // 设置测试用的密钥
+        final String testSecretKey = "dGVzdC1zZWNyZXQta2V5LWZvci1qd3QtdG9rZW4tZ2VuZXJhdGlvbi1hbmQtdmVyaWZpY2F0aW9u";
         ReflectionTestUtils.setField(jwtUtils, "secretKeyBase64", testSecretKey);
-        
-        // 创建测试用户
-        testUser = new User();
+
+        User testUser = new User();
         testUser.setId(1L);
         testUser.setUsername("testuser");
         testUser.setRole(User.Role.USER);
         testUser.setOrgTags("org1,org2");
         testUser.setPrimaryOrg("org1");
 
-        // Mock用户仓库行为 (使用lenient模式避免不必要的stubbing警告)
         lenient().when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+        lenient().when(tokenCacheService.isTokenValid(anyString())).thenReturn(true);
+        lenient().doNothing().when(tokenCacheService).cacheToken(anyString(), anyString(), anyString(), anyLong());
+        lenient().doNothing().when(tokenCacheService).cacheRefreshToken(anyString(), anyString(), any(), anyLong());
     }
 
     @Test
@@ -62,7 +65,7 @@ public class JwtUtilsRefreshTest {
     }
 
     @Test
-    void testShouldRefreshToken() throws InterruptedException {
+    void testShouldRefreshToken() {
         // 由于当前REFRESH_THRESHOLD是5分钟，而EXPIRATION_TIME是1小时
         // 正常情况下新生成的token不会触发刷新
         String token = jwtUtils.generateToken("testuser");

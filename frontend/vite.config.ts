@@ -13,6 +13,9 @@ export default defineConfig(configEnv => {
 
   return {
     base: viteEnv.VITE_BASE_URL,
+    optimizeDeps: {
+      exclude: ['vue-markdown-shiki']
+    },
     resolve: {
       alias: {
         '~': fileURLToPath(new URL('./', import.meta.url)),

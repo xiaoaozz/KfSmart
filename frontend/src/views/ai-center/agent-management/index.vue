@@ -386,7 +386,14 @@ async function runDebug() {
     const { error, data } = await fetchDebugAgentWorkflow(agentDetail.workflowId, {
       query: userQuery,
       history,
-      systemPrompt: agentDetail.systemPrompt || undefined
+      systemPrompt: agentDetail.systemPrompt ?? '',
+      mcpTools: agentDetail.mcpTools ?? '',
+      models: agentDetail.selectedModel || agentDetail.models || '',
+      temperature: agentDetail.temperature,
+      topP: agentDetail.topP,
+      maxTokens: agentDetail.maxTokens,
+      knowledgeBases: agentDetail.knowledgeBases ?? '',
+      memoryTypes: agentDetail.memoryTypes.length ? agentDetail.memoryTypes.join(',') : ''
     });
     if (!error && data) {
       debugMessages.value.push({

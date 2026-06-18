@@ -31,6 +31,8 @@ function scrollToBottom() {
 onMounted(async () => {
   chatStore.scrollToBottom = scrollToBottom;
 
+  chatStore.connectWs();
+
   await chatStore.fetchSessions();
 
   if (conversationId.value) {

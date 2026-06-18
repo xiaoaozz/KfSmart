@@ -2,16 +2,20 @@ package com.smart.kf.service;
 
 import com.smart.kf.exception.CustomException;
 import com.smart.kf.model.User;
+import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.repository.LoginRecordRepository;
+import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.utils.PasswordUtil;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.util.Collections;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,42 +23,54 @@ import static org.mockito.Mockito.*;
 /**
  * UserService 的测试类
  */
+@ExtendWith(MockitoExtension.class)
 class UserServiceTest {
     // 模拟 UserRepository 实例
     @Mock
     private UserRepository userRepository;
 
-    // 注入模拟的 UserService 实例
+    @Mock
+    private OrganizationTagRepository organizationTagRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private FileUploadRepository fileUploadRepository;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private OrgTagCacheService orgTagCacheService;
+
+    @Mock
+    @SuppressWarnings("unused")
+    private LoginRecordRepository loginRecordRepository;
+
     @InjectMocks
     private UserService userService;
-
-    /**
-     * 在每个测试方法执行前初始化模拟对象
-     */
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-    }
 
     /**
      * 测试用户注册成功的情况
      */
     @Test
     void testRegisterUser_Success() {
-        // 假设用户名 "testuser" 在数据库中不存在
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
+        when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(false);
+        when(organizationTagRepository.existsByTagId("default")).thenReturn(false);
+        when(organizationTagRepository.existsByTagId("PRIVATE_testuser")).thenReturn(false);
+        when(userRepository.findAll()).thenReturn(Collections.emptyList());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            if (user.getId() == null) user.setId(1L);
+            return user;
+        });
 
-        // 调用 userService 的 registerUser 方法进行用户注册
         userService.registerUser("testuser", "password123");
 
-        // 创建 ArgumentCaptor 来捕获 save 方法的参数
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, atLeastOnce()).save(userCaptor.capture());
 
-        // 验证 userRepository.save 被调用了一次，并捕获参数
-        verify(userRepository, times(1)).save(userCaptor.capture());
-
-        // 获取捕获的 User 对象并进行断言
-        User savedUser = userCaptor.getValue();
+        User savedUser = userCaptor.getAllValues().stream()
+                .filter(u -> "testuser".equals(u.getUsername()))
+                .findFirst().orElse(null);
         assertNotNull(savedUser);
         assertEquals("testuser", savedUser.getUsername());
     }
@@ -122,7 +138,7 @@ void testAuthenticateUser_Success() {
 
         // 断言在使用错误密码认证时抛出 CustomException 异常
         CustomException exception = assertThrows(CustomException.class, () -> userService.authenticateUser("testuser", "wrongpassword"));
-        assertEquals("Invalid username or password", exception.getMessage());
+        assertEquals("用户名或密码错误", exception.getMessage());
         assertEquals(HttpStatus.UNAUTHORIZED, exception.getStatus());
     }
 }

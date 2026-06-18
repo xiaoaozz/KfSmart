@@ -146,11 +146,53 @@ public class AgentCenterService {
         List<Map<String, String>> history = (List<Map<String, String>>) variables.remove("history");
         if (history == null) history = new ArrayList<>();
 
-        // 即时调试：前端表单中填写的 systemPrompt 直接生效，无需保存
+        // 即时调试：前端表单中填写的配置直接生效，无需保存
         String debugSystemPrompt = (String) variables.remove("systemPrompt");
-        String originalSystemPrompt = workflow.getSystemPrompt(); // 保留原值，防止写库
+        String originalSystemPrompt = workflow.getSystemPrompt();
         if (debugSystemPrompt != null && !debugSystemPrompt.isBlank()) {
             workflow.setSystemPrompt(debugSystemPrompt);
+        }
+
+        String debugMcpTools = (String) variables.remove("mcpTools");
+        String originalMcpTools = workflow.getMcpTools();
+        if (debugMcpTools != null) {
+            workflow.setMcpTools(debugMcpTools);
+        }
+
+        String debugModels = (String) variables.remove("models");
+        String originalModels = workflow.getModels();
+        if (debugModels != null && !debugModels.isBlank()) {
+            workflow.setModels(debugModels);
+        }
+
+        String debugKnowledgeBases = (String) variables.remove("knowledgeBases");
+        String originalKnowledgeBases = workflow.getKnowledgeBases();
+        if (debugKnowledgeBases != null) {
+            workflow.setKnowledgeBases(debugKnowledgeBases);
+        }
+
+        String debugMemoryTypes = (String) variables.remove("memoryTypes");
+        String originalMemoryTypes = workflow.getMemoryTypes();
+        if (debugMemoryTypes != null) {
+            workflow.setMemoryTypes(debugMemoryTypes);
+        }
+
+        Object debugTemperature = variables.remove("temperature");
+        Double originalTemperature = workflow.getTemperature();
+        if (debugTemperature != null) {
+            workflow.setTemperature(((Number) debugTemperature).doubleValue());
+        }
+
+        Object debugTopP = variables.remove("topP");
+        Double originalTopP = workflow.getTopP();
+        if (debugTopP != null) {
+            workflow.setTopP(((Number) debugTopP).doubleValue());
+        }
+
+        Object debugMaxTokens = variables.remove("maxTokens");
+        Integer originalMaxTokens = workflow.getMaxTokens();
+        if (debugMaxTokens != null) {
+            workflow.setMaxTokens(((Number) debugMaxTokens).intValue());
         }
 
         boolean success = true;
@@ -179,8 +221,15 @@ public class AgentCenterService {
             workflow.setFailureCount(workflow.getFailureCount() + 1);
         }
         workflow.setAvgDurationMs(Math.round((workflow.getAvgDurationMs() * oldCalls + duration) * 1.0 / workflow.getCallCount()));
-        // 还原临时 systemPrompt，确保只更新统计字段，不污染数据库中的提示词
+        // 还原临时配置，确保只更新统计字段，不污染数据库
         workflow.setSystemPrompt(originalSystemPrompt);
+        workflow.setMcpTools(originalMcpTools);
+        workflow.setModels(originalModels);
+        workflow.setKnowledgeBases(originalKnowledgeBases);
+        workflow.setMemoryTypes(originalMemoryTypes);
+        workflow.setTemperature(originalTemperature);
+        workflow.setTopP(originalTopP);
+        workflow.setMaxTokens(originalMaxTokens);
         workflowRepository.save(workflow);
 
         Map<String, Object> tokens = new HashMap<>();
@@ -267,26 +316,29 @@ public class AgentCenterService {
         prompt.setName(request.getName());
         prompt.setDescription(request.getDescription());
         prompt.setCategory(request.getCategory());
-        // 版本号自动递增：每次保存时版本号自动加 1，不支持用户手动修改
+        // 版本号自动递增：每次保存时版本号自动 +1
         String baseVersion = prompt.getVersion();
-        String newVersion;
-        if (isBlank(baseVersion)) {
-            newVersion = "v1";
-        } else if (baseVersion.startsWith("v")) {
+        int nextVersion;
+
+        if (baseVersion != null && !baseVersion.isBlank()) {
+            String v = baseVersion.trim();
+            // 去掉前缀 v（如果存在）
+            if (v.startsWith("v") || v.startsWith("V")) {
+                v = v.substring(1);
+            }
+            // 只取主版本号（例如 v12.3 → 12）
+            String major = v.split("\\.")[0];
+
             try {
-                int num = Integer.parseInt(baseVersion.substring(1).split("\\.")[0]);
-                newVersion = "v" + (num + 1);
-            } catch (NumberFormatException e) {
-                newVersion = "v1";
+                nextVersion = Integer.parseInt(major) + 1;
+            } catch (NumberFormatException ignored) {
+                nextVersion = 1;
             }
         } else {
-            try {
-                int num = Integer.parseInt(baseVersion.split("\\.")[0]);
-                newVersion = "v" + (num + 1);
-            } catch (NumberFormatException e) {
-                newVersion = "v1";
-            }
+            nextVersion = 1;
         }
+
+        String newVersion = "v" + nextVersion;
         prompt.setVersion(newVersion);
         prompt.setSystemContent(request.getSystemContent());
         prompt.setContent(request.getContent());
@@ -631,11 +683,32 @@ public class AgentCenterService {
             }
             // 优先使用 llmPrompt（来自 Prompt 节点），否则用原始 query
             String query = String.valueOf(variables.getOrDefault("llmPrompt", variables.getOrDefault("query", "")));
-            // context 只在绑定了知识库时才有实质内容
             String context = String.valueOf(variables.getOrDefault("context", ""));
-            // 构建 Agent 专用 system prompt：基础能力说明 + 用户自定义
             String systemPrompt = buildAgentSystemPrompt(workflow);
-            String answer = modelClient.chat(query, context, history, activeConfig.get(), systemPrompt);
+            // 即时调试：用 workflow 上的模型参数覆盖 ApiKeyConfig 的默认值（使用副本，避免脏写数据库）
+            ApiKeyConfig resolvedConfig = copyApiKeyConfig(activeConfig.get());
+            if (!isBlank(workflow.getModels())) {
+                String desiredModel = workflow.getModels().split(",")[0].trim();
+                if (!desiredModel.equals(resolvedConfig.getModelName())) {
+                    Optional<ApiKeyConfig> matched = apiKeyConfigService.findAll().stream()
+                        .filter(c -> desiredModel.equals(c.getModelName()))
+                        .findFirst();
+                    if (matched.isPresent()) {
+                        resolvedConfig = copyApiKeyConfig(matched.get());
+                    }
+                }
+            }
+            // 覆盖生成参数：workflow 级别优先于 ApiKeyConfig 级别
+            if (workflow.getTemperature() != null) {
+                resolvedConfig.setTemperature(workflow.getTemperature());
+            }
+            if (workflow.getTopP() != null) {
+                resolvedConfig.setTopP(workflow.getTopP());
+            }
+            if (workflow.getMaxTokens() != null) {
+                resolvedConfig.setMaxTokens(workflow.getMaxTokens());
+            }
+            String answer = modelClient.chat(query, context, history, resolvedConfig, systemPrompt);
             variables.put("answer", answer);
             return;
         }
@@ -803,5 +876,11 @@ public class AgentCenterService {
     }
 
     private record WorkflowEdge(String source, String target) {
+    }
+
+    private ApiKeyConfig copyApiKeyConfig(ApiKeyConfig source) {
+        ApiKeyConfig copy = new ApiKeyConfig();
+        org.springframework.beans.BeanUtils.copyProperties(source, copy);
+        return copy;
     }
 }
