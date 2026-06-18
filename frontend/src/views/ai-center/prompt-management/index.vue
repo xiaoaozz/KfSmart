@@ -19,7 +19,7 @@ import {
   fetchRollbackPrompt,
   fetchSavePromptTemplate,
   fetchTogglePromptStatus
-} from '@/service/api/agent-center';
+} from '@/service/api/resource';
 
 type PageView = 'list' | 'edit';
 

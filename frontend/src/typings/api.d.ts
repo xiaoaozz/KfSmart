@@ -577,5 +577,34 @@ declare namespace Api {
       scene: string;
       updatedAt: string;
     }
+
+    interface WorkflowVersion {
+      id: number;
+      versionId: string;
+      workflowId: string;
+      versionNumber: number;
+      name: string;
+      description: string;
+      status: string;
+      changeDescription: string;
+      snapshotBy: string;
+      isActive: boolean;
+      snapshotAt: string;
+    }
+
+    interface WorkflowExecutionLog {
+      id: number;
+      executionId: string;
+      workflowId: string;
+      triggerType: string;
+      status: string;
+      startedBy: string;
+      startedAt: string;
+      completedAt: string | null;
+      durationMs: number;
+      totalTokens: number;
+      cost: number;
+      errorMessage: string | null;
+    }
   }
 }

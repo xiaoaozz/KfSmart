@@ -1,6 +1,7 @@
 package com.smart.kf.config;
 
 import com.smart.kf.handler.ChatWebSocketHandler;
+import com.smart.kf.handler.WorkflowWebSocketHandler;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -15,9 +16,15 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private ChatWebSocketHandler chatWebSocketHandler;
 
+    @Autowired
+    private WorkflowWebSocketHandler workflowWebSocketHandler;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(chatWebSocketHandler, "/chat/{token}")
-                .setAllowedOrigins("*"); // 允许所有来源访问，生产环境应该限制
+                .setAllowedOrigins("*");
+
+        registry.addHandler(workflowWebSocketHandler, "/ws/workflow/{token}")
+                .setAllowedOrigins("*");
     }
 }

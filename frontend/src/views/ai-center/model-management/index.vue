@@ -1,6 +1,6 @@
 <script setup lang="tsx">
 import { NButton, NDataTable, NPagination, NTag } from 'naive-ui';
-import { fetchAgentModelsPage } from '@/service/api/agent-center';
+import { fetchAgentModelsPage } from '@/service/api/resource';
 
 const { columns, data, getData, loading, mobilePagination } = useTable({
   apiFn: fetchAgentModelsPage,

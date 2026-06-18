@@ -4,4 +4,6 @@ export * from './system';
 export * from './search';
 export * from './conversation';
 export * from './api-key';
-export * from './agent-center';
+export * from './agent';
+export * from './workflow';
+export * from './resource';

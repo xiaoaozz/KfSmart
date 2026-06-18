@@ -102,9 +102,7 @@ export const generatedRoutes = [
         component: 'view.ai-center_agent-management',
         meta: {
           title: 'ai-center_agent-management',
-          i18nKey: 'route.ai-center_agent-management',
-          icon: 'carbon:bot',
-          order: 1
+          i18nKey: 'route.ai-center_agent-management'
         }
       },
       {
@@ -124,9 +122,7 @@ export const generatedRoutes = [
         component: 'view.ai-center_debug-center',
         meta: {
           title: 'ai-center_debug-center',
-          i18nKey: 'route.ai-center_debug-center',
-          icon: 'carbon:debug',
-          order: 7
+          i18nKey: 'route.ai-center_debug-center'
         }
       },
       {
@@ -179,9 +175,7 @@ export const generatedRoutes = [
         component: 'view.ai-center_workflow',
         meta: {
           title: 'ai-center_workflow',
-          i18nKey: 'route.ai-center_workflow',
-          icon: 'carbon:flow',
-          order: 2
+          i18nKey: 'route.ai-center_workflow'
         }
       }
     ]
@@ -249,11 +243,7 @@ export const generatedRoutes = [
     component: 'layout.base',
     meta: {
       title: 'permission-center',
-      i18nKey: 'route.permission-center',
-      icon: 'solar:shield-keyhole-line-duotone',
-      roles: ['ADMIN'],
-      permissions: ['system:admin'],
-      order: 5
+      i18nKey: 'route.permission-center'
     },
     children: [
       {
@@ -262,11 +252,7 @@ export const generatedRoutes = [
         component: 'view.permission-center_org-management',
         meta: {
           title: 'permission-center_org-management',
-          i18nKey: 'route.permission-center_org-management',
-          icon: 'solar:buildings-line-duotone',
-          roles: ['ADMIN'],
-          permissions: ['system:admin'],
-          order: 1
+          i18nKey: 'route.permission-center_org-management'
         }
       },
       {
@@ -275,8 +261,7 @@ export const generatedRoutes = [
         component: 'view.permission-center_role-management',
         meta: {
           title: 'permission-center_role-management',
-          i18nKey: 'route.permission-center_role-management',
-          order: 2
+          i18nKey: 'route.permission-center_role-management'
         }
       },
       {
@@ -285,11 +270,7 @@ export const generatedRoutes = [
         component: 'view.permission-center_user-management',
         meta: {
           title: 'permission-center_user-management',
-          i18nKey: 'route.permission-center_user-management',
-          icon: 'solar:user-line-duotone',
-          roles: ['ADMIN'],
-          permissions: ['user:read'],
-          order: 3
+          i18nKey: 'route.permission-center_user-management'
         }
       }
     ]

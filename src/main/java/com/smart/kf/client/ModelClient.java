@@ -254,6 +254,157 @@ public class ModelClient {
         return "anthropic".equals(authType) ? parseAnthropicText(response) : parseOpenAiText(response);
     }
 
+    /**
+     * 支持 Function Calling 的非流式对话接口，供 Agent ReAct 引擎使用。
+     * 返回 {@link FunctionCallResult}，包含文本内容和可能的 tool_calls。
+     */
+    public FunctionCallResult chatWithFunctions(
+            String userMessage,
+            List<Map<String, String>> history,
+            ApiKeyConfig apiKeyConfig,
+            String systemPrompt,
+            List<Map<String, Object>> tools) {
+        WebClient client;
+        String model;
+
+        if (apiKeyConfig != null) {
+            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
+            model = apiKeyConfig.getModelName();
+        } else {
+            client = defaultWebClient;
+            model = defaultModel;
+        }
+
+        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
+                ? apiKeyConfig.getAuthType().toLowerCase()
+                : "bearer";
+
+        Map<String, Object> requestBody = buildRequest(userMessage, null, history, model, apiKeyConfig, systemPrompt);
+        requestBody.put("stream", false);
+
+        if (tools != null && !tools.isEmpty()) {
+            if ("anthropic".equals(authType)) {
+                requestBody.put("tools", convertToAnthropicTools(tools));
+                requestBody.put("tool_choice", Map.of("type", "auto"));
+            } else {
+                requestBody.put("tools", tools);
+                requestBody.put("tool_choice", "auto");
+            }
+        }
+
+        String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
+
+        String response = client.post()
+                .uri(resolvedUri)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .retrieve()
+                .onStatus(
+                        HttpStatusCode::isError,
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> Mono.error(new RuntimeException(parseErrorMessage(errorBody))))
+                )
+                .bodyToMono(String.class)
+                .block();
+
+        return "anthropic".equals(authType)
+                ? parseAnthropicFunctionCall(response)
+                : parseOpenAiFunctionCall(response);
+    }
+
+    // ─── Function Call 解析 ───
+
+    private List<Map<String, Object>> convertToAnthropicTools(List<Map<String, Object>> openAiTools) {
+        List<Map<String, Object>> anthropicTools = new ArrayList<>();
+        for (Map<String, Object> tool : openAiTools) {
+            Object functionObj = tool.get("function");
+            if (functionObj instanceof Map<?, ?> function) {
+                Map<String, Object> at = new HashMap<>();
+                at.put("name", function.get("name"));
+                at.put("description", function.get("description"));
+                at.put("input_schema", function.get("parameters"));
+                anthropicTools.add(at);
+            }
+        }
+        return anthropicTools;
+    }
+
+    @SuppressWarnings("unchecked")
+    private FunctionCallResult parseOpenAiFunctionCall(String response) {
+        try {
+            JsonNode node = new ObjectMapper().readTree(response);
+            JsonNode choice = node.path("choices").path(0);
+            JsonNode message = choice.path("message");
+            String content = message.path("content").asText("");
+            String finishReason = choice.path("finish_reason").asText("");
+
+            List<ToolCall> toolCalls = new ArrayList<>();
+            JsonNode toolCallsNode = message.path("tool_calls");
+            if (toolCallsNode.isArray()) {
+                for (JsonNode tc : toolCallsNode) {
+                    String tcId = tc.path("id").asText("");
+                    JsonNode function = tc.path("function");
+                    String name = function.path("name").asText("");
+                    String argsStr = function.path("arguments").asText("{}");
+                    Map<String, Object> args;
+                    try {
+                        args = new ObjectMapper().readValue(argsStr, Map.class);
+                    } catch (Exception e) {
+                        args = new HashMap<>();
+                    }
+                    toolCalls.add(new ToolCall(tcId, name, args));
+                }
+            }
+
+            return new FunctionCallResult(content, toolCalls, finishReason);
+        } catch (Exception e) {
+            logger.error("解析 OpenAI Function Call 响应失败: {}", e.getMessage(), e);
+            throw new RuntimeException("解析模型响应失败");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private FunctionCallResult parseAnthropicFunctionCall(String response) {
+        try {
+            JsonNode node = new ObjectMapper().readTree(response);
+            StringBuilder content = new StringBuilder();
+            List<ToolCall> toolCalls = new ArrayList<>();
+            String stopReason = node.path("stop_reason").asText("");
+
+            for (JsonNode block : node.path("content")) {
+                String type = block.path("type").asText("");
+                if ("text".equals(type)) {
+                    content.append(block.path("text").asText(""));
+                } else if ("tool_use".equals(type)) {
+                    String tcId = block.path("id").asText("");
+                    String name = block.path("name").asText("");
+                    Map<String, Object> args;
+                    try {
+                        args = new ObjectMapper().convertValue(block.path("input"), Map.class);
+                    } catch (Exception e) {
+                        args = new HashMap<>();
+                    }
+                    toolCalls.add(new ToolCall(tcId, name, args));
+                }
+            }
+
+            return new FunctionCallResult(content.toString(), toolCalls, stopReason);
+        } catch (Exception e) {
+            logger.error("解析 Anthropic Function Call 响应失败: {}", e.getMessage(), e);
+            throw new RuntimeException("解析模型响应失败");
+        }
+    }
+
+    // ─── Function Call 相关 record ───
+
+    public record ToolCall(String id, String name, Map<String, Object> arguments) {}
+
+    public record FunctionCallResult(String content, List<ToolCall> toolCalls, String finishReason) {
+        public boolean hasToolCalls() {
+            return toolCalls != null && !toolCalls.isEmpty();
+        }
+    }
+
     // ───────────────────────── 私有方法 ─────────────────────────
 
     /**
