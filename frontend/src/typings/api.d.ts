@@ -439,6 +439,7 @@ declare namespace Api {
   namespace AgentCenter {
     interface Workflow {
       id: number;
+      agentId?: string;
       workflowId: string;
       name: string;
       description: string;
@@ -460,6 +461,7 @@ declare namespace Api {
       nodesJson: string;
       edgesJson: string;
       systemPrompt: string;
+      userPrompt: string;
       avatarEmoji: string;
       temperature: number;
       topP: number;
@@ -526,6 +528,11 @@ declare namespace Api {
     }
 
     interface DebugResult {
+      answer?: string;
+      iterations?: number;
+      success?: boolean;
+      errorMessage?: string;
+      executionId?: string;
       trace: { name: string; durationMs: number; status: string }[];
       variables: Record<string, any>;
       tokens: {
@@ -542,6 +549,7 @@ declare namespace Api {
     }
 
     interface MarketplaceItem {
+      agentId?: string;
       workflowId: string;
       name: string;
       category: string;

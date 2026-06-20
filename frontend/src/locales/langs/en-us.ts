@@ -175,7 +175,6 @@ const local: App.I18n.Schema = {
     'ai-center_prompt-management': 'Prompt Management',
     'ai-center_model-management': 'Model Management',
     'ai-center_agent-marketplace': 'Agent Marketplace',
-    'ai-center_debug-center': 'Debug Center',
     'ai-center_run-analysis': 'Run Analysis',
     'personal-center': 'Personal Center',
     'api-key-management': 'API Key Management',

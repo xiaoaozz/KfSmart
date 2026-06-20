@@ -46,6 +46,7 @@ public class AgentVersionService {
         version.setDescription(agent.getDescription());
         version.setStatus(agent.getStatus());
         version.setSystemPrompt(agent.getSystemPrompt());
+        version.setUserPrompt(agent.getUserPrompt());
         version.setTemperature(agent.getTemperature());
         version.setTopP(agent.getTopP());
         version.setMaxTokens(agent.getMaxTokens());
@@ -79,6 +80,7 @@ public class AgentVersionService {
         agent.setDescription(target.getDescription());
         agent.setStatus(target.getStatus());
         agent.setSystemPrompt(target.getSystemPrompt());
+        agent.setUserPrompt(target.getUserPrompt());
         agent.setTemperature(target.getTemperature());
         agent.setTopP(target.getTopP());
         agent.setMaxTokens(target.getMaxTokens());

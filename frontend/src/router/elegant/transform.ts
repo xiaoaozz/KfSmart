@@ -173,7 +173,6 @@ const routeMap: RouteMap = {
   "ai-center": "/ai-center",
   "ai-center_agent-management": "/ai-center/agent-management",
   "ai-center_agent-marketplace": "/ai-center/agent-marketplace",
-  "ai-center_debug-center": "/ai-center/debug-center",
   "ai-center_mcp-tools": "/ai-center/mcp-tools",
   "ai-center_model-management": "/ai-center/model-management",
   "ai-center_prompt-management": "/ai-center/prompt-management",

@@ -22,8 +22,9 @@ export function fetchAgentDetail(agentId: string) {
 }
 
 export function fetchSaveAgent(data: Partial<Api.AgentCenter.Workflow> & { agentId?: string }) {
-  const method = data.agentId ? 'PUT' : 'POST';
-  const url = data.agentId ? `/agents/${data.agentId}` : '/agents';
+  const agentId = data.agentId || data.workflowId;
+  const method = agentId ? 'PUT' : 'POST';
+  const url = agentId ? `/agents/${agentId}` : '/agents';
   return request<Api.AgentCenter.Workflow>({ url, method, data });
 }
 

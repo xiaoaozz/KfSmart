@@ -46,6 +46,9 @@ public class Agent {
     @Column(name = "system_prompt", columnDefinition = "TEXT")
     private String systemPrompt;
 
+    @Column(name = "user_prompt", columnDefinition = "TEXT")
+    private String userPrompt;
+
     @Column(name = "avatar_emoji", length = 32)
     private String avatarEmoji = "🤖";
 

@@ -25,7 +25,6 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "ai-assistant_knowledge-base": () => import("@/views/ai-assistant/knowledge-base/index.vue"),
   "ai-center_agent-management": () => import("@/views/ai-center/agent-management/index.vue"),
   "ai-center_agent-marketplace": () => import("@/views/ai-center/agent-marketplace/index.vue"),
-  "ai-center_debug-center": () => import("@/views/ai-center/debug-center/index.vue"),
   "ai-center_mcp-tools": () => import("@/views/ai-center/mcp-tools/index.vue"),
   "ai-center_model-management": () => import("@/views/ai-center/model-management/index.vue"),
   "ai-center_prompt-management": () => import("@/views/ai-center/prompt-management/index.vue"),
