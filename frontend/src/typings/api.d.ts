@@ -303,6 +303,11 @@ declare namespace Api {
       searchText?: string;
       isPinned?: boolean;
       pinnedAt?: string;
+      sessionType?: string;
+      targetType?: string;
+      targetId?: string;
+      targetName?: string;
+      targetDescription?: string;
     }
 
     interface DeleteSessionResult {
@@ -746,6 +751,49 @@ declare namespace Api {
       totalTokens: number;
       cost: number;
       errorMessage: string | null;
+    }
+  }
+
+  namespace Runtime {
+    interface CatalogItem {
+      id: string;
+      type: 'agent' | 'workflow';
+      name: string;
+      description: string;
+      status: string;
+      ownerName: string;
+      tags: string;
+      models: string;
+      avatarEmoji?: string;
+      callCount: number;
+      successRate: number;
+      publishedAt?: string | null;
+      updatedAt?: string | null;
+    }
+
+    interface Catalog {
+      agents: CatalogItem[];
+      workflows: CatalogItem[];
+      agentCount: number;
+      workflowCount: number;
+    }
+
+    interface ExecuteResult {
+      conversationId: string;
+      session: Api.Chat.Session;
+      execution: {
+        executionId?: string;
+        answer?: string;
+        output?: any;
+        trace?: any[];
+        tokens?: Record<string, any>;
+        durationMs?: number;
+        success?: boolean;
+        errorMessage?: string;
+        displayContent: string;
+        targetType: 'agent' | 'workflow';
+        targetId: string;
+      };
     }
   }
 }

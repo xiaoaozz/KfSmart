@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
 import {
   NButton,
   NDivider,
@@ -36,6 +37,7 @@ import type { WorkflowNode } from './types/workflow';
 
 type SelectOption = { label: string; value: string; disabled?: boolean };
 type PageView = 'list' | 'designer';
+const router = useRouter();
 
 // ─── 统计数据 ───
 const stats = ref<Api.AgentCenter.WorkflowStats>({ agentCount: 0, runCount: 0, successRate: 100, avgDurationMs: 0 });
@@ -256,6 +258,21 @@ async function publishWorkflow(workflowId: string) {
     await loadData();
     if (activeView.value === 'designer') activeView.value = 'list';
   }
+}
+
+function goToRuntime(workflow?: Partial<Api.AgentCenter.Workflow> | null) {
+  const runtimeWorkflowId = workflow?.workflowId || '';
+  if (!runtimeWorkflowId) {
+    window.$message?.warning('请先选择一个工作流');
+    return;
+  }
+  router.push({
+    path: '/ai-center/runtime-center',
+    query: {
+      targetType: 'workflow',
+      targetId: runtimeWorkflowId
+    }
+  });
 }
 
 async function deleteWorkflow(workflowId: string) {
@@ -711,6 +728,10 @@ onMounted(() => { loadData(); });
                     <template #icon><icon-carbon:edit /></template>
                     编辑
                   </NButton>
+                  <NButton size="small" secondary type="success" @click="goToRuntime(selectedWorkflow)">
+                    <template #icon><icon-carbon:play-filled /></template>
+                    去运行
+                  </NButton>
                   <NButton size="small" secondary @click="copyWorkflow(selectedWorkflow.workflowId)">
                     <template #icon><icon-carbon:copy /></template>
                     复制
@@ -772,6 +793,10 @@ onMounted(() => { loadData(); });
             <NButton size="small" type="success" @click="publishWorkflow(designer.workflowId)">
               <template #icon><icon-carbon:launch /></template>
               发布
+            </NButton>
+            <NButton size="small" secondary type="success" @click="goToRuntime({ workflowId: designer.workflowId })">
+              <template #icon><icon-carbon:play-filled /></template>
+              运行界面
             </NButton>
           </div>
         </div>

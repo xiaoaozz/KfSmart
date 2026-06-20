@@ -90,7 +90,10 @@ public class ConversationController {
      * 查询当前用户的会话列表（摘要信息）
      */
     @GetMapping("/sessions")
-    public ResponseEntity<?> getSessions(@RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> getSessions(@RequestHeader("Authorization") String token,
+                                         @RequestParam(name = "session_type", required = false) String sessionType,
+                                         @RequestParam(name = "target_type", required = false) String targetType,
+                                         @RequestParam(name = "target_id", required = false) String targetId) {
         String username = null;
         try {
             User user = getCurrentUser(token);
@@ -98,7 +101,7 @@ public class ConversationController {
             String userId = buildPrimaryUserKey(user);
 
             ensureLegacyConversationIndex(user);
-            List<Map<String, Object>> sessions = chatHandler.getConversationSessions(userId);
+            List<Map<String, Object>> sessions = chatHandler.getConversationSessions(userId, sessionType, targetType, targetId);
 
             LogUtils.logBusiness("GET_SESSIONS", username, "获取会话列表成功, count=%d", sessions.size());
             return ResponseEntity.ok(successResponse("获取会话列表成功", sessions));
@@ -116,7 +119,8 @@ public class ConversationController {
      * 创建新会话
      */
     @PostMapping("/sessions")
-    public ResponseEntity<?> createSession(@RequestHeader("Authorization") String token) {
+    public ResponseEntity<?> createSession(@RequestHeader("Authorization") String token,
+                                           @RequestBody(required = false) Map<String, Object> body) {
         String username = null;
         try {
             User user = getCurrentUser(token);
@@ -124,7 +128,7 @@ public class ConversationController {
             String userId = buildPrimaryUserKey(user);
 
             ensureLegacyConversationIndex(user);
-            Map<String, Object> session = chatHandler.createConversationSession(userId);
+            Map<String, Object> session = chatHandler.createConversationSession(userId, body);
 
             LogUtils.logBusiness("CREATE_SESSION", username, "创建新会话成功, conversationId=%s", session.get("id"));
             return ResponseEntity.ok(successResponse("创建会话成功", session));

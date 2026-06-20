@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
 import {
   NButton,
   NDivider,
@@ -40,6 +41,7 @@ type PromptSelectOption = SelectOption & {
 };
 
 type PageView = 'list' | 'detail';
+const router = useRouter();
 
 // ─── 统计数据 ───
 const stats = ref<Api.AgentCenter.WorkflowStats>({
@@ -399,6 +401,21 @@ async function publishAgent(agentId: string) {
       activeView.value = 'list';
     }
   }
+}
+
+function goToRuntime(agent?: Partial<Api.AgentCenter.Workflow> | null) {
+  const runtimeAgentId = getAgentId(agent);
+  if (!runtimeAgentId) {
+    window.$message?.warning('请先选择一个 Agent');
+    return;
+  }
+  router.push({
+    path: '/ai-center/runtime-center',
+    query: {
+      targetType: 'agent',
+      targetId: runtimeAgentId
+    }
+  });
 }
 
 async function deleteAgent(agentId: string) {
@@ -886,6 +903,10 @@ onMounted(() => {
                     <template #icon><icon-carbon:edit /></template>
                     编辑
                   </NButton>
+                  <NButton size="small" secondary type="success" @click="goToRuntime(selectedAgent)">
+                    <template #icon><icon-carbon:play-filled /></template>
+                    去运行
+                  </NButton>
                   <NButton size="small" secondary @click="copyAgent(getAgentId(selectedAgent))">
                     <template #icon><icon-carbon:copy /></template>
                     复制
@@ -939,6 +960,10 @@ onMounted(() => {
             <NButton size="small" type="success" @click="publishAgent(agentDetail.agentId)">
               <template #icon><icon-carbon:launch /></template>
               发布
+            </NButton>
+            <NButton size="small" secondary type="success" @click="goToRuntime(agentDetail)">
+              <template #icon><icon-carbon:play-filled /></template>
+              运行界面
             </NButton>
           </div>
         </div>

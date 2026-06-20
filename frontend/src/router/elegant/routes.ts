@@ -141,6 +141,15 @@ export const generatedRoutes = [
         }
       },
       {
+        name: 'ai-center_runtime-center',
+        path: '/ai-center/runtime-center',
+        component: 'view.ai-center_runtime-center',
+        meta: {
+          title: 'ai-center_runtime-center',
+          i18nKey: 'route.ai-center_runtime-center'
+        }
+      },
+      {
         name: 'ai-center_skills',
         path: '/ai-center/skills',
         component: 'view.ai-center_skills',

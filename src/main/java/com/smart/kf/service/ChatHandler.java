@@ -305,6 +305,10 @@ public class ChatHandler {
     }
 
     public List<Map<String, Object>> getConversationSessions(String userId) {
+        return getConversationSessions(userId, null, null, null);
+    }
+
+    public List<Map<String, Object>> getConversationSessions(String userId, String sessionType, String targetType, String targetId) {
         List<String> conversationIds = getUserConversationIds(userId);
         String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId));
         if (hasText(currentConversationId) && !conversationIds.contains(currentConversationId)) {
@@ -319,7 +323,9 @@ public class ChatHandler {
                 sessionMeta = buildConversationMetaFromHistory(userId, conversationId, getConversationHistory(conversationId));
                 saveConversationMeta(conversationId, sessionMeta);
             }
-            sessions.add(normalizeSessionMeta(conversationId, sessionMeta));
+            if (matchesSessionFilters(sessionMeta, sessionType, targetType, targetId)) {
+                sessions.add(normalizeSessionMeta(conversationId, sessionMeta));
+            }
         }
 
         sessions.sort((a, b) -> compareSessionMeta(a, b, currentConversationId));
@@ -327,13 +333,40 @@ public class ChatHandler {
     }
 
     public Map<String, Object> createConversationSession(String userId) {
+        return createConversationSession(userId, null);
+    }
+
+    public Map<String, Object> createConversationSession(String userId, Map<String, Object> metadata) {
         String currentConversationId = getCurrentConversationId(userId);
-        if (hasText(currentConversationId) && isConversationEmpty(currentConversationId)) {
+        if (hasText(currentConversationId)
+                && isConversationEmpty(currentConversationId)
+                && currentConversationMatches(currentConversationId, metadata)) {
             throw new CustomException("当前新会话暂无消息，请先发送消息后再创建新会话", HttpStatus.BAD_REQUEST);
         }
 
-        String conversationId = createConversationInternal(userId);
+        String conversationId = createConversationInternal(userId, metadata);
         return normalizeSessionMeta(conversationId, getConversationMeta(conversationId));
+    }
+
+    public Map<String, Object> getConversationSessionMeta(String userId, String conversationId) {
+        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
+            return new LinkedHashMap<>();
+        }
+        return normalizeSessionMeta(conversationId, getConversationMeta(conversationId));
+    }
+
+    public void appendConversationTurn(String userId, String conversationId, String userMessage, String response) {
+        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
+            throw new CustomException("会话不存在或无权访问", HttpStatus.NOT_FOUND);
+        }
+        updateConversationHistory(conversationId, userId, userMessage, response);
+    }
+
+    public void appendConversationError(String userId, String conversationId, String userMessage, String errorMessage) {
+        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
+            throw new CustomException("会话不存在或无权访问", HttpStatus.NOT_FOUND);
+        }
+        saveErrorMessage(conversationId, userId, userMessage, errorMessage);
     }
 
     public Map<String, Object> deleteConversationSession(String userId, String conversationId) {
@@ -404,10 +437,10 @@ public class ChatHandler {
             return currentConversationId;
         }
 
-        return createConversationInternal(userId);
+        return createConversationInternal(userId, null);
     }
 
-    private String createConversationInternal(String userId) {
+    private String createConversationInternal(String userId, Map<String, Object> metadata) {
         String conversationId = UUID.randomUUID().toString();
         String now = currentTimestamp();
 
@@ -423,6 +456,7 @@ public class ChatHandler {
         meta.put("updatedAt", now);
         meta.put("isPinned", false);
         meta.put("pinnedAt", "");
+        applyExtraSessionMeta(meta, metadata);
 
         saveConversationMeta(conversationId, meta);
         attachConversationToUser(userId, conversationId);
@@ -555,7 +589,66 @@ public class ChatHandler {
         normalized.put("updatedAt", toStringValue(meta.get("updatedAt"), toStringValue(meta.get("time"), "")));
         normalized.put("isPinned", toBooleanValue(meta.get("isPinned")));
         normalized.put("pinnedAt", toStringValue(meta.get("pinnedAt"), ""));
+        normalized.put("sessionType", toStringValue(meta.get("sessionType"), ""));
+        normalized.put("targetType", toStringValue(meta.get("targetType"), ""));
+        normalized.put("targetId", toStringValue(meta.get("targetId"), ""));
+        normalized.put("targetName", toStringValue(meta.get("targetName"), ""));
+        normalized.put("targetDescription", toStringValue(meta.get("targetDescription"), ""));
         return normalized;
+    }
+
+    private boolean matchesSessionFilters(Map<String, Object> meta, String sessionType, String targetType, String targetId) {
+        return matchesMetaValue(meta.get("sessionType"), sessionType)
+                && matchesMetaValue(meta.get("targetType"), targetType)
+                && matchesMetaValue(meta.get("targetId"), targetId);
+    }
+
+    private boolean matchesMetaValue(Object actual, String expected) {
+        if (!hasText(expected)) {
+            return true;
+        }
+        return expected.equals(toStringValue(actual, ""));
+    }
+
+    private boolean currentConversationMatches(String conversationId, Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return true;
+        }
+        Map<String, Object> currentMeta = getConversationMeta(conversationId);
+        return matchesMetaValue(currentMeta.get("sessionType"), toStringValue(metadata.get("sessionType"), ""))
+                && matchesMetaValue(currentMeta.get("targetType"), toStringValue(metadata.get("targetType"), ""))
+                && matchesMetaValue(currentMeta.get("targetId"), toStringValue(metadata.get("targetId"), ""));
+    }
+
+    private void applyExtraSessionMeta(Map<String, Object> targetMeta, Map<String, Object> extraMeta) {
+        if (extraMeta == null || extraMeta.isEmpty()) {
+            return;
+        }
+
+        copyIfPresent(targetMeta, extraMeta, "sessionType");
+        copyIfPresent(targetMeta, extraMeta, "targetType");
+        copyIfPresent(targetMeta, extraMeta, "targetId");
+        copyIfPresent(targetMeta, extraMeta, "targetName");
+        copyIfPresent(targetMeta, extraMeta, "targetDescription");
+    }
+
+    private void copyIfPresent(Map<String, Object> targetMeta, Map<String, Object> sourceMeta, String key) {
+        String value = toStringValue(sourceMeta.get(key), "");
+        if (hasText(value)) {
+            targetMeta.put(key, value);
+        }
+    }
+
+    private Map<String, Object> mergeSessionMeta(Map<String, Object> rebuiltMeta, Map<String, Object> existingMeta) {
+        Map<String, Object> merged = new LinkedHashMap<>(rebuiltMeta);
+        if (existingMeta == null || existingMeta.isEmpty()) {
+            return merged;
+        }
+
+        merged.put("isPinned", toBooleanValue(existingMeta.get("isPinned")));
+        merged.put("pinnedAt", toStringValue(existingMeta.get("pinnedAt"), ""));
+        applyExtraSessionMeta(merged, existingMeta);
+        return merged;
     }
 
     private int compareSessionMeta(Map<String, Object> a, Map<String, Object> b, String currentConversationId) {
@@ -650,7 +743,11 @@ public class ChatHandler {
         try {
             String json = objectMapper.writeValueAsString(history);
             redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
-            saveConversationMeta(conversationId, buildConversationMetaFromHistory(userId, conversationId, history));
+            Map<String, Object> existingMeta = getConversationMeta(conversationId);
+            saveConversationMeta(conversationId, mergeSessionMeta(
+                    buildConversationMetaFromHistory(userId, conversationId, history),
+                    existingMeta
+            ));
             attachConversationToUser(userId, conversationId);
             logger.info("已保存错误消息到会话历史，会话ID: {}", conversationId);
         } catch (JsonProcessingException e) {
@@ -683,7 +780,11 @@ public class ChatHandler {
         try {
             String json = objectMapper.writeValueAsString(history);
             redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
-            saveConversationMeta(conversationId, buildConversationMetaFromHistory(userId, conversationId, history));
+            Map<String, Object> existingMeta = getConversationMeta(conversationId);
+            saveConversationMeta(conversationId, mergeSessionMeta(
+                    buildConversationMetaFromHistory(userId, conversationId, history),
+                    existingMeta
+            ));
             attachConversationToUser(userId, conversationId);
             logger.debug("更新会话历史，会话ID: {}, 总消息数: {}", conversationId, history.size());
         } catch (JsonProcessingException e) {
