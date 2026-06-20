@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed } from 'vue';
 import type { EChartsOption } from 'echarts';
-import { fetchGetSystemStatus } from '@/service/api/system';
+import { useSystemOverviewShared } from '../composables/use-overview-shared';
 
 defineOptions({
   name: 'PerformanceMetrics'
 });
 
-const loading = ref(false);
-
-// 系统状态数据
-const systemStatus = ref<Api.System.Status | null>(null);
+const { status: systemStatus, statusLoading: loading, loadStatus } = useSystemOverviewShared();
 
 // 性能指标数据
 interface PerformanceItem {
@@ -119,21 +116,6 @@ const chartOptions = computed<EChartsOption>(() => {
   };
 });
 
-async function fetchPerformanceData() {
-  loading.value = true;
-  try {
-    // 尝试获取系统状态
-    const { error, data } = await fetchGetSystemStatus();
-    if (!error && data) {
-      systemStatus.value = data;
-    }
-  } catch (e) {
-    console.error('[PerformanceMetrics] 获取性能数据失败:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
 const getStatusColor = (status: 'good' | 'normal' | 'warning') => {
   const map = {
     good: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
@@ -153,9 +135,6 @@ const getColorClasses = (color: string) => {
   return colorMap[color] || colorMap.blue;
 };
 
-onMounted(() => {
-  fetchPerformanceData();
-});
 </script>
 
 <template>
@@ -170,7 +149,7 @@ onMounted(() => {
               <span class="text-blue-500" v-if="systemStatus">（数据来自系统 API）</span>
             </p>
           </div>
-          <NButton text @click="fetchPerformanceData">
+          <NButton text @click="loadStatus">
             <template #icon>
               <icon-carbon:renew class="text-lg" />
             </template>

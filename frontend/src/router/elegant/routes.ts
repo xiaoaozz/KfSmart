@@ -115,7 +115,7 @@ export const generatedRoutes = [
           title: 'ai-center_mcp-tools',
           i18nKey: 'route.ai-center_mcp-tools',
           icon: 'carbon:tool-kit',
-          order: 3
+          order: 4
         }
       },
       {
@@ -137,7 +137,27 @@ export const generatedRoutes = [
           title: 'ai-center_prompt-management',
           i18nKey: 'route.ai-center_prompt-management',
           icon: 'carbon:text-annotation-toggle',
-          order: 4
+          order: 5
+        }
+      },
+      {
+        name: 'ai-center_runtime-center',
+        path: '/ai-center/runtime-center',
+        component: 'view.ai-center_runtime-center',
+        meta: {
+          title: 'ai-center_runtime-center',
+          i18nKey: 'route.ai-center_runtime-center'
+        }
+      },
+      {
+        name: 'ai-center_skills',
+        path: '/ai-center/skills',
+        component: 'view.ai-center_skills',
+        meta: {
+          title: 'ai-center_skills',
+          i18nKey: 'route.ai-center_skills',
+          icon: 'carbon:skill-level-advanced',
+          order: 2
         }
       },
       {
@@ -148,7 +168,7 @@ export const generatedRoutes = [
           title: 'ai-center_workflow',
           i18nKey: 'route.ai-center_workflow',
           icon: 'carbon:flow-stream',
-          order: 2
+          order: 3
         }
       }
     ]
@@ -216,7 +236,9 @@ export const generatedRoutes = [
     component: 'layout.base',
     meta: {
       title: 'permission-center',
-      i18nKey: 'route.permission-center'
+      i18nKey: 'route.permission-center',
+      icon: 'carbon:security',
+      order: 5.45
     },
     children: [
       {
@@ -225,7 +247,9 @@ export const generatedRoutes = [
         component: 'view.permission-center_org-management',
         meta: {
           title: 'permission-center_org-management',
-          i18nKey: 'route.permission-center_org-management'
+          i18nKey: 'route.permission-center_org-management',
+          icon: 'carbon:enterprise',
+          order: 1
         }
       },
       {
@@ -234,7 +258,9 @@ export const generatedRoutes = [
         component: 'view.permission-center_role-management',
         meta: {
           title: 'permission-center_role-management',
-          i18nKey: 'route.permission-center_role-management'
+          i18nKey: 'route.permission-center_role-management',
+          icon: 'carbon:badge',
+          order: 2
         }
       },
       {
@@ -243,7 +269,9 @@ export const generatedRoutes = [
         component: 'view.permission-center_user-management',
         meta: {
           title: 'permission-center_user-management',
-          i18nKey: 'route.permission-center_user-management'
+          i18nKey: 'route.permission-center_user-management',
+          icon: 'carbon:user-multiple',
+          order: 3
         }
       }
     ]
@@ -267,7 +295,7 @@ export const generatedRoutes = [
       title: 'run-analysis',
       i18nKey: 'route.run-analysis',
       icon: 'carbon:chart-line-data',
-      order: 5.4
+      order: 5.6
     }
   },
   {
@@ -280,7 +308,7 @@ export const generatedRoutes = [
       icon: 'carbon:dashboard',
       roles: ['ADMIN'],
       permissions: ['system:admin'],
-      order: 0
+      order: 0.6
     }
   },
   {

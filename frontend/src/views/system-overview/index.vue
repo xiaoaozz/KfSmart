@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import DataOverview from './modules/data-overview.vue';
 import UsageTrends from './modules/usage-trends.vue';
 import PopularQuestions from './modules/popular-questions.vue';
 import KnowledgeStats from './modules/knowledge-stats.vue';
 import PerformanceMetrics from './modules/performance-metrics.vue';
 import RecentActivities from './modules/recent-activities.vue';
+import { provideSystemOverviewShared } from './composables/use-overview-shared';
 
 defineOptions({
   name: 'SystemOverview'
 });
+
+const { loadAll } = provideSystemOverviewShared();
+
+onMounted(loadAll);
 </script>
 
 <template>

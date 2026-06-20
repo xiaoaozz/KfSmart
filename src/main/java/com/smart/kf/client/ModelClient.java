@@ -356,7 +356,12 @@ public class ModelClient {
                 }
             }
 
-            return new FunctionCallResult(content, toolCalls, finishReason);
+            JsonNode usage = node.path("usage");
+            int promptTokens = usage.path("prompt_tokens").asInt(0);
+            int completionTokens = usage.path("completion_tokens").asInt(0);
+            double modelCost = calculateModelCost(promptTokens, completionTokens);
+
+            return new FunctionCallResult(content, toolCalls, finishReason, promptTokens, completionTokens, modelCost);
         } catch (Exception e) {
             logger.error("解析 OpenAI Function Call 响应失败: {}", e.getMessage(), e);
             throw new RuntimeException("解析模型响应失败");
@@ -388,7 +393,12 @@ public class ModelClient {
                 }
             }
 
-            return new FunctionCallResult(content.toString(), toolCalls, stopReason);
+            JsonNode usage = node.path("usage");
+            int inputTokens = usage.path("input_tokens").asInt(0);
+            int outputTokens = usage.path("output_tokens").asInt(0);
+            double modelCost = calculateModelCost(inputTokens, outputTokens);
+
+            return new FunctionCallResult(content.toString(), toolCalls, stopReason, inputTokens, outputTokens, modelCost);
         } catch (Exception e) {
             logger.error("解析 Anthropic Function Call 响应失败: {}", e.getMessage(), e);
             throw new RuntimeException("解析模型响应失败");
@@ -399,7 +409,14 @@ public class ModelClient {
 
     public record ToolCall(String id, String name, Map<String, Object> arguments) {}
 
-    public record FunctionCallResult(String content, List<ToolCall> toolCalls, String finishReason) {
+    public record FunctionCallResult(
+        String content,
+        List<ToolCall> toolCalls,
+        String finishReason,
+        int promptTokens,
+        int completionTokens,
+        double modelCost
+    ) {
         public boolean hasToolCalls() {
             return toolCalls != null && !toolCalls.isEmpty();
         }
@@ -428,6 +445,10 @@ public class ModelClient {
             }
         }
         return builder.build();
+    }
+
+    private double calculateModelCost(int promptTokens, int completionTokens) {
+        return (promptTokens * 0.001 + completionTokens * 0.002) / 1000.0;
     }
 
     /**

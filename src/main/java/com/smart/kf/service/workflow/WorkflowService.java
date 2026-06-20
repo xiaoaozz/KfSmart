@@ -177,6 +177,7 @@ public class WorkflowService {
         target.setKnowledgeBases(source.getKnowledgeBases());
         target.setPromptRefs(source.getPromptRefs());
         target.setMcpTools(source.getMcpTools());
+        target.setSkillRefs(source.getSkillRefs());
         target.setModels(source.getModels());
         target.setNodesJson(isBlank(source.getNodesJson()) ? com.smart.kf.workflow.engine.dag.GraphBuilder.defaultNodesJson() : source.getNodesJson());
         target.setEdgesJson(isBlank(source.getEdgesJson()) ? com.smart.kf.workflow.engine.dag.GraphBuilder.defaultEdgesJson() : source.getEdgesJson());

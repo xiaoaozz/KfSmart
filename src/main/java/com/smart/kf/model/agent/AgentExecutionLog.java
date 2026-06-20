@@ -73,6 +73,12 @@ public class AgentExecutionLog {
     @Column(name = "cost", precision = 10, scale = 6)
     private BigDecimal cost = BigDecimal.ZERO;
 
+    @Column(name = "model_cost", precision = 10, scale = 6)
+    private BigDecimal modelCost = BigDecimal.ZERO;
+
+    @Column(name = "tool_cost", precision = 10, scale = 6)
+    private BigDecimal toolCost = BigDecimal.ZERO;
+
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 }

@@ -49,6 +49,7 @@ public class WorkflowVersionService {
         version.setKnowledgeBases(workflow.getKnowledgeBases());
         version.setPromptRefs(workflow.getPromptRefs());
         version.setMcpTools(workflow.getMcpTools());
+        version.setSkillRefs(workflow.getSkillRefs());
         version.setModels(workflow.getModels());
         version.setNodesJson(workflow.getNodesJson());
         version.setEdgesJson(workflow.getEdgesJson());
@@ -78,6 +79,7 @@ public class WorkflowVersionService {
         workflow.setKnowledgeBases(target.getKnowledgeBases());
         workflow.setPromptRefs(target.getPromptRefs());
         workflow.setMcpTools(target.getMcpTools());
+        workflow.setSkillRefs(target.getSkillRefs());
         workflow.setModels(target.getModels());
         workflow.setNodesJson(target.getNodesJson());
         workflow.setEdgesJson(target.getEdgesJson());

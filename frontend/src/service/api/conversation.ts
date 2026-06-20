@@ -7,17 +7,34 @@ export function fetchGetConversationMessages(conversationId?: string) {
   });
 }
 
-export function fetchGetConversationSessions() {
+type SessionFilterParams = {
+  sessionType?: string;
+  targetType?: string;
+  targetId?: string;
+};
+
+export function fetchGetConversationSessions(params?: SessionFilterParams) {
   return request<Api.Chat.Session[]>({
-    url: '/users/conversation/sessions'
+    url: '/users/conversation/sessions',
+    params: {
+      session_type: params?.sessionType,
+      target_type: params?.targetType,
+      target_id: params?.targetId
+    }
   });
 }
 
-export function fetchCreateConversationSession() {
+export function fetchCreateConversationSession(data?: SessionFilterParams & { targetName?: string; targetDescription?: string }) {
   return request<Api.Chat.Session>({
     url: '/users/conversation/sessions',
     method: 'post',
-    data: {}
+    data: {
+      sessionType: data?.sessionType,
+      targetType: data?.targetType,
+      targetId: data?.targetId,
+      targetName: data?.targetName,
+      targetDescription: data?.targetDescription
+    }
   });
 }
 

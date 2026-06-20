@@ -15,6 +15,7 @@ export function useDesignerState() {
     knowledgeBases: '',
     promptRefs: '',
     mcpTools: '',
+    skillRefs: '',
     models: '',
     selectedNodeId: '',
     nodes: [] as WorkflowNode[],
@@ -39,6 +40,7 @@ export function useDesignerState() {
       knowledgeBases: designer.knowledgeBases,
       promptRefs: designer.promptRefs,
       mcpTools: designer.mcpTools,
+      skillRefs: designer.skillRefs,
       models: designer.models,
       nodes: designer.nodes,
       edges: designer.edges
@@ -68,6 +70,7 @@ export function useDesignerState() {
     designer.knowledgeBases = '';
     designer.promptRefs = '';
     designer.mcpTools = '';
+    designer.skillRefs = '';
     designer.models = '';
     designer.nodes = [];
     designer.edges = [];

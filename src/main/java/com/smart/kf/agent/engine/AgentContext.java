@@ -3,6 +3,7 @@ package com.smart.kf.agent.engine;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,10 +53,19 @@ public class AgentContext {
     public static class TokenUsage {
         private int promptTokens;
         private int completionTokens;
+        private BigDecimal modelCost = BigDecimal.ZERO;
+        private final BigDecimal toolCost = BigDecimal.ZERO;
 
         public void add(int prompt, int completion) {
             this.promptTokens += prompt;
             this.completionTokens += completion;
+            this.modelCost = this.modelCost.add(BigDecimal.valueOf((prompt * 0.001 + completion * 0.002) / 1000.0));
+        }
+
+        public void add(int prompt, int completion, double modelCost) {
+            this.promptTokens += prompt;
+            this.completionTokens += completion;
+            this.modelCost = this.modelCost.add(BigDecimal.valueOf(Math.max(0D, modelCost)));
         }
 
         public int getTotalTokens() {
@@ -63,7 +73,15 @@ public class AgentContext {
         }
 
         public double getCost() {
-            return (promptTokens * 0.001 + completionTokens * 0.002) / 1000.0;
+            return getModelCost() + getToolCost();
+        }
+
+        public double getModelCost() {
+            return modelCost.doubleValue();
+        }
+
+        public double getToolCost() {
+            return toolCost.doubleValue();
         }
     }
 }

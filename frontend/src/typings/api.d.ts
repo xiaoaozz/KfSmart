@@ -303,6 +303,11 @@ declare namespace Api {
       searchText?: string;
       isPinned?: boolean;
       pinnedAt?: string;
+      sessionType?: string;
+      targetType?: string;
+      targetId?: string;
+      targetName?: string;
+      targetDescription?: string;
     }
 
     interface DeleteSessionResult {
@@ -405,6 +410,29 @@ declare namespace Api {
       timestamp: string;
       ip_address: string;
     }
+
+    interface RecentActivity {
+      id: string;
+      type: 'knowledge' | 'document' | 'user';
+      icon: string;
+      title: string;
+      description: string;
+      occurredAt: string;
+      timestamp: number;
+      color: string;
+    }
+
+    interface RecentActivityStats {
+      todayActivities: number;
+      weekActivities: number;
+      knowledgeUpdates: number;
+      documentUpdates: number;
+    }
+
+    interface RecentActivitiesResponse {
+      activities: RecentActivity[];
+      stats: RecentActivityStats;
+    }
   }
 
   /** 登录记录 */
@@ -437,6 +465,8 @@ declare namespace Api {
   }
 
   namespace AgentCenter {
+    type PaginatingSkillRecord = Api.Common.PaginatingQueryRecord<Skill>;
+
     interface Workflow {
       id: number;
       agentId?: string;
@@ -457,6 +487,7 @@ declare namespace Api {
       knowledgeBases: string;
       promptRefs: string;
       mcpTools: string;
+      skillRefs: string;
       models: string;
       nodesJson: string;
       edgesJson: string;
@@ -473,10 +504,98 @@ declare namespace Api {
     }
 
     interface WorkflowStats {
-      agentCount: number;
+      agentCount?: number;
+      workflowCount?: number;
       runCount: number;
       successRate: number;
       avgDurationMs: number;
+    }
+
+    interface Skill {
+      id: number;
+      skillId: string;
+      name: string;
+      category: string;
+      status: string;
+      ownerName: string;
+      description: string;
+      tags: string;
+      instruction: string;
+      systemPrompt: string;
+      inputSchema: string;
+      outputSchema: string;
+      runtimeConfig: string;
+      exampleInput: string;
+      exampleOutput: string;
+      promptRefs: string;
+      mcpToolRefs: string;
+      version: string;
+      callCount: number;
+      successCount: number;
+      avgDurationMs: number;
+      publishedAt?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    interface SkillStats {
+      total: number;
+      published: number;
+      draft: number;
+      disabled: number;
+      totalCalls: number;
+      avgDurationMs: number;
+      categories: Record<string, number>;
+    }
+
+    interface SkillHistory {
+      id: number;
+      skillId: string;
+      name: string;
+      category: string;
+      version: string;
+      status: string;
+      ownerName: string;
+      description: string;
+      tags: string;
+      instruction: string;
+      systemPrompt: string;
+      inputSchema: string;
+      outputSchema: string;
+      runtimeConfig: string;
+      exampleInput: string;
+      exampleOutput: string;
+      promptRefs: string;
+      mcpToolRefs: string;
+      snapshotBy: string;
+      changeDescription: string;
+      snapshotAt: string;
+    }
+
+    interface SkillUsage {
+      type: string;
+      refId: string;
+      name: string;
+      status: string;
+      ownerName: string;
+      updatedAt: string;
+    }
+
+    interface SkillTestResult {
+      success: boolean;
+      message: string;
+      validation: {
+        valid: boolean;
+        missingFields: string[];
+        typeErrors: string[];
+      };
+      resolvedPrompts: Array<Record<string, any>>;
+      resolvedTools: Array<Record<string, any>>;
+      runtimeConfig: Record<string, any>;
+      executionPlan: string[];
+      warnings: string[];
+      mockOutput: Record<string, any>;
+      echoInput: Record<string, any>;
     }
 
     interface PromptTemplate {
@@ -612,6 +731,7 @@ declare namespace Api {
       name: string;
       description: string;
       status: string;
+      skillRefs?: string;
       changeDescription: string;
       snapshotBy: string;
       isActive: boolean;
@@ -631,6 +751,49 @@ declare namespace Api {
       totalTokens: number;
       cost: number;
       errorMessage: string | null;
+    }
+  }
+
+  namespace Runtime {
+    interface CatalogItem {
+      id: string;
+      type: 'agent' | 'workflow';
+      name: string;
+      description: string;
+      status: string;
+      ownerName: string;
+      tags: string;
+      models: string;
+      avatarEmoji?: string;
+      callCount: number;
+      successRate: number;
+      publishedAt?: string | null;
+      updatedAt?: string | null;
+    }
+
+    interface Catalog {
+      agents: CatalogItem[];
+      workflows: CatalogItem[];
+      agentCount: number;
+      workflowCount: number;
+    }
+
+    interface ExecuteResult {
+      conversationId: string;
+      session: Api.Chat.Session;
+      execution: {
+        executionId?: string;
+        answer?: string;
+        output?: any;
+        trace?: any[];
+        tokens?: Record<string, any>;
+        durationMs?: number;
+        success?: boolean;
+        errorMessage?: string;
+        displayContent: string;
+        targetType: 'agent' | 'workflow';
+        targetId: string;
+      };
     }
   }
 }

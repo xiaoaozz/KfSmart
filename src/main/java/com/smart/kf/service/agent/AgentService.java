@@ -133,6 +133,7 @@ public class AgentService {
         target.setKnowledgeBases(source.getKnowledgeBases());
         target.setPromptRefs(source.getPromptRefs());
         target.setMcpTools(source.getMcpTools());
+        target.setSkillRefs(source.getSkillRefs());
         target.setModels(source.getModels());
         target.setSystemPrompt(source.getSystemPrompt());
         target.setUserPrompt(source.getUserPrompt());
