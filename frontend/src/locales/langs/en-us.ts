@@ -170,6 +170,7 @@ const local: App.I18n.Schema = {
     'ai-assistant_document-management': 'Document Management',
     'ai-center': 'AI Center',
     'ai-center_agent-management': 'Agent Management',
+    'ai-center_skills': 'Skills',
     'ai-center_workflow': 'Workflow',
     'ai-center_mcp-tools': 'MCP Tools',
     'ai-center_prompt-management': 'Prompt Management',

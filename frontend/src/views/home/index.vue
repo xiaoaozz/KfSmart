@@ -48,7 +48,7 @@ const quickActions = [
   { label: '创建智能体', desc: '创建一个专属的 AI 助手', icon: 'agent', color: '#7C6FD4', bg: '#EDE9FF', route: '/ai-center/agent-management' },
   { label: '创建工作流', desc: '设计自动化业务流程', icon: 'workflow', color: '#3B82F6', bg: '#DBEAFE', route: '/ai-center/workflow' },
   { label: '添加 MCP 工具', desc: '接入外部服务与能力', icon: 'mcp', color: '#10B981', bg: '#D1FAE5', route: '/ai-center/mcp-tools' },
-  { label: '创建技能', desc: '扩展智能体的专业能力', icon: 'skill', color: '#F59E0B', bg: '#FEF3C7', route: '/ai-center/agent-management' }
+  { label: '创建技能', desc: '扩展智能体的专业能力', icon: 'skill', color: '#F59E0B', bg: '#FEF3C7', route: '/ai-center/skills' }
 ];
 
 const recentTab = ref('agent');

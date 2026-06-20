@@ -24,6 +24,7 @@ import {
   fetchMcpTools,
   fetchPromptTemplates
 } from '@/service/api/resource';
+import { fetchSkills } from '@/service/api/skills';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import { defaultNodeConfig, defaultNodes, defaultEdges } from './constants/nodeDefinitions';
 import { useDesignerState } from './composables/useDesignerState';
@@ -43,6 +44,7 @@ const stats = ref<Api.AgentCenter.WorkflowStats>({ agentCount: 0, runCount: 0, s
 const knowledgeBaseOptions = ref<SelectOption[]>([]);
 const promptOptions = ref<SelectOption[]>([]);
 const mcpToolOptions = ref<SelectOption[]>([]);
+const skillOptions = ref<SelectOption[]>([]);
 const modelOptions = ref<SelectOption[]>([]);
 
 // ─── 页面状态 ───
@@ -114,12 +116,13 @@ function getPageRecords<T>(data: any): T[] {
 
 async function loadData() {
   loading.value = true;
-  const [statsRes, kbRes, promptRes, toolRes, modelRes, wfRes] = await Promise.all([
+  const [statsRes, kbRes, promptRes, toolRes, modelRes, skillRes, wfRes] = await Promise.all([
     fetchAgentWorkflowStats(),
     fetchGetKnowledgeBases({ page: 1, size: 100 }),
     fetchPromptTemplates({ page: 1, size: 100 }),
     fetchMcpTools({ page: 1, size: 100 }),
     fetchAgentModels(),
+    fetchSkills({ page: 1, size: 100 }),
     fetchAgentWorkflows({ page: 1, size: 100, keyword: keyword.value || undefined })
   ]);
   loading.value = false;
@@ -133,6 +136,9 @@ async function loadData() {
   }
   if (!toolRes.error && toolRes.data) {
     mcpToolOptions.value = getPageRecords(toolRes.data).map((item: any) => ({ label: item.name, value: item.toolId || item.name }));
+  }
+  if (!skillRes.error && skillRes.data) {
+    skillOptions.value = getPageRecords(skillRes.data).map((item: any) => ({ label: item.name, value: item.skillId, disabled: item.status === '已停用' }));
   }
   if (!modelRes.error && modelRes.data) {
     modelOptions.value = modelRes.data.map((item: any) => ({ label: item.modelName || item.name, value: item.modelName || item.name }));
@@ -195,6 +201,7 @@ function applyWorkflow(row: Api.AgentCenter.Workflow) {
   designer.knowledgeBases = row.knowledgeBases || '';
   designer.promptRefs = row.promptRefs || '';
   designer.mcpTools = row.mcpTools || '';
+  designer.skillRefs = row.skillRefs || '';
   designer.models = row.models || '';
   let parsedNodes: WorkflowNode[] = [];
   try { parsedNodes = row.nodesJson ? JSON.parse(row.nodesJson) : defaultNodes(); } catch { parsedNodes = defaultNodes(); }
@@ -223,6 +230,7 @@ async function saveDesigner() {
       knowledgeBases: designer.knowledgeBases,
       promptRefs: designer.promptRefs,
       mcpTools: designer.mcpTools,
+      skillRefs: designer.skillRefs,
       models: designer.models,
       nodesJson: JSON.stringify(designer.nodes),
       edgesJson: JSON.stringify(designer.edges)
@@ -367,6 +375,10 @@ function splitComma(val: string | undefined) {
 
 function joinComma(values: string[]) {
   return values.filter(Boolean).join(',');
+}
+
+function getOptionLabel(options: SelectOption[], value: string) {
+  return options.find(item => item.value === value)?.label || value;
 }
 
 function syncMcpToolsFromNodes() {
@@ -664,6 +676,21 @@ onMounted(() => { loadData(); });
                   </div>
                 </template>
 
+                <template v-if="selectedWorkflow.skillRefs">
+                  <NDivider class="!my-2" />
+                  <div>
+                    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                      <icon-carbon:skill-level-advanced class="text-primary-500" />
+                      技能
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <NTag v-for="skill in splitComma(selectedWorkflow.skillRefs)" :key="skill" size="small" :bordered="false" type="warning">
+                        {{ getOptionLabel(skillOptions, skill) }}
+                      </NTag>
+                    </div>
+                  </div>
+                </template>
+
                 <NDivider class="!my-2" />
 
                 <!-- 时间信息 -->
@@ -758,6 +785,7 @@ onMounted(() => { loadData(); });
           :knowledge-base-options="knowledgeBaseOptions"
           :prompt-options="promptOptions"
           :mcp-tool-options="mcpToolOptions"
+          :skill-options="skillOptions"
           :saving="saving"
           :debug-loading="debugLoading"
           :test-query="testQuery"

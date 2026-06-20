@@ -26,6 +26,7 @@ import {
   fetchPromptTemplates,
   fetchAgentModels
 } from '@/service/api/resource';
+import { fetchSkills } from '@/service/api/skills';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 
 type SelectOption = {
@@ -53,6 +54,7 @@ const knowledgeBaseOptions = ref<SelectOption[]>([]);
 const promptOptions = ref<PromptSelectOption[]>([]);
 const promptTemplates = ref<Api.AgentCenter.PromptTemplate[]>([]);
 const mcpToolOptions = ref<SelectOption[]>([]);
+const skillOptions = ref<SelectOption[]>([]);
 const modelOptions = ref<SelectOption[]>([]);
 const activeModelName = ref('');
 
@@ -140,6 +142,7 @@ const agentDetail = reactive({
   knowledgeBases: '',
   promptRefs: '',
   mcpTools: '',
+  skillRefs: '',
   models: '',
   systemPrompt: '',
   userPrompt: '',
@@ -202,12 +205,13 @@ function getPageRecords<T>(data: any): T[] {
 
 async function loadData() {
   loading.value = true;
-  const [statsRes, kbRes, promptRes, toolRes, modelRes, agentRes] = await Promise.all([
+  const [statsRes, kbRes, promptRes, toolRes, modelRes, skillRes, agentRes] = await Promise.all([
     fetchAgentWorkflowStats(),
     fetchGetKnowledgeBases({ page: 1, size: 100 }),
     fetchPromptTemplates({ page: 1, size: 100 }),
     fetchMcpTools({ page: 1, size: 100 }),
     fetchAgentModels(),
+    fetchSkills({ page: 1, size: 100 }),
     fetchAgentWorkflows({ page: 1, size: 100, keyword: keyword.value || undefined })
   ]);
   loading.value = false;
@@ -233,6 +237,13 @@ async function loadData() {
     mcpToolOptions.value = getPageRecords<Api.AgentCenter.McpTool>(toolRes.data).map(item => ({
       label: item.name,
       value: item.toolId || item.name
+    }));
+  }
+  if (!skillRes.error && skillRes.data) {
+    skillOptions.value = getPageRecords<Api.AgentCenter.Skill>(skillRes.data).map(item => ({
+      label: item.name,
+      value: item.skillId,
+      disabled: item.status === '已停用'
     }));
   }
   if (!modelRes.error && modelRes.data) {
@@ -315,6 +326,7 @@ function applyAgent(row: Api.AgentCenter.Workflow) {
   agentDetail.knowledgeBases = row.knowledgeBases || '';
   agentDetail.promptRefs = row.promptRefs || '';
   agentDetail.mcpTools = row.mcpTools || '';
+  agentDetail.skillRefs = row.skillRefs || '';
   agentDetail.models = row.models || '';
   agentDetail.selectedModel = (row.models || '').split(',')[0] || activeModelName.value;
   agentDetail.temperature = row.temperature ?? 0.7;
@@ -345,6 +357,7 @@ async function saveAgent() {
       knowledgeBases: agentDetail.knowledgeBases,
       promptRefs: agentDetail.promptRefs,
       mcpTools: agentDetail.mcpTools,
+      skillRefs: agentDetail.skillRefs,
       models: agentDetail.selectedModel || agentDetail.models,
       systemPrompt: agentDetail.systemPrompt,
       userPrompt: agentDetail.userPrompt,
@@ -476,6 +489,10 @@ function splitComma(val: string) {
 
 function joinComma(arr: string[]) {
   return arr.join(',');
+}
+
+function getOptionLabel(options: SelectOption[], value: string) {
+  return options.find(item => item.value === value)?.label || value;
 }
 
 function renderTemplatePrompt(template: Api.AgentCenter.PromptTemplate, target: 'system' | 'user') {
@@ -790,6 +807,27 @@ onMounted(() => {
                     <div class="flex flex-wrap gap-1.5">
                       <NTag v-for="tool in selectedAgent.mcpTools.split(',').filter(Boolean)" :key="tool" size="small" :bordered="false">
                         {{ tool }}
+                      </NTag>
+                    </div>
+                  </div>
+                </template>
+
+                <template v-if="selectedAgent.skillRefs">
+                  <NDivider class="!my-2" />
+                  <div>
+                    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                      <icon-carbon:skill-level-advanced class="text-primary-500" />
+                      技能
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <NTag
+                        v-for="skill in splitComma(selectedAgent.skillRefs)"
+                        :key="skill"
+                        size="small"
+                        :bordered="false"
+                        type="warning"
+                      >
+                        {{ getOptionLabel(skillOptions, skill) }}
                       </NTag>
                     </div>
                   </div>
@@ -1134,6 +1172,21 @@ onMounted(() => {
                 placeholder="选择 MCP 工具"
                 size="small"
                 @update:value="(v: string[]) => (agentDetail.mcpTools = joinComma(v))"
+              />
+            </div>
+
+            <div class="rounded-lg border border-gray-100 p-4 dark:border-gray-700">
+              <div class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <icon-carbon:skill-level-advanced class="text-primary-500" />
+                技能绑定
+              </div>
+              <NSelect
+                :value="splitComma(agentDetail.skillRefs)"
+                multiple
+                :options="skillOptions.length ? skillOptions : [{ label: '暂无技能', value: '', disabled: true }]"
+                placeholder="选择 Skills 技能"
+                size="small"
+                @update:value="(v: string[]) => (agentDetail.skillRefs = joinComma(v))"
               />
             </div>
 

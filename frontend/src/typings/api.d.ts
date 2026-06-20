@@ -437,6 +437,8 @@ declare namespace Api {
   }
 
   namespace AgentCenter {
+    type PaginatingSkillRecord = Api.Common.PaginatingQueryRecord<Skill>;
+
     interface Workflow {
       id: number;
       agentId?: string;
@@ -457,6 +459,7 @@ declare namespace Api {
       knowledgeBases: string;
       promptRefs: string;
       mcpTools: string;
+      skillRefs: string;
       models: string;
       nodesJson: string;
       edgesJson: string;
@@ -477,6 +480,93 @@ declare namespace Api {
       runCount: number;
       successRate: number;
       avgDurationMs: number;
+    }
+
+    interface Skill {
+      id: number;
+      skillId: string;
+      name: string;
+      category: string;
+      status: string;
+      ownerName: string;
+      description: string;
+      tags: string;
+      instruction: string;
+      systemPrompt: string;
+      inputSchema: string;
+      outputSchema: string;
+      runtimeConfig: string;
+      exampleInput: string;
+      exampleOutput: string;
+      promptRefs: string;
+      mcpToolRefs: string;
+      version: string;
+      callCount: number;
+      successCount: number;
+      avgDurationMs: number;
+      publishedAt?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    interface SkillStats {
+      total: number;
+      published: number;
+      draft: number;
+      disabled: number;
+      totalCalls: number;
+      avgDurationMs: number;
+      categories: Record<string, number>;
+    }
+
+    interface SkillHistory {
+      id: number;
+      skillId: string;
+      name: string;
+      category: string;
+      version: string;
+      status: string;
+      ownerName: string;
+      description: string;
+      tags: string;
+      instruction: string;
+      systemPrompt: string;
+      inputSchema: string;
+      outputSchema: string;
+      runtimeConfig: string;
+      exampleInput: string;
+      exampleOutput: string;
+      promptRefs: string;
+      mcpToolRefs: string;
+      snapshotBy: string;
+      changeDescription: string;
+      snapshotAt: string;
+    }
+
+    interface SkillUsage {
+      type: string;
+      refId: string;
+      name: string;
+      status: string;
+      ownerName: string;
+      updatedAt: string;
+    }
+
+    interface SkillTestResult {
+      success: boolean;
+      message: string;
+      validation: {
+        valid: boolean;
+        missingFields: string[];
+        typeErrors: string[];
+      };
+      resolvedPrompts: Array<Record<string, any>>;
+      resolvedTools: Array<Record<string, any>>;
+      runtimeConfig: Record<string, any>;
+      executionPlan: string[];
+      warnings: string[];
+      mockOutput: Record<string, any>;
+      echoInput: Record<string, any>;
     }
 
     interface PromptTemplate {
@@ -612,6 +702,7 @@ declare namespace Api {
       name: string;
       description: string;
       status: string;
+      skillRefs?: string;
       changeDescription: string;
       snapshotBy: string;
       isActive: boolean;

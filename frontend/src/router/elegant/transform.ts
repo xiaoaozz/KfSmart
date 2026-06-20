@@ -175,6 +175,7 @@ const routeMap: RouteMap = {
   "ai-center_mcp-tools": "/ai-center/mcp-tools",
   "ai-center_model-management": "/ai-center/model-management",
   "ai-center_prompt-management": "/ai-center/prompt-management",
+  "ai-center_skills": "/ai-center/skills",
   "ai-center_workflow": "/ai-center/workflow",
   "api-key-management": "/api-key-management",
   "home": "/home",

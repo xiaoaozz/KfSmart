@@ -47,6 +47,9 @@ public class WorkflowVersion {
     @Column(name = "mcp_tools", columnDefinition = "TEXT")
     private String mcpTools;
 
+    @Column(name = "skill_refs", columnDefinition = "TEXT")
+    private String skillRefs;
+
     @Column(name = "models", columnDefinition = "TEXT")
     private String models;
 

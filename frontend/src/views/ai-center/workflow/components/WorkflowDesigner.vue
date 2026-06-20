@@ -18,6 +18,7 @@ const props = defineProps<{
   knowledgeBaseOptions: { label: string; value: string }[];
   promptOptions: { label: string; value: string }[];
   mcpToolOptions: { label: string; value: string }[];
+  skillOptions: { label: string; value: string }[];
   saving: boolean;
   debugLoading: boolean;
   testQuery: string;
@@ -100,6 +101,19 @@ const boundMcpToolOptions = computed(() => {
             max-tag-count="responsive"
             placeholder="绑定 MCP 工具"
             @update:value="(value: string[]) => (props.designer.mcpTools = joinComma(value))"
+          />
+          <NSelect
+            :value="splitComma(props.designer.skillRefs)"
+            multiple
+            clearable
+            filterable
+            size="small"
+            class="w-220px"
+            :disabled="!hasSelectedWorkflow"
+            :options="props.skillOptions"
+            max-tag-count="responsive"
+            placeholder="绑定 Skills"
+            @update:value="(value: string[]) => (props.designer.skillRefs = joinComma(value))"
           />
         </div>
         <div class="flex items-center gap-1">

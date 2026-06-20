@@ -55,6 +55,7 @@ public class AgentVersionService {
         version.setKnowledgeBases(agent.getKnowledgeBases());
         version.setPromptRefs(agent.getPromptRefs());
         version.setMcpTools(agent.getMcpTools());
+        version.setSkillRefs(agent.getSkillRefs());
         version.setModels(agent.getModels());
         version.setSnapshotBy(username);
         version.setChangeDescription(changeDescription != null ? changeDescription : "编辑保存");
@@ -89,6 +90,7 @@ public class AgentVersionService {
         agent.setKnowledgeBases(target.getKnowledgeBases());
         agent.setPromptRefs(target.getPromptRefs());
         agent.setMcpTools(target.getMcpTools());
+        agent.setSkillRefs(target.getSkillRefs());
         agent.setModels(target.getModels());
 
         return agentRepository.save(agent);
