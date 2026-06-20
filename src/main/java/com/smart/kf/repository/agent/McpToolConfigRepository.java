@@ -9,5 +9,9 @@ import java.util.Optional;
 public interface McpToolConfigRepository extends JpaRepository<McpToolConfig, Long> {
     Optional<McpToolConfig> findByToolId(String toolId);
 
-    List<McpToolConfig> findByNameContainingIgnoreCaseOrTypeContainingIgnoreCase(String name, String type);
+    Optional<McpToolConfig> findByToolName(String toolName);
+
+    Optional<McpToolConfig> findByName(String name);
+
+    List<McpToolConfig> findByNameContainingIgnoreCaseOrTypeContainingIgnoreCaseOrToolNameContainingIgnoreCase(String name, String type, String toolName);
 }

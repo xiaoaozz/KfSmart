@@ -25,17 +25,20 @@ public class SharedResourceService {
     private final PromptTemplateHistoryRepository historyRepository;
     private final McpToolConfigRepository toolRepository;
     private final ApiKeyConfigService apiKeyConfigService;
+    private final McpToolInvocationService mcpToolInvocationService;
 
     public SharedResourceService(
         PromptTemplateRepository promptRepository,
         PromptTemplateHistoryRepository historyRepository,
         McpToolConfigRepository toolRepository,
-        ApiKeyConfigService apiKeyConfigService
+        ApiKeyConfigService apiKeyConfigService,
+        McpToolInvocationService mcpToolInvocationService
     ) {
         this.promptRepository = promptRepository;
         this.historyRepository = historyRepository;
         this.toolRepository = toolRepository;
         this.apiKeyConfigService = apiKeyConfigService;
+        this.mcpToolInvocationService = mcpToolInvocationService;
     }
 
     // ── Prompt 模板管理 ──
@@ -206,11 +209,12 @@ public class SharedResourceService {
     public PageResult<Map<String, Object>> listTools(String keyword, PageQuery query) {
         List<McpToolConfig> source = isBlank(keyword)
             ? toolRepository.findAll()
-            : toolRepository.findByNameContainingIgnoreCaseOrTypeContainingIgnoreCase(keyword, keyword);
+            : toolRepository.findByNameContainingIgnoreCaseOrTypeContainingIgnoreCaseOrToolNameContainingIgnoreCase(keyword, keyword, keyword);
         source.sort(Comparator.comparing(McpToolConfig::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return PageResult.fromList(source.stream().map(this::toToolResponse).toList(), query);
     }
 
+    @Transactional
     public Map<String, Object> saveTool(McpToolConfig request) {
         McpToolConfig tool = isBlank(request.getToolId())
             ? new McpToolConfig()
@@ -218,16 +222,28 @@ public class SharedResourceService {
         if (isBlank(tool.getToolId())) {
             tool.setToolId("mcp_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         }
+        if (isBlank(request.getName())) {
+            throw new IllegalArgumentException("工具名称不能为空");
+        }
         tool.setName(request.getName());
         tool.setType(isBlank(request.getType()) ? "MCP" : request.getType());
         tool.setStatus(isBlank(request.getStatus()) ? "在线" : request.getStatus());
+        tool.setToolName(isBlank(request.getToolName()) ? normalizeToolName(request.getName()) : request.getToolName().trim());
+        tool.setRequestMode(isBlank(request.getRequestMode()) ? "MCP_JSON_RPC" : request.getRequestMode());
+        tool.setProtocolVersion(isBlank(request.getProtocolVersion()) ? "2024-11-05" : request.getProtocolVersion());
         tool.setEndpoint(request.getEndpoint());
-        tool.setAuthType(request.getAuthType());
+        tool.setAuthType(isBlank(request.getAuthType()) ? "无认证" : request.getAuthType());
+        tool.setAuthHeaderName(isBlank(request.getAuthHeaderName()) ? "X-API-Key" : request.getAuthHeaderName());
         if (!isBlank(request.getApiKey()) && !request.getApiKey().contains("****")) {
             tool.setApiKey(request.getApiKey());
         }
         tool.setDescription(request.getDescription());
+        tool.setInputSchema(isBlank(request.getInputSchema()) ? defaultInputSchema() : request.getInputSchema());
         return toToolResponse(toolRepository.save(tool));
+    }
+
+    public Map<String, Object> testTool(String toolId, Map<String, Object> arguments) {
+        return mcpToolInvocationService.test(toolId, arguments);
     }
 
     @Transactional
@@ -349,10 +365,18 @@ public class SharedResourceService {
         row.put("name", tool.getName());
         row.put("type", tool.getType());
         row.put("status", tool.getStatus());
+        row.put("toolName", tool.getToolName());
+        row.put("requestMode", tool.getRequestMode());
+        row.put("protocolVersion", tool.getProtocolVersion());
         row.put("endpoint", tool.getEndpoint());
         row.put("authType", tool.getAuthType());
+        row.put("authHeaderName", tool.getAuthHeaderName());
         row.put("apiKeyMasked", maskApiKey(tool.getApiKey()));
         row.put("description", tool.getDescription());
+        row.put("inputSchema", tool.getInputSchema());
+        row.put("lastTestStatus", tool.getLastTestStatus());
+        row.put("lastTestMessage", tool.getLastTestMessage());
+        row.put("lastTestAt", tool.getLastTestAt());
         row.put("callCount", tool.getCallCount());
         row.put("createdAt", tool.getCreatedAt());
         row.put("updatedAt", tool.getUpdatedAt());
@@ -367,5 +391,22 @@ public class SharedResourceService {
             return value;
         }
         return value.length() <= 8 ? "****" : value.substring(0, 3) + "****" + value.substring(value.length() - 4);
+    }
+
+    private String normalizeToolName(String value) {
+        if (isBlank(value)) {
+            return "mcp_tool";
+        }
+        String normalized = value.trim().toLowerCase()
+            .replaceAll("[^a-z0-9_\\u4e00-\\u9fa5-]", "_")
+            .replaceAll("_+", "_")
+            .replaceAll("^_|_$", "");
+        return normalized.isBlank() ? "mcp_tool" : normalized;
+    }
+
+    private String defaultInputSchema() {
+        return """
+            {"type":"object","properties":{"query":{"type":"string","description":"请求参数或查询内容"}},"required":["query"]}
+            """.trim();
     }
 }

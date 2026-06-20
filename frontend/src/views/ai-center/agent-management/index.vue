@@ -232,7 +232,7 @@ async function loadData() {
   if (!toolRes.error && toolRes.data) {
     mcpToolOptions.value = getPageRecords<Api.AgentCenter.McpTool>(toolRes.data).map(item => ({
       label: item.name,
-      value: item.name
+      value: item.toolId || item.name
     }));
   }
   if (!modelRes.error && modelRes.data) {

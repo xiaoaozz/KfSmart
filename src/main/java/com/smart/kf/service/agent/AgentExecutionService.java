@@ -31,17 +31,20 @@ public class AgentExecutionService {
     private final ReActEngine reActEngine;
     private final AgentRepository agentRepository;
     private final AgentExecutionLogRepository logRepository;
+    private final AgentRunAnalysisService runAnalysisService;
     private final ObjectMapper objectMapper;
 
     public AgentExecutionService(
         ReActEngine reActEngine,
         AgentRepository agentRepository,
         AgentExecutionLogRepository logRepository,
+        AgentRunAnalysisService runAnalysisService,
         ObjectMapper objectMapper
     ) {
         this.reActEngine = reActEngine;
         this.agentRepository = agentRepository;
         this.logRepository = logRepository;
+        this.runAnalysisService = runAnalysisService;
         this.objectMapper = objectMapper;
     }
 
@@ -60,6 +63,16 @@ public class AgentExecutionService {
         updateAgentStats(agent, ctx, duration);
 
         saveExecutionLog(ctx, agentId, query, username, duration);
+        try {
+            runAnalysisService.recordExecution(
+                ctx.getFinalAnswer() != null && !ctx.getFinalAnswer().startsWith("执行过程中出错"),
+                duration,
+                ctx.getTokenUsage().getTotalTokens(),
+                BigDecimal.valueOf(ctx.getTokenUsage().getCost())
+            );
+        } catch (Exception e) {
+            logger.warn("保存Agent运行分析快照失败: {}", e.getMessage());
+        }
 
         return buildResponse(ctx, duration);
     }

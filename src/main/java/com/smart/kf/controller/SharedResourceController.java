@@ -113,9 +113,16 @@ public class SharedResourceController {
     }
 
     @PutMapping("/mcp-tools/{toolId}")
+    @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> updateTool(@PathVariable String toolId, @RequestBody McpToolConfig request) {
         request.setToolId(toolId);
         return ok("保存MCP工具成功", resourceService.saveTool(request));
+    }
+
+    @PostMapping("/mcp-tools/{toolId}/test")
+    @PreAuthorize("hasAuthority('agent:run')")
+    public ResponseEntity<?> testTool(@PathVariable String toolId, @RequestBody(required = false) Map<String, Object> arguments) {
+        return ok("测试MCP工具成功", resourceService.testTool(toolId, arguments == null ? Map.of() : arguments));
     }
 
     @DeleteMapping("/mcp-tools/{toolId}")

@@ -19,10 +19,12 @@ public class AgentService {
 
     private final AgentRepository agentRepository;
     private final AgentVersionService versionService;
+    private final AgentRunAnalysisService runAnalysisService;
 
-    public AgentService(AgentRepository agentRepository, AgentVersionService versionService) {
+    public AgentService(AgentRepository agentRepository, AgentVersionService versionService, AgentRunAnalysisService runAnalysisService) {
         this.agentRepository = agentRepository;
         this.versionService = versionService;
+        this.runAnalysisService = runAnalysisService;
     }
 
     public PageResult<Agent> listAgents(String keyword, PageQuery query) {
@@ -118,21 +120,7 @@ public class AgentService {
     }
 
     public Map<String, Object> runAnalysis() {
-        List<Agent> agents = agentRepository.findAll();
-        long calls = agents.stream().mapToLong(Agent::getCallCount).sum();
-        long success = agents.stream().mapToLong(Agent::getSuccessCount).sum();
-        long failures = agents.stream().mapToLong(Agent::getFailureCount).sum();
-
-        Map<String, Object> result = agentStats();
-        result.put("failureRate", calls == 0 ? 0 : Math.round(failures * 100.0 / calls));
-        result.put("successRate", calls == 0 ? 100 : Math.round(success * 100.0 / calls));
-        result.put("hotAgents", agents.stream()
-            .sorted(Comparator.comparingLong(Agent::getCallCount).reversed())
-            .limit(5)
-            .map(item -> Map.of("name", item.getName(), "callCount", item.getCallCount()))
-            .toList());
-        result.put("cost", Map.of("tokenUsage", calls * 1280, "modelCost", calls * 0.0128, "toolCost", calls * 0.004));
-        return result;
+        return runAnalysisService.buildRunAnalysis();
     }
 
     private void applyAgent(Agent target, Agent source) {

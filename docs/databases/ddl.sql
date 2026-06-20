@@ -196,10 +196,18 @@ CREATE TABLE mcp_tool_configs (
     name        VARCHAR(100) NOT NULL COMMENT '工具名称',
     type        VARCHAR(50) DEFAULT 'MCP' COMMENT '类型：MCP/HTTP',
     status      VARCHAR(20) DEFAULT '在线' COMMENT '状态：在线/离线',
+    tool_name   VARCHAR(128) COMMENT 'MCP tools/call 使用的工具名',
+    request_mode VARCHAR(32) DEFAULT 'MCP_JSON_RPC' COMMENT '请求模式：MCP_JSON_RPC/HTTP_COMPAT',
+    protocol_version VARCHAR(32) DEFAULT '2024-11-05' COMMENT 'MCP 协议版本',
     endpoint    VARCHAR(500) COMMENT '工具 Endpoint URL',
     auth_type   VARCHAR(50) COMMENT '鉴权类型：API Key/Bearer Token/无鉴权',
+    auth_header_name VARCHAR(100) DEFAULT 'X-API-Key' COMMENT 'API Key Header 名称',
     api_key     VARCHAR(500) COMMENT 'API Key（加密存储）',
     description TEXT COMMENT '工具描述',
+    input_schema TEXT COMMENT '工具输入 JSON Schema',
+    last_test_status VARCHAR(20) COMMENT '最近测试状态',
+    last_test_message VARCHAR(1000) COMMENT '最近测试信息',
+    last_test_at TIMESTAMP NULL COMMENT '最近测试时间',
     call_count  BIGINT NOT NULL DEFAULT 0 COMMENT '调用次数',
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -260,6 +268,22 @@ CREATE TABLE agent_execution_logs (
     INDEX idx_status (status),
     INDEX idx_started_at (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent 执行日志表';
+
+CREATE TABLE agent_run_analysis_snapshots (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    snapshot_date       DATE NOT NULL COMMENT '统计日期',
+    run_count           BIGINT NOT NULL DEFAULT 0 COMMENT '当日调用次数',
+    success_count       BIGINT NOT NULL DEFAULT 0 COMMENT '当日成功次数',
+    failure_count       BIGINT NOT NULL DEFAULT 0 COMMENT '当日失败次数',
+    duration_total_ms   BIGINT NOT NULL DEFAULT 0 COMMENT '当日总耗时(ms)',
+    token_usage         BIGINT NOT NULL DEFAULT 0 COMMENT '当日 Token 消耗',
+    model_cost          DECIMAL(16,6) NOT NULL DEFAULT 0 COMMENT '当日模型费用',
+    tool_cost           DECIMAL(16,6) NOT NULL DEFAULT 0 COMMENT '当日工具费用',
+    hot_agents_json     LONGTEXT COMMENT '当日热门 Agent 快照',
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_snapshot_date (snapshot_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Agent 运行分析快照表';
 
 CREATE TABLE workflow_versions (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',

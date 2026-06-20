@@ -518,12 +518,21 @@ declare namespace Api {
       name: string;
       type: string;
       status: string;
+      toolName: string;
+      requestMode: string;
+      protocolVersion: string;
       endpoint: string;
       authType: string;
+      authHeaderName: string;
       apiKeyMasked: string;
       apiKey?: string;
       description: string;
+      inputSchema: string;
+      lastTestStatus?: string;
+      lastTestMessage?: string;
+      lastTestAt?: string;
       callCount: number;
+      createdAt?: string;
       updatedAt: string;
     }
 
@@ -559,8 +568,12 @@ declare namespace Api {
     }
 
     interface RunAnalysis extends WorkflowStats {
+      successCount: number;
       failureRate: number;
+      failureCount: number;
       hotAgents: { name: string; callCount: number }[];
+      dailyTrends: { date: string; label: string; calls: number; success: number; failed: number }[];
+      latestSnapshotDate?: string | null;
       cost: {
         tokenUsage: number;
         modelCost: number;

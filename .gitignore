@@ -71,3 +71,6 @@ src/main/resources/application.yml~
 
 # ai
 .claude
+.codex
+.codeflicker
+.myflicker

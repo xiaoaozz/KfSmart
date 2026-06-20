@@ -3,6 +3,8 @@ package com.smart.kf.agent.engine;
 import com.smart.kf.agent.engine.tools.KnowledgeBaseTool;
 import com.smart.kf.agent.engine.tools.McpToolExecutor;
 import com.smart.kf.model.agent.Agent;
+import com.smart.kf.model.agent.McpToolConfig;
+import com.smart.kf.service.McpToolInvocationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -19,13 +21,16 @@ public class ToolRegistry {
 
     private final KnowledgeBaseTool knowledgeBaseTool;
     private final McpToolExecutor mcpToolExecutor;
+    private final McpToolInvocationService mcpToolInvocationService;
 
     public ToolRegistry(
         KnowledgeBaseTool knowledgeBaseTool,
-        McpToolExecutor mcpToolExecutor
+        McpToolExecutor mcpToolExecutor,
+        McpToolInvocationService mcpToolInvocationService
     ) {
         this.knowledgeBaseTool = knowledgeBaseTool;
         this.mcpToolExecutor = mcpToolExecutor;
+        this.mcpToolInvocationService = mcpToolInvocationService;
     }
 
     public List<ToolDefinition> resolveTools(Agent agent) {
@@ -99,18 +104,13 @@ public class ToolRegistry {
     }
 
     private ToolDefinition buildMcpTool(String toolName) {
-        Map<String, Object> params = new HashMap<>();
-        params.put("type", "object");
-        Map<String, Object> properties = new HashMap<>();
-        Map<String, Object> queryProp = new HashMap<>();
-        queryProp.put("type", "string");
-        queryProp.put("description", "请求参数或查询内容");
-        properties.put("query", queryProp);
-        params.put("properties", properties);
+        McpToolConfig tool = mcpToolInvocationService.resolveTool(toolName);
+        Map<String, Object> params = mcpToolInvocationService.parseSchema(tool.getInputSchema());
+        String functionName = "mcp_" + sanitizeToolName(mcpToolInvocationService.normalizeToolName(tool));
 
         return new ToolDefinition(
-            "mcp_" + sanitizeToolName(toolName),
-            "调用外部工具: " + toolName,
+            functionName,
+            isPresent(tool.getDescription()) ? tool.getDescription() : "调用外部 MCP 工具: " + tool.getName(),
             params,
             args -> mcpToolExecutor.execute(toolName, args)
         );
