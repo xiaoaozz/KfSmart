@@ -34,6 +34,10 @@ type SelectOption = {
   disabled?: boolean;
 };
 
+type PromptSelectOption = SelectOption & {
+  template: Api.AgentCenter.PromptTemplate;
+};
+
 type PageView = 'list' | 'detail';
 
 // ─── 统计数据 ───
@@ -46,7 +50,8 @@ const stats = ref<Api.AgentCenter.WorkflowStats>({
 
 // ─── 选项数据 ───
 const knowledgeBaseOptions = ref<SelectOption[]>([]);
-const promptOptions = ref<SelectOption[]>([]);
+const promptOptions = ref<PromptSelectOption[]>([]);
+const promptTemplates = ref<Api.AgentCenter.PromptTemplate[]>([]);
 const mcpToolOptions = ref<SelectOption[]>([]);
 const modelOptions = ref<SelectOption[]>([]);
 const activeModelName = ref('');
@@ -95,6 +100,26 @@ const filteredAgents = computed(() => {
   return list;
 });
 
+const selectedPromptTemplates = computed(() => {
+  const refs = splitComma(agentDetail.promptRefs);
+  return refs
+    .map(ref => promptTemplates.value.find(item => item.name === ref || item.templateId === ref))
+    .filter((item): item is Api.AgentCenter.PromptTemplate => Boolean(item));
+});
+
+const primaryPromptTemplate = computed(() => selectedPromptTemplates.value[0] || null);
+
+const promptPreviewStats = computed(() => {
+  const systemLength = selectedPromptTemplates.value.reduce((sum, item) => sum + (item.systemContent?.length || 0), 0);
+  const userLength = selectedPromptTemplates.value.reduce((sum, item) => sum + (item.content?.length || 0), 0);
+  const variables = selectedPromptTemplates.value.flatMap(item => splitComma(item.variables));
+  return {
+    systemLength,
+    userLength,
+    variables: [...new Set(variables)]
+  };
+});
+
 function switchCategoryMode(mode: 'type' | 'status') {
   categoryMode.value = mode;
   activeCategory.value = '全部';
@@ -104,7 +129,7 @@ function switchCategoryMode(mode: 'type' | 'status') {
 const selectedAgent = ref<Api.AgentCenter.Workflow | null>(null);
 
 const agentDetail = reactive({
-  workflowId: '',
+  agentId: '',
   name: '',
   description: '',
   type: '',
@@ -117,6 +142,7 @@ const agentDetail = reactive({
   mcpTools: '',
   models: '',
   systemPrompt: '',
+  userPrompt: '',
   temperature: 0.7,
   topP: 0.8,
   maxTokens: 4000,
@@ -195,9 +221,12 @@ async function loadData() {
     }));
   }
   if (!promptRes.error && promptRes.data) {
-    promptOptions.value = getPageRecords<Api.AgentCenter.PromptTemplate>(promptRes.data).map(item => ({
+    promptTemplates.value = getPageRecords<Api.AgentCenter.PromptTemplate>(promptRes.data);
+    promptOptions.value = promptTemplates.value.map(item => ({
       label: `${item.name} ${item.version || ''}`.trim(),
-      value: item.name
+      value: item.name,
+      disabled: item.status === '禁用',
+      template: item
     }));
   }
   if (!toolRes.error && toolRes.data) {
@@ -270,8 +299,12 @@ function selectAgent(item: Api.AgentCenter.Workflow) {
   selectedAgent.value = item;
 }
 
+function getAgentId(agent?: Partial<Api.AgentCenter.Workflow> | null) {
+  return agent?.agentId || agent?.workflowId || '';
+}
+
 function applyAgent(row: Api.AgentCenter.Workflow) {
-  agentDetail.workflowId = row.workflowId;
+  agentDetail.agentId = getAgentId(row);
   agentDetail.name = row.name;
   agentDetail.description = row.description;
   agentDetail.type = row.type;
@@ -288,16 +321,20 @@ function applyAgent(row: Api.AgentCenter.Workflow) {
   agentDetail.topP = row.topP ?? 0.8;
   agentDetail.maxTokens = row.maxTokens ?? 4000;
   agentDetail.systemPrompt = row.systemPrompt || '';
+  agentDetail.userPrompt = row.userPrompt || '';
   agentDetail.memoryTypes = row.memoryTypes ? row.memoryTypes.split(',').filter(Boolean) : ['会话记忆'];
   agentDetail.avatarEmoji = row.avatarEmoji || '🤖';
 }
 
 async function saveAgent() {
-  if (!agentDetail.workflowId) return;
+  if (!agentDetail.agentId) {
+    window.$message?.warning('请先选择一个 Agent');
+    return;
+  }
   saving.value = true;
   try {
     const { error, data } = await fetchSaveAgentWorkflow({
-      workflowId: agentDetail.workflowId,
+      agentId: agentDetail.agentId,
       name: agentDetail.name,
       description: agentDetail.description,
       type: agentDetail.type,
@@ -310,6 +347,7 @@ async function saveAgent() {
       mcpTools: agentDetail.mcpTools,
       models: agentDetail.selectedModel || agentDetail.models,
       systemPrompt: agentDetail.systemPrompt,
+      userPrompt: agentDetail.userPrompt,
       avatarEmoji: agentDetail.avatarEmoji,
       temperature: agentDetail.temperature,
       topP: agentDetail.topP,
@@ -319,22 +357,28 @@ async function saveAgent() {
     if (!error && data) {
       window.$message?.success('保存成功');
       await loadData();
+      selectedAgent.value = { ...data };
+      applyAgent(data);
     }
   } finally {
     saving.value = false;
   }
 }
 
-async function copyAgent(workflowId: string) {
-  const { error } = await fetchCopyAgentWorkflow(workflowId);
+async function copyAgent(agentId: string) {
+  const { error } = await fetchCopyAgentWorkflow(agentId);
   if (!error) {
     window.$message?.success('复制成功');
     await loadData();
   }
 }
 
-async function publishAgent(workflowId: string) {
-  const { error } = await fetchPublishAgentWorkflow(workflowId);
+async function publishAgent(agentId: string) {
+  if (!agentId) {
+    window.$message?.warning('请先选择一个 Agent');
+    return;
+  }
+  const { error } = await fetchPublishAgentWorkflow(agentId);
   if (!error) {
     window.$message?.success('发布成功');
     await loadData();
@@ -344,17 +388,17 @@ async function publishAgent(workflowId: string) {
   }
 }
 
-async function deleteAgent(workflowId: string) {
+async function deleteAgent(agentId: string) {
   window.$dialog?.warning({
     title: '删除 Agent',
     content: '确认删除该 Agent 吗？此操作不可恢复。',
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
-      const { error } = await fetchDeleteAgentWorkflow(workflowId);
+      const { error } = await fetchDeleteAgentWorkflow(agentId);
       if (!error) {
         window.$message?.success('删除成功');
-        if (selectedAgent.value?.workflowId === workflowId) {
+        if (getAgentId(selectedAgent.value) === agentId) {
           selectedAgent.value = null;
         }
         await loadData();
@@ -365,7 +409,7 @@ async function deleteAgent(workflowId: string) {
 
 // ─── 调试 ───
 async function runDebug() {
-  if (!agentDetail.workflowId) {
+  if (!agentDetail.agentId) {
     window.$message?.warning('请先选择一个 Agent');
     return;
   }
@@ -385,10 +429,11 @@ async function runDebug() {
     .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
 
   try {
-    const { error, data } = await fetchDebugAgentWorkflow(agentDetail.workflowId, {
+    const { error, data } = await fetchDebugAgentWorkflow(agentDetail.agentId, {
       query: userQuery,
       history,
       systemPrompt: agentDetail.systemPrompt ?? '',
+      userPrompt: agentDetail.userPrompt ?? '',
       mcpTools: agentDetail.mcpTools ?? '',
       models: agentDetail.selectedModel || agentDetail.models || '',
       temperature: agentDetail.temperature,
@@ -400,7 +445,7 @@ async function runDebug() {
     if (!error && data) {
       debugMessages.value.push({
         role: 'agent',
-        content: data.output?.answer || '工作流执行完成',
+        content: data.answer || data.output?.answer || 'Agent 未返回答案',
         tokens: data.tokens,
         trace: data.trace,
         durationMs: data.durationMs,
@@ -431,6 +476,41 @@ function splitComma(val: string) {
 
 function joinComma(arr: string[]) {
   return arr.join(',');
+}
+
+function renderTemplatePrompt(template: Api.AgentCenter.PromptTemplate, target: 'system' | 'user') {
+  return target === 'system' ? template.systemContent?.trim() || '' : template.content?.trim() || '';
+}
+
+function applyPromptTemplate(target: 'system' | 'user', mode: 'replace' | 'append') {
+  const template = primaryPromptTemplate.value;
+  if (!template) {
+    window.$message?.warning('请先选择 Prompt 模板');
+    return;
+  }
+  const promptText = renderTemplatePrompt(template, target);
+  if (!promptText) {
+    window.$message?.warning(`该模板没有可应用的 ${target === 'system' ? 'System' : 'User'} Prompt 内容`);
+    return;
+  }
+  if (mode === 'replace') {
+    if (target === 'system') {
+      agentDetail.systemPrompt = promptText;
+    } else {
+      agentDetail.userPrompt = promptText;
+    }
+  } else {
+    const currentPrompt = target === 'system' ? agentDetail.systemPrompt : agentDetail.userPrompt;
+    const mergedPrompt = [currentPrompt?.trim(), promptText]
+      .filter(Boolean)
+      .join('\n\n');
+    if (target === 'system') {
+      agentDetail.systemPrompt = mergedPrompt;
+    } else {
+      agentDetail.userPrompt = mergedPrompt;
+    }
+  }
+  window.$message?.success(`${mode === 'replace' ? '已覆盖' : '已追加'}${target === 'system' ? ' System' : ' User'} Prompt`);
 }
 
 function formatTime(time: string | undefined | null): string {
@@ -544,9 +624,9 @@ onMounted(() => {
                 <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                   <div
                     v-for="item in filteredAgents"
-                    :key="item.workflowId"
+                    :key="getAgentId(item)"
                     class="cursor-pointer rounded-xl border bg-white p-4 transition-all hover:shadow-md dark:bg-[#1e1e22] dark:border-gray-700"
-                    :class="selectedAgent?.workflowId === item.workflowId
+                    :class="getAgentId(selectedAgent) === getAgentId(item)
                       ? 'border-primary-400 shadow-sm ring-1 ring-primary-200 dark:border-primary-500 dark:ring-primary-800'
                       : 'border-gray-200 hover:border-primary-300 dark:border-gray-700 dark:hover:border-primary-600'"
                     @click="selectAgent(item)"
@@ -683,6 +763,22 @@ onMounted(() => {
                   </div>
                 </template>
 
+                <!-- Prompt 模板 -->
+                <template v-if="selectedAgent.promptRefs">
+                  <NDivider class="!my-2" />
+                  <div>
+                    <div class="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                      <icon-carbon:text-link class="text-primary-500" />
+                      Prompt 模板
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <NTag v-for="prompt in selectedAgent.promptRefs.split(',').filter(Boolean)" :key="prompt" size="small" :bordered="false" type="success">
+                        {{ prompt }}
+                      </NTag>
+                    </div>
+                  </div>
+                </template>
+
                 <!-- 工具绑定 -->
                 <template v-if="selectedAgent.mcpTools">
                   <NDivider class="!my-2" />
@@ -742,7 +838,7 @@ onMounted(() => {
                   </div>
                   <div class="flex items-center gap-2">
                     <icon-carbon:identification class="text-sm" />
-                    <span>ID：{{ selectedAgent.workflowId }}</span>
+                    <span>ID：{{ getAgentId(selectedAgent) }}</span>
                   </div>
                 </div>
 
@@ -752,11 +848,11 @@ onMounted(() => {
                     <template #icon><icon-carbon:edit /></template>
                     编辑
                   </NButton>
-                  <NButton size="small" secondary @click="copyAgent(selectedAgent.workflowId)">
+                  <NButton size="small" secondary @click="copyAgent(getAgentId(selectedAgent))">
                     <template #icon><icon-carbon:copy /></template>
                     复制
                   </NButton>
-                  <NButton size="small" secondary type="error" @click="deleteAgent(selectedAgent.workflowId)">
+                  <NButton size="small" secondary type="error" @click="deleteAgent(getAgentId(selectedAgent))">
                     <template #icon><icon-carbon:trash-can /></template>
                     删除
                   </NButton>
@@ -802,7 +898,7 @@ onMounted(() => {
               <template #icon><icon-carbon:save /></template>
               保存
             </NButton>
-            <NButton size="small" type="success" @click="publishAgent(agentDetail.workflowId)">
+            <NButton size="small" type="success" @click="publishAgent(agentDetail.agentId)">
               <template #icon><icon-carbon:launch /></template>
               发布
             </NButton>
@@ -835,12 +931,12 @@ onMounted(() => {
             </div>
 
             <div>
-              <div class="mb-2 text-xs text-gray-500 dark:text-gray-400">头像</div>
-              <div class="grid grid-cols-4 gap-1.5">
+              <div class="mb-1 text-xs text-gray-500 dark:text-gray-400">头像</div>
+              <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
                 <button
                   v-for="emoji in avatarOptions"
                   :key="emoji"
-                  class="flex h-9 w-9 items-center justify-center rounded-lg border text-xl transition"
+                  class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border text-lg transition"
                   :class="agentDetail.avatarEmoji === emoji
                     ? 'border-primary-400 bg-primary-50 dark:border-primary-500 dark:bg-primary-900/30'
                     : 'border-gray-200 bg-white hover:border-primary-300 dark:border-gray-600 dark:bg-[#1e1e22]'"
@@ -850,15 +946,117 @@ onMounted(() => {
             </div>
 
             <div>
+              <div class="mb-1 text-xs text-gray-500 dark:text-gray-400">Prompt 模板</div>
+              <div class="rounded-lg border border-gray-100 p-3 dark:border-gray-700">
+                <NSelect
+                  :value="splitComma(agentDetail.promptRefs)"
+                  multiple
+                  clearable
+                  filterable
+                  :options="promptOptions.length ? promptOptions : [{ label: '暂无Prompt模板', value: '', disabled: true }]"
+                  placeholder="选择 Prompt 管理中的模板"
+                  size="small"
+                  @update:value="(v: string[]) => (agentDetail.promptRefs = joinComma(v))"
+                />
+                <div v-if="selectedPromptTemplates.length" class="mt-3 space-y-2">
+                  <div class="grid grid-cols-3 gap-2 text-center text-[10px] text-gray-500 dark:text-gray-400">
+                    <div class="rounded-md bg-blue-50 px-2 py-1.5 dark:bg-blue-900/20">
+                      <div class="text-sm font-semibold text-blue-600 dark:text-blue-300">{{ promptPreviewStats.systemLength }}</div>
+                      <div>System</div>
+                    </div>
+                    <div class="rounded-md bg-green-50 px-2 py-1.5 dark:bg-green-900/20">
+                      <div class="text-sm font-semibold text-green-600 dark:text-green-300">{{ promptPreviewStats.userLength }}</div>
+                      <div>User</div>
+                    </div>
+                    <div class="rounded-md bg-amber-50 px-2 py-1.5 dark:bg-amber-900/20">
+                      <div class="text-sm font-semibold text-amber-600 dark:text-amber-300">{{ promptPreviewStats.variables.length }}</div>
+                      <div>变量</div>
+                    </div>
+                  </div>
+                  <div
+                    v-for="template in selectedPromptTemplates"
+                    :key="template.templateId"
+                    class="rounded-md bg-gray-50 px-3 py-2 text-xs dark:bg-[#1e1e22]"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="truncate font-medium text-gray-700 dark:text-gray-200">
+                          {{ template.name }}
+                          <span class="ml-1 text-gray-400">{{ template.version }}</span>
+                        </div>
+                        <div v-if="template.description" class="mt-0.5 line-clamp-1 text-gray-400">
+                          {{ template.description }}
+                        </div>
+                      </div>
+                      <NTag :type="template.status === '启用' ? 'success' : 'default'" size="small" :bordered="false" class="flex-shrink-0">
+                        {{ template.status }}
+                      </NTag>
+                    </div>
+                    <div class="mt-2 grid grid-cols-1 gap-2">
+                      <details v-if="template.systemContent" class="group rounded border border-blue-100 bg-white/70 p-2 dark:border-blue-900 dark:bg-[#18181c]">
+                        <summary class="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-300">
+                          <icon-carbon:chevron-right class="transition-transform group-open:rotate-90" />
+                          System Prompt
+                        </summary>
+                        <pre class="mt-1 max-h-120px overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{{ template.systemContent }}</pre>
+                      </details>
+                      <details v-if="template.content" class="group rounded border border-green-100 bg-white/70 p-2 dark:border-green-900 dark:bg-[#18181c]">
+                        <summary class="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-300">
+                          <icon-carbon:chevron-right class="transition-transform group-open:rotate-90" />
+                          User Prompt
+                        </summary>
+                        <pre class="mt-1 max-h-120px overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">{{ template.content }}</pre>
+                      </details>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <NButton size="tiny" secondary type="primary" :disabled="!primaryPromptTemplate" @click="applyPromptTemplate('system', 'replace')">
+                      <template #icon><icon-carbon:renew /></template>
+                      覆盖 System
+                    </NButton>
+                    <NButton size="tiny" secondary :disabled="!primaryPromptTemplate" @click="applyPromptTemplate('system', 'append')">
+                      <template #icon><icon-carbon:add /></template>
+                      追加 System
+                    </NButton>
+                    <NButton size="tiny" secondary type="success" :disabled="!primaryPromptTemplate" @click="applyPromptTemplate('user', 'replace')">
+                      <template #icon><icon-carbon:renew /></template>
+                      覆盖 User
+                    </NButton>
+                    <NButton size="tiny" secondary :disabled="!primaryPromptTemplate" @click="applyPromptTemplate('user', 'append')">
+                      <template #icon><icon-carbon:add /></template>
+                      追加 User
+                    </NButton>
+                  </div>
+                  <div class="text-[10px] text-gray-400">快捷操作使用第一个已选模板；模板引用保存为关系，System/User Prompt 保存为 Agent 生效配置。</div>
+                </div>
+                <div v-else class="mt-2 text-[10px] text-gray-400">选择模板后可预览 System/User 两段，并合并到 Agent 生效配置。</div>
+              </div>
+            </div>
+
+            <div>
               <div class="mb-1 text-xs text-gray-500 dark:text-gray-400">System Prompt</div>
               <NInput
                 v-model:value="agentDetail.systemPrompt"
                 type="textarea"
-                :rows="8"
+                :autosize="{ minRows: 3, maxRows: 4 }"
                 placeholder="你是一名专业的 AI 助手，负责..."
                 size="small"
+                class="compact-prompt-input"
               />
               <div class="mt-1 text-[10px] text-gray-400">支持使用 &#123;&#123;变量&#125;&#125; 引用上下文变量</div>
+            </div>
+
+            <div>
+              <div class="mb-1 text-xs text-gray-500 dark:text-gray-400">User Prompt</div>
+              <NInput
+                v-model:value="agentDetail.userPrompt"
+                type="textarea"
+                :autosize="{ minRows: 3, maxRows: 4 }"
+                placeholder="可选。用于包装用户输入，例如：请根据以下问题给出专业回答：&#123;&#123;query&#125;&#125;"
+                size="small"
+                class="compact-prompt-input"
+              />
+              <div class="mt-1 text-[10px] text-gray-400">支持 &#123;&#123;query&#125;&#125; 或 &#123;&#123;input&#125;&#125; 占位符；不填写时直接使用用户输入。</div>
             </div>
           </div>
 
@@ -1165,5 +1363,10 @@ onMounted(() => {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.compact-prompt-input :deep(textarea) {
+  max-height: 104px;
+  overflow-y: auto;
 }
 </style>

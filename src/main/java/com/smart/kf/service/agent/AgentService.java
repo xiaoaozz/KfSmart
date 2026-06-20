@@ -146,9 +146,8 @@ public class AgentService {
         target.setPromptRefs(source.getPromptRefs());
         target.setMcpTools(source.getMcpTools());
         target.setModels(source.getModels());
-        if (!isBlank(source.getSystemPrompt())) {
-            target.setSystemPrompt(source.getSystemPrompt());
-        }
+        target.setSystemPrompt(source.getSystemPrompt());
+        target.setUserPrompt(source.getUserPrompt());
         if (!isBlank(source.getAvatarEmoji())) {
             target.setAvatarEmoji(source.getAvatarEmoji());
         }

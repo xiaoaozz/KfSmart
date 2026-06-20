@@ -56,8 +56,9 @@ public class ReActEngine {
             long stepStart = System.currentTimeMillis();
 
             try {
+                String userMessage = buildUserMessage(ctx, agent, debugOverrides);
                 ModelClient.FunctionCallResult llmResult = modelClient.chatWithFunctions(
-                    buildUserMessage(ctx),
+                    userMessage,
                     filterHistory(ctx.getMessages()),
                     resolvedConfig,
                     systemPrompt,
@@ -65,7 +66,7 @@ public class ReActEngine {
                 );
 
                 ctx.getTokenUsage().add(
-                    estimateTokens(systemPrompt + userInput),
+                    estimateTokens(systemPrompt + userMessage),
                     estimateTokens(llmResult.content())
                 );
 
@@ -132,13 +133,26 @@ public class ReActEngine {
         return ctx;
     }
 
-    private String buildUserMessage(AgentContext ctx) {
+    private String buildUserMessage(AgentContext ctx, Agent agent, Map<String, Object> debugOverrides) {
         List<Map<String, String>> messages = ctx.getMessages();
         if (messages.isEmpty()) {
             return "";
         }
         Map<String, String> last = messages.get(messages.size() - 1);
-        return last.getOrDefault("content", "");
+        String query = last.getOrDefault("content", "");
+        if (!"user".equals(last.get("role"))) {
+            return query;
+        }
+        String template = resolveUserPrompt(agent, debugOverrides);
+        if (template == null || template.isBlank()) {
+            return query;
+        }
+        if (template.contains("{{query}}") || template.contains("{{input}}")) {
+            return template
+                .replace("{{query}}", query)
+                .replace("{{input}}", query);
+        }
+        return template + "\n\n用户输入：\n" + query;
     }
 
     private List<Map<String, String>> filterHistory(List<Map<String, String>> messages) {
@@ -188,6 +202,16 @@ public class ReActEngine {
             }
         }
         return agent.getSystemPrompt() != null ? agent.getSystemPrompt() : "你是一个智能助手，请根据用户问题进行推理和回答。";
+    }
+
+    private String resolveUserPrompt(Agent agent, Map<String, Object> debugOverrides) {
+        if (debugOverrides != null) {
+            String debugUserPrompt = (String) debugOverrides.get("userPrompt");
+            if (debugUserPrompt != null && !debugUserPrompt.isBlank()) {
+                return debugUserPrompt;
+            }
+        }
+        return agent.getUserPrompt();
     }
 
     private int resolveMaxIterations(Agent agent, Map<String, Object> debugOverrides) {

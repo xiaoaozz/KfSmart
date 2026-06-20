@@ -101,6 +101,7 @@ CREATE TABLE agents (
     owner_name      VARCHAR(100) COMMENT '负责人',
     tags            VARCHAR(255) COMMENT '标签，逗号分隔',
     system_prompt   TEXT COMMENT 'System Prompt 内容',
+    user_prompt     TEXT COMMENT 'User Prompt 内容（支持 {{query}} 或 {{input}} 占位符）',
     avatar_emoji    VARCHAR(32) DEFAULT '🤖' COMMENT '头像 Emoji',
     temperature     DOUBLE DEFAULT 0.7 COMMENT '模型温度参数',
     top_p           DOUBLE DEFAULT 0.8 COMMENT '模型 Top-P 参数',
@@ -216,6 +217,7 @@ CREATE TABLE agent_versions (
     description     TEXT COMMENT '描述快照',
     status          VARCHAR(20) DEFAULT '草稿' COMMENT '状态快照',
     system_prompt   TEXT COMMENT 'System Prompt 快照',
+    user_prompt     TEXT COMMENT 'User Prompt 快照',
     temperature     DOUBLE COMMENT '温度参数快照',
     top_p           DOUBLE COMMENT 'Top-P 快照',
     max_tokens      INT COMMENT '最大 Token 快照',
@@ -311,6 +313,11 @@ CREATE TABLE workflow_execution_logs (
     INDEX idx_status (status),
     INDEX idx_started_at (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流执行日志表';
+
+-- ===== 增量升级脚本：Agent 支持独立 User Prompt =====
+-- 已有库执行；新建库已包含在上方 CREATE TABLE 中。
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS user_prompt TEXT COMMENT 'User Prompt 内容（支持 {{query}} 或 {{input}} 占位符）' AFTER system_prompt;
+ALTER TABLE agent_versions ADD COLUMN IF NOT EXISTS user_prompt TEXT COMMENT 'User Prompt 快照' AFTER system_prompt;
 
 -- ===== 数据迁移脚本：从旧表 agent_workflows 迁移到新表 =====
 -- 注意：执行前请先备份数据库！新表需已通过上述 DDL 创建完成。

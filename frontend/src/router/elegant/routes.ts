@@ -117,15 +117,6 @@ export const generatedRoutes = [
         }
       },
       {
-        name: 'ai-center_debug-center',
-        path: '/ai-center/debug-center',
-        component: 'view.ai-center_debug-center',
-        meta: {
-          title: 'ai-center_debug-center',
-          i18nKey: 'route.ai-center_debug-center'
-        }
-      },
-      {
         name: 'ai-center_mcp-tools',
         path: '/ai-center/mcp-tools',
         component: 'view.ai-center_mcp-tools',

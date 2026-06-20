@@ -41,6 +41,9 @@ public class AgentVersion {
     @Column(name = "system_prompt", columnDefinition = "TEXT")
     private String systemPrompt;
 
+    @Column(name = "user_prompt", columnDefinition = "TEXT")
+    private String userPrompt;
+
     @Column(name = "temperature")
     private Double temperature = 0.7;
 
