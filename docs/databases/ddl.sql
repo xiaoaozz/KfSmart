@@ -320,6 +320,8 @@ CREATE TABLE agent_execution_logs (
     completion_tokens INT DEFAULT 0,
     total_tokens    INT DEFAULT 0,
     cost            DECIMAL(10,6) DEFAULT 0 COMMENT '执行费用',
+    model_cost      DECIMAL(10,6) DEFAULT 0 COMMENT '模型费用',
+    tool_cost       DECIMAL(10,6) DEFAULT 0 COMMENT '工具费用',
     error_message   TEXT COMMENT '错误信息',
     UNIQUE KEY uk_execution_id (execution_id),
     INDEX idx_agent_id (agent_id),

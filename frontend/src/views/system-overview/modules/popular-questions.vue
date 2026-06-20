@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { fetchGetSystemStats } from '@/service/api/system';
+import { computed } from 'vue';
+import { useSystemOverviewShared } from '../composables/use-overview-shared';
 
 defineOptions({
   name: 'PopularQuestions'
 });
 
-const loading = ref(false);
-const systemStats = ref<Api.System.Stats | null>(null);
+const { stats: systemStats, statsLoading: loading, loadStats } = useSystemOverviewShared();
 
 const popularQuestions = computed(() => systemStats.value?.popularQuestions || []);
 const totalCount = computed(() => popularQuestions.value.reduce((sum, item) => sum + Number(item.count || 0), 0));
@@ -21,23 +20,6 @@ function getRankClass(rank: number) {
   return 'rank-normal';
 }
 
-async function fetchPopularQuestions() {
-  loading.value = true;
-  try {
-    const { error, data } = await fetchGetSystemStats();
-    if (!error && data) {
-      systemStats.value = data;
-    }
-  } catch (e) {
-    console.error('[PopularQuestions] 获取热门问题失败:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(() => {
-  fetchPopularQuestions();
-});
 </script>
 
 <template>
@@ -49,7 +31,7 @@ onMounted(() => {
             <h2 class="text-lg text-gray-900 font-semibold dark:text-white">热门问题</h2>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">按今日提问频次排序</p>
           </div>
-          <NButton text @click="fetchPopularQuestions">
+          <NButton text @click="loadStats">
             <template #icon>
               <icon-carbon:renew class="text-lg" />
             </template>

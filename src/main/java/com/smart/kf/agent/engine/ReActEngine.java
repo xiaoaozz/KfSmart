@@ -65,10 +65,10 @@ public class ReActEngine {
                     openAiTools
                 );
 
-                ctx.getTokenUsage().add(
-                    estimateTokens(systemPrompt + userMessage),
-                    estimateTokens(llmResult.content())
-                );
+                int promptTokens = llmResult.promptTokens() > 0 ? llmResult.promptTokens() : estimateTokens(systemPrompt + userMessage);
+                int completionTokens = llmResult.completionTokens() > 0 ? llmResult.completionTokens() : estimateTokens(llmResult.content());
+                double modelCost = llmResult.modelCost() > 0 ? llmResult.modelCost() : (promptTokens * 0.001 + completionTokens * 0.002) / 1000.0;
+                ctx.getTokenUsage().add(promptTokens, completionTokens, modelCost);
 
                 if (llmResult.hasToolCalls()) {
                     for (ModelClient.ToolCall toolCall : llmResult.toolCalls()) {

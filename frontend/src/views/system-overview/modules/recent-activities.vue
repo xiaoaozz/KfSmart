@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
-import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
-import { request } from '@/service/request';
+import { fetchGetRecentActivities } from '@/service/api/system';
 
 defineOptions({
   name: 'RecentActivities'
@@ -10,24 +9,13 @@ defineOptions({
 
 type ActivityType = 'all' | 'knowledge' | 'document' | 'user';
 
-interface Activity {
-  id: string;
-  type: Exclude<ActivityType, 'all'>;
-  icon: string;
-  title: string;
-  description: string;
-  time: string;
-  timestamp: number;
-  color: string;
-}
-
-const activities = ref<Activity[]>([]);
+const activities = ref<Api.System.RecentActivity[]>([]);
 const loading = ref(false);
 const activeType = ref<ActivityType>('all');
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
 const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
-const activityStats = ref({
+const activityStats = ref<Api.System.RecentActivityStats>({
   todayActivities: 0,
   weekActivities: 0,
   knowledgeUpdates: 0,
@@ -50,24 +38,6 @@ const visibleActivities = computed(() => {
   return filteredActivities.value.slice(start, start + pageSize.value);
 });
 
-function getTimeValue(dateStr?: string): number {
-  if (!dateStr) return 0;
-  const value = new Date(dateStr).getTime();
-  return Number.isNaN(value) ? 0 : value;
-}
-
-function isSameTime(left?: string, right?: string): boolean {
-  const leftTime = getTimeValue(left);
-  const rightTime = getTimeValue(right);
-  if (!leftTime || !rightTime) return false;
-  return Math.abs(leftTime - rightTime) < 60 * 1000;
-}
-
-function isSameDay(timestamp: number, date: Date): boolean {
-  if (!timestamp) return false;
-  return new Date(timestamp).toDateString() === date.toDateString();
-}
-
 function formatTime(dateStr: string): string {
   if (!dateStr) return '--';
   try {
@@ -87,111 +57,15 @@ function formatTime(dateStr: string): string {
   }
 }
 
-function pushActivity(items: Activity[], activity: Activity) {
-  if (!activity.timestamp) return;
-  items.push(activity);
-}
-
-/** 聚合知识库创建/更新、文档上传/更新和用户加入记录 */
 async function fetchActivities() {
   loading.value = true;
   try {
-    const [filesRes, kbRes] = await Promise.all([
-      request<Api.Common.PaginatingQueryRecord<any>>({ url: '/documents/uploads', params: { sort: 'updatedAt', size: 100 } }),
-      fetchGetKnowledgeBases({ size: 100 })
-    ]);
-
-    const items: Activity[] = [];
-    const files = !filesRes.error && filesRes.data ? filesRes.data.records || filesRes.data.content || filesRes.data.data || [] : [];
-    const knowledgeBases = !kbRes.error && kbRes.data ? kbRes.data.records || kbRes.data.content || kbRes.data.data || [] : [];
-
-    knowledgeBases.forEach((kb: Api.KnowledgeBase.KnowledgeBaseInfo) => {
-      pushActivity(items, {
-        id: `kb-create-${kb.kbId}`,
-        type: 'knowledge',
-        icon: 'data-base',
-        title: '创建知识库',
-        description: `知识库「${kb.name || '未命名'}」已创建`,
-        time: formatTime(kb.createdAt),
-        timestamp: getTimeValue(kb.createdAt),
-        color: 'green'
-      });
-
-      if (!isSameTime(kb.createdAt, kb.updatedAt)) {
-        pushActivity(items, {
-          id: `kb-update-${kb.kbId}`,
-          type: 'knowledge',
-          icon: 'settings-adjust',
-          title: '更新知识库',
-          description: `知识库「${kb.name || '未命名'}」信息已更新`,
-          time: formatTime(kb.updatedAt),
-          timestamp: getTimeValue(kb.updatedAt),
-          color: 'cyan'
-        });
-      }
-    });
-
-    files.forEach((file: any) => {
-      const targetName = file.kbName || file.orgTagName || file.kbId || '未归类';
-      pushActivity(items, {
-        id: `doc-create-${file.fileMd5 || file.fileName}`,
-        type: 'document',
-        icon: 'document-add',
-        title: '上传文档',
-        description: `文件「${file.fileName || '未知'}」上传到「${targetName}」`,
-        time: formatTime(file.createdAt),
-        timestamp: getTimeValue(file.createdAt),
-        color: 'blue'
-      });
-
-      if (file.mergedAt && !isSameTime(file.createdAt, file.mergedAt)) {
-        pushActivity(items, {
-          id: `doc-update-${file.fileMd5 || file.fileName}`,
-          type: 'document',
-          icon: 'document-tasks',
-          title: '更新文档',
-          description: `文件「${file.fileName || '未知'}」已完成处理并更新索引`,
-          time: formatTime(file.mergedAt),
-          timestamp: getTimeValue(file.mergedAt),
-          color: 'purple'
-        });
-      }
-    });
-
-    try {
-      const { error: userErr, data: users } = await request<any[]>({ url: '/admin/users' });
-      if (!userErr && users && users.length > 0) {
-        users.slice(-5).forEach((user: any) => {
-          pushActivity(items, {
-            id: `user-${user.id || user.username}`,
-            type: 'user',
-            icon: 'user-follow',
-            title: '用户加入',
-            description: `用户「${user.username || '未知'}」已加入系统`,
-            time: formatTime(user.createdAt),
-            timestamp: getTimeValue(user.createdAt),
-            color: 'orange'
-          });
-        });
-      }
-    } catch {
-      // 非管理员可能无法访问用户列表，不影响知识库和文档活动。
+    const { error, data } = await fetchGetRecentActivities();
+    if (!error && data) {
+      activities.value = data.activities || [];
+      activityStats.value = data.stats || activityStats.value;
     }
-
-    activities.value = items.sort((a, b) => b.timestamp - a.timestamp).slice(0, 40);
-
-    const now = new Date();
-    const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-    activityStats.value.todayActivities = activities.value.filter(item => isSameDay(item.timestamp, now)).length;
-    activityStats.value.weekActivities = activities.value.filter(item => item.timestamp >= weekAgo).length;
-    activityStats.value.knowledgeUpdates = activities.value.filter(
-      item => item.type === 'knowledge' && item.title.includes('更新')
-    ).length;
-    activityStats.value.documentUpdates = activities.value.filter(
-      item => item.type === 'document' && item.title.includes('更新')
-    ).length;
-  } catch (e) {
-    console.error('[RecentActivities] 获取活动数据失败:', e);
+  } catch {
   } finally {
     loading.value = false;
   }
@@ -314,7 +188,7 @@ const getColorClasses = (color: string) => {
                     </NTag>
                   </div>
                   <span class="flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
-                    {{ activity.time }}
+                    {{ formatTime(activity.occurredAt) }}
                   </span>
                 </div>
                 <p class="line-clamp-1 text-sm text-gray-600 dark:text-gray-400">

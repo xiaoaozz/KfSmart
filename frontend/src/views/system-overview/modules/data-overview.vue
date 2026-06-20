@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { fetchGetSystemStats } from '@/service/api/system';
+import { computed } from 'vue';
+import { useSystemOverviewShared } from '../composables/use-overview-shared';
 
 defineOptions({
   name: 'DataOverview'
 });
 
-const loading = ref(false);
+const { stats: systemStats, statsLoading: loading, loadStats } = useSystemOverviewShared();
 
 interface StatItem {
   icon: string;
@@ -18,49 +18,6 @@ interface StatItem {
   color: string;
   tooltip: string;
 }
-
-const stats = ref<StatItem[]>([
-  {
-    icon: 'chat',
-    label: '今日问答数',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '实时累计',
-    color: 'blue',
-    tooltip: '今日已完成的用户问答次数'
-  },
-  {
-    icon: 'search',
-    label: '知识库命中率',
-    value: '--%',
-    change: '--',
-    trend: 'up',
-    changeLabel: '今日检索',
-    color: 'emerald',
-    tooltip: '今日问答中成功检索到知识库上下文的比例'
-  },
-  {
-    icon: 'time',
-    label: '平均响应时间',
-    value: '--',
-    change: '--',
-    trend: 'down',
-    changeLabel: '今日平均',
-    color: 'cyan',
-    tooltip: '今日 AI 问答从请求到完成的平均耗时'
-  },
-  {
-    icon: 'document',
-    label: '文档总数',
-    value: '--',
-    change: '--',
-    trend: 'up',
-    changeLabel: '总计',
-    color: 'indigo',
-    tooltip: '系统中已上传并纳入知识库统计的文档总数'
-  }
-]);
 
 /** 格式化数字为带千分位分隔的字符串 */
 function formatNumber(num: number): string {
@@ -78,34 +35,55 @@ function formatDuration(ms: number): string {
   return `${ms}ms`;
 }
 
-/** 从后端获取统计数据并更新 */
-async function fetchStats() {
-  loading.value = true;
-  try {
-    const { error, data } = await fetchGetSystemStats();
-    if (!error && data) {
-      // 更新各统计卡片
-      stats.value[0].value = formatNumber(data.todayQuestions || data.todayConversations || 0);
-      stats.value[0].change = `+${data.todayQuestions || data.todayConversations || 0}`;
+const stats = computed<StatItem[]>(() => {
+  const data = systemStats.value;
+  const todayQuestions = data?.todayQuestions || data?.todayConversations || 0;
+  const knowledgeHitRate = data?.knowledgeHitRate || 0;
+  const averageResponseTimeMs = data?.averageResponseTimeMs || 0;
+  const totalDocuments = data?.totalDocuments || 0;
 
-      stats.value[1].value = `${data.knowledgeHitRate || 0}%`;
-      stats.value[1].change = data.knowledgeHitRate ? '有命中数据' : '暂无命中';
-
-      stats.value[2].value = formatDuration(data.averageResponseTimeMs || 0);
-      stats.value[2].change = data.averageResponseTimeMs ? `${data.averageResponseTimeMs}ms` : '暂无耗时';
-
-      stats.value[3].value = formatNumber(data.totalDocuments || 0);
-      stats.value[3].change = String(data.totalDocuments || 0);
+  return [
+    {
+      icon: 'chat',
+      label: '今日问答数',
+      value: data ? formatNumber(todayQuestions) : '--',
+      change: data ? `+${todayQuestions}` : '--',
+      trend: 'up',
+      changeLabel: '实时累计',
+      color: 'blue',
+      tooltip: '今日已完成的用户问答次数'
+    },
+    {
+      icon: 'search',
+      label: '知识库命中率',
+      value: data ? `${knowledgeHitRate}%` : '--%',
+      change: data ? (knowledgeHitRate ? '有命中数据' : '暂无命中') : '--',
+      trend: 'up',
+      changeLabel: '今日检索',
+      color: 'emerald',
+      tooltip: '今日问答中成功检索到知识库上下文的比例'
+    },
+    {
+      icon: 'time',
+      label: '平均响应时间',
+      value: data ? formatDuration(averageResponseTimeMs) : '--',
+      change: data ? (averageResponseTimeMs ? `${averageResponseTimeMs}ms` : '暂无耗时') : '--',
+      trend: 'down',
+      changeLabel: '今日平均',
+      color: 'cyan',
+      tooltip: '今日 AI 问答从请求到完成的平均耗时'
+    },
+    {
+      icon: 'document',
+      label: '文档总数',
+      value: data ? formatNumber(totalDocuments) : '--',
+      change: data ? String(totalDocuments) : '--',
+      trend: 'up',
+      changeLabel: '总计',
+      color: 'indigo',
+      tooltip: '系统中已上传并纳入知识库统计的文档总数'
     }
-  } catch (e) {
-    console.error('[DataOverview] 获取系统统计失败:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(() => {
-  fetchStats();
+  ];
 });
 
 const getColorClasses = (color: string) => {
@@ -164,7 +142,7 @@ const getColorClasses = (color: string) => {
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">核心数据概览</h2>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">系统关键指标实时监控（数据来自数据库）</p>
           </div>
-          <NButton text @click="fetchStats">
+          <NButton text @click="loadStats">
             <template #icon>
               <icon-carbon:renew class="text-lg" />
             </template>

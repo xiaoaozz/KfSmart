@@ -60,19 +60,21 @@ public class AgentExecutionService {
 
         long duration = System.currentTimeMillis() - startTime;
 
-        updateAgentStats(agent, ctx, duration);
-
-        saveExecutionLog(ctx, agentId, query, username, duration);
         try {
             runAnalysisService.recordExecution(
                 ctx.getFinalAnswer() != null && !ctx.getFinalAnswer().startsWith("执行过程中出错"),
                 duration,
                 ctx.getTokenUsage().getTotalTokens(),
-                BigDecimal.valueOf(ctx.getTokenUsage().getCost())
+                BigDecimal.valueOf(ctx.getTokenUsage().getModelCost()),
+                BigDecimal.valueOf(ctx.getTokenUsage().getToolCost())
             );
         } catch (Exception e) {
             logger.warn("保存Agent运行分析快照失败: {}", e.getMessage());
         }
+
+        updateAgentStats(agent, ctx, duration);
+
+        saveExecutionLog(ctx, agentId, query, username, duration);
 
         return buildResponse(ctx, duration);
     }
@@ -123,6 +125,8 @@ public class AgentExecutionService {
             log.setCompletionTokens(ctx.getTokenUsage().getCompletionTokens());
             log.setTotalTokens(ctx.getTokenUsage().getTotalTokens());
             log.setCost(BigDecimal.valueOf(ctx.getTokenUsage().getCost()));
+            log.setModelCost(BigDecimal.valueOf(ctx.getTokenUsage().getModelCost()));
+            log.setToolCost(BigDecimal.valueOf(ctx.getTokenUsage().getToolCost()));
             log.setCompletedAt(LocalDateTime.now());
 
             try {
@@ -175,7 +179,9 @@ public class AgentExecutionService {
             "promptTokens", ctx.getTokenUsage().getPromptTokens(),
             "completionTokens", ctx.getTokenUsage().getCompletionTokens(),
             "totalTokens", ctx.getTokenUsage().getTotalTokens(),
-            "cost", ctx.getTokenUsage().getCost()
+            "cost", ctx.getTokenUsage().getCost(),
+            "modelCost", ctx.getTokenUsage().getModelCost(),
+            "toolCost", ctx.getTokenUsage().getToolCost()
         ));
 
         return result;

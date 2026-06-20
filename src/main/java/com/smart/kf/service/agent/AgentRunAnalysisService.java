@@ -21,9 +21,6 @@ import java.util.Map;
 @Service
 public class AgentRunAnalysisService {
 
-    private static final BigDecimal MODEL_COST_RATIO = new BigDecimal("0.761904");
-    private static final BigDecimal TOOL_COST_RATIO = BigDecimal.ONE.subtract(MODEL_COST_RATIO);
-
     private final AgentRepository agentRepository;
     private final AgentRunAnalysisSnapshotRepository snapshotRepository;
     private final ObjectMapper objectMapper;
@@ -39,10 +36,9 @@ public class AgentRunAnalysisService {
     }
 
     @Transactional
-    public void recordExecution(boolean success, long durationMs, int totalTokens, BigDecimal totalCost) {
+    public void recordExecution(boolean success, long durationMs, int totalTokens, BigDecimal modelCost, BigDecimal toolCost) {
         if (snapshotRepository.count() == 0) {
             seedSnapshotFromCurrentAgents();
-            return;
         }
 
         LocalDate snapshotDate = LocalDate.now();
@@ -61,10 +57,8 @@ public class AgentRunAnalysisService {
         snapshot.setDurationTotalMs(snapshot.getDurationTotalMs() + Math.max(0L, durationMs));
         snapshot.setTokenUsage(snapshot.getTokenUsage() + Math.max(0, totalTokens));
 
-        BigDecimal modelCost = totalCost.multiply(MODEL_COST_RATIO).setScale(6, RoundingMode.HALF_UP);
-        BigDecimal toolCost = totalCost.multiply(TOOL_COST_RATIO).setScale(6, RoundingMode.HALF_UP);
-        snapshot.setModelCost(snapshot.getModelCost().add(modelCost));
-        snapshot.setToolCost(snapshot.getToolCost().add(toolCost));
+        snapshot.setModelCost(snapshot.getModelCost().add(safeBigDecimal(modelCost).setScale(6, RoundingMode.HALF_UP)));
+        snapshot.setToolCost(snapshot.getToolCost().add(safeBigDecimal(toolCost).setScale(6, RoundingMode.HALF_UP)));
 
         snapshot.setHotAgentsJson(serializeHotAgents());
         snapshotRepository.save(snapshot);
@@ -117,8 +111,8 @@ public class AgentRunAnalysisService {
         snapshot.setFailureCount(failureCount);
         snapshot.setDurationTotalMs(durationTotalMs);
         snapshot.setTokenUsage(runCount * 1280L);
-        snapshot.setModelCost(BigDecimal.valueOf(runCount).multiply(new BigDecimal("0.0128")).setScale(6, RoundingMode.HALF_UP));
-        snapshot.setToolCost(BigDecimal.valueOf(runCount).multiply(new BigDecimal("0.004")).setScale(6, RoundingMode.HALF_UP));
+        snapshot.setModelCost(BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP));
+        snapshot.setToolCost(BigDecimal.ZERO.setScale(6, RoundingMode.HALF_UP));
         snapshot.setHotAgentsJson(serializeHotAgents());
         snapshotRepository.save(snapshot);
     }

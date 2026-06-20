@@ -405,6 +405,29 @@ declare namespace Api {
       timestamp: string;
       ip_address: string;
     }
+
+    interface RecentActivity {
+      id: string;
+      type: 'knowledge' | 'document' | 'user';
+      icon: string;
+      title: string;
+      description: string;
+      occurredAt: string;
+      timestamp: number;
+      color: string;
+    }
+
+    interface RecentActivityStats {
+      todayActivities: number;
+      weekActivities: number;
+      knowledgeUpdates: number;
+      documentUpdates: number;
+    }
+
+    interface RecentActivitiesResponse {
+      activities: RecentActivity[];
+      stats: RecentActivityStats;
+    }
   }
 
   /** 登录记录 */
@@ -476,7 +499,8 @@ declare namespace Api {
     }
 
     interface WorkflowStats {
-      agentCount: number;
+      agentCount?: number;
+      workflowCount?: number;
       runCount: number;
       successRate: number;
       avgDurationMs: number;

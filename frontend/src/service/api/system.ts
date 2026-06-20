@@ -10,12 +10,13 @@ export function fetchGetSystemStatus() {
   return request<Api.System.Status>({ url: '/admin/system/status' });
 }
 
+/** 获取系统最近活动 */
+export function fetchGetRecentActivities() {
+  return request<Api.System.RecentActivitiesResponse>({ url: '/admin/activities' });
+}
+
 /** 获取用户活动日志 */
-export function fetchGetUserActivities(params?: {
-  username?: string;
-  start_date?: string;
-  end_date?: string;
-}) {
+export function fetchGetUserActivities(params?: { username?: string; start_date?: string; end_date?: string }) {
   return request<Api.System.UserActivity[]>({ url: '/admin/user-activities', params });
 }
 

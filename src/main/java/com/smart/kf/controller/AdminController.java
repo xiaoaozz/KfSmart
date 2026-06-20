@@ -15,6 +15,7 @@ import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.DocumentService;
 import com.smart.kf.service.FileTypeValidationService;
 import com.smart.kf.service.RbacService;
+import com.smart.kf.service.SystemActivityService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
@@ -105,6 +106,9 @@ public class AdminController {
 
     @Autowired
     private DocumentService documentService;
+
+    @Autowired
+    private SystemActivityService systemActivityService;
 
     /**
      * 获取所有用户列表
@@ -536,6 +540,25 @@ public class AdminController {
             monitor.end("获取系统统计失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("code", 500, "message", "获取系统统计失败: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/activities")
+    public ResponseEntity<?> getRecentActivities(@RequestHeader("Authorization") String token) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("ADMIN_GET_RECENT_ACTIVITIES");
+        String adminUsername = null;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+
+            Map<String, Object> data = systemActivityService.getRecentActivities();
+            monitor.end("获取最近活动成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "获取最近活动成功", "data", data));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_GET_RECENT_ACTIVITIES", adminUsername, "获取最近活动失败", e);
+            monitor.end("获取最近活动失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("code", 500, "message", "获取最近活动失败: " + e.getMessage()));
         }
     }
 

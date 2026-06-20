@@ -183,9 +183,7 @@ export const generatedRoutes = [
     component: 'layout.base$view.home',
     meta: {
       title: 'home',
-      i18nKey: 'route.home',
-      icon: 'carbon:home',
-      order: 0.5
+      i18nKey: 'route.home'
     }
   },
   {
@@ -288,7 +286,7 @@ export const generatedRoutes = [
       title: 'run-analysis',
       i18nKey: 'route.run-analysis',
       icon: 'carbon:chart-line-data',
-      order: 5.4
+      order: 5.6
     }
   },
   {

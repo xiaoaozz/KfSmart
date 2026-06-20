@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
-import { fetchGetSystemStats } from '@/service/api/system';
+import { computed, nextTick, watch } from 'vue';
 import { type ECOption, useEcharts } from '@/hooks/common/echarts';
+import { useSystemOverviewShared } from '../composables/use-overview-shared';
 
 defineOptions({
   name: 'UsageTrends'
 });
 
-const loading = ref(false);
-const systemStats = ref<Api.System.Stats | null>(null);
+const { stats: systemStats, statsLoading: loading, loadStats } = useSystemOverviewShared();
 
 interface TrendItem {
   date: string;
@@ -166,24 +165,9 @@ function getSummaryIcon(icon: string) {
   return map[icon] || map['chart-line'];
 }
 
-async function fetchTrendsData() {
-  loading.value = true;
-  try {
-    const { error, data } = await fetchGetSystemStats();
-    if (!error && data) {
-      systemStats.value = data;
-    }
-    await refreshChart();
-  } catch (e) {
-    console.error('[UsageTrends] 获取趋势数据失败:', e);
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(() => {
-  fetchTrendsData();
-});
+watch(chartTrends, () => {
+  refreshChart();
+}, { deep: true, immediate: true });
 </script>
 
 <template>
@@ -195,7 +179,7 @@ onMounted(() => {
             <h2 class="text-lg text-gray-900 font-semibold dark:text-white">使用趋势</h2>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">近 7 天问答量趋势</p>
           </div>
-          <NButton text @click="fetchTrendsData">
+          <NButton text @click="loadStats">
             <template #icon>
               <icon-carbon:renew class="text-lg" />
             </template>
