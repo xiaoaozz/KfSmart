@@ -46,7 +46,7 @@ export const generatedRoutes = [
     meta: {
       title: 'ai-assistant',
       i18nKey: 'route.ai-assistant',
-      icon: 'solar:chat-round-call-line-duotone',
+      icon: 'carbon:ai-launch',
       order: 1
     },
     children: [
@@ -102,18 +102,9 @@ export const generatedRoutes = [
         component: 'view.ai-center_agent-management',
         meta: {
           title: 'ai-center_agent-management',
-          i18nKey: 'route.ai-center_agent-management'
-        }
-      },
-      {
-        name: 'ai-center_agent-marketplace',
-        path: '/ai-center/agent-marketplace',
-        component: 'view.ai-center_agent-marketplace',
-        meta: {
-          title: 'ai-center_agent-marketplace',
-          i18nKey: 'route.ai-center_agent-marketplace',
-          icon: 'carbon:store',
-          order: 6
+          i18nKey: 'route.ai-center_agent-management',
+          icon: 'carbon:bot',
+          order: 1
         }
       },
       {
@@ -150,23 +141,14 @@ export const generatedRoutes = [
         }
       },
       {
-        name: 'ai-center_run-analysis',
-        path: '/ai-center/run-analysis',
-        component: 'view.ai-center_run-analysis',
-        meta: {
-          title: 'ai-center_run-analysis',
-          i18nKey: 'route.ai-center_run-analysis',
-          icon: 'carbon:chart-line-data',
-          order: 8
-        }
-      },
-      {
         name: 'ai-center_workflow',
         path: '/ai-center/workflow',
         component: 'view.ai-center_workflow',
         meta: {
           title: 'ai-center_workflow',
-          i18nKey: 'route.ai-center_workflow'
+          i18nKey: 'route.ai-center_workflow',
+          icon: 'carbon:flow-stream',
+          order: 2
         }
       }
     ]
@@ -275,6 +257,17 @@ export const generatedRoutes = [
       i18nKey: 'route.personal-center',
       icon: 'solar:people-nearby-line-duotone',
       order: 6
+    }
+  },
+  {
+    name: 'run-analysis',
+    path: '/run-analysis',
+    component: 'layout.base$view.run-analysis',
+    meta: {
+      title: 'run-analysis',
+      i18nKey: 'route.run-analysis',
+      icon: 'carbon:chart-line-data',
+      order: 5.4
     }
   },
   {

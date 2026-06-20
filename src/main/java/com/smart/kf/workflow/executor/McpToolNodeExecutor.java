@@ -1,7 +1,9 @@
 package com.smart.kf.workflow.executor;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.kf.model.agent.McpToolConfig;
-import com.smart.kf.repository.agent.McpToolConfigRepository;
+import com.smart.kf.service.McpToolInvocationService;
 import com.smart.kf.workflow.engine.ExecutionContext;
 import com.smart.kf.workflow.engine.NodeExecutionResult;
 import com.smart.kf.workflow.engine.NodeExecutor;
@@ -9,10 +11,8 @@ import com.smart.kf.workflow.model.WorkflowNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Component
@@ -20,12 +20,12 @@ public class McpToolNodeExecutor implements NodeExecutor {
 
     private static final Logger logger = LoggerFactory.getLogger(McpToolNodeExecutor.class);
 
-    private final McpToolConfigRepository toolRepository;
-    private final WebClient webClient;
+    private final McpToolInvocationService invocationService;
+    private final ObjectMapper objectMapper;
 
-    public McpToolNodeExecutor(McpToolConfigRepository toolRepository, WebClient.Builder webClientBuilder) {
-        this.toolRepository = toolRepository;
-        this.webClient = webClientBuilder.build();
+    public McpToolNodeExecutor(McpToolInvocationService invocationService, ObjectMapper objectMapper) {
+        this.invocationService = invocationService;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -56,64 +56,59 @@ public class McpToolNodeExecutor implements NodeExecutor {
         }
 
         McpToolConfig tool = findTool(toolId);
-        if (tool == null) {
-            throw new IllegalStateException("未找到 MCP 工具: " + toolId);
-        }
-
-        if (tool.getEndpoint() == null || tool.getEndpoint().isBlank()) {
-            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 的 Endpoint 未配置");
-        }
-
-        String endpoint = tool.getEndpoint().trim();
-        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
-            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 的 Endpoint 格式无效");
-        }
-
-        // 构建请求体
-        Map<String, Object> body = new HashMap<>();
-        body.put("query", ctx.getOrDefault("query", ""));
-        body.put("variables", ctx.getVariables());
+        Map<String, Object> arguments = buildArguments(node, ctx);
 
         Object result;
         try {
-            result = webClient.post()
-                .uri(endpoint)
-                .headers(headers -> applyAuth(headers, tool))
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(Object.class)
-                .block();
+            result = invocationService.execute(toolId, arguments);
         } catch (Exception e) {
             String detail = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 调用失败 (" + endpoint + "): " + detail, e);
+            throw new IllegalStateException("MCP 工具 [" + tool.getName() + "] 调用失败: " + detail, e);
         }
-
-        tool.setCallCount(tool.getCallCount() + 1);
-        toolRepository.save(tool);
 
         ctx.setVariable("toolResult", result != null ? result : "");
 
         Map<String, Object> outputs = new HashMap<>();
         outputs.put(outputField, result != null ? result : "");
         outputs.put("result", result != null ? result : "");
-        return NodeExecutionResult.of(outputs, "调用MCP工具[" + tool.getName() + "]，endpoint=" + endpoint);
+        return NodeExecutionResult.of(outputs, "调用MCP工具[" + tool.getName() + "]");
     }
 
     private McpToolConfig findTool(String toolId) {
-        List<McpToolConfig> tools = toolRepository.findAll();
-        return tools.stream()
-            .filter(t -> t.getName().equals(toolId) || toolId.contains(t.getName()) || t.getToolId().equals(toolId))
-            .findFirst()
-            .orElse(null);
+        return invocationService.resolveTool(toolId);
     }
 
-    private void applyAuth(org.springframework.http.HttpHeaders headers, McpToolConfig tool) {
-        if (tool.getApiKey() == null || tool.getApiKey().isBlank()) return;
-        String authType = tool.getAuthType() == null ? "" : tool.getAuthType().toLowerCase();
-        if (authType.contains("api key")) {
-            headers.set("X-API-Key", tool.getApiKey());
-        } else if (authType.contains("bearer")) {
-            headers.setBearerAuth(tool.getApiKey());
+    private Map<String, Object> buildArguments(WorkflowNode node, ExecutionContext ctx) {
+        Map<String, Object> arguments = new HashMap<>();
+        String inputMapping = node.configString("inputMapping");
+        if (inputMapping != null && !inputMapping.isBlank()) {
+            try {
+                Map<String, Object> mapping = objectMapper.readValue(inputMapping, new TypeReference<>() {});
+                mapping.forEach((key, value) -> arguments.put(key, resolveValue(value, ctx)));
+            } catch (Exception e) {
+                logger.warn("MCP 工具节点 inputMapping 解析失败，使用默认参数: {}", e.getMessage());
+            }
         }
+
+        arguments.putIfAbsent("query", ctx.getOrDefault("query", ""));
+        arguments.putIfAbsent("variables", ctx.getVariables());
+        return arguments;
+    }
+
+    private Object resolveValue(Object value, ExecutionContext ctx) {
+        if (value instanceof String text) {
+            return ctx.resolveTemplate(text);
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> resolved = new HashMap<>();
+            map.forEach((key, nested) -> resolved.put(String.valueOf(key), resolveValue(nested, ctx)));
+            return resolved;
+        }
+        if (value instanceof Iterable<?> iterable) {
+            java.util.List<Object> resolved = new java.util.ArrayList<>();
+            iterable.forEach(item -> resolved.add(resolveValue(item, ctx)));
+            return resolved;
+        }
+        return value;
     }
 }

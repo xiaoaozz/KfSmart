@@ -132,7 +132,7 @@ async function loadData() {
     promptOptions.value = getPageRecords(promptRes.data).map((item: any) => ({ label: `${item.name} ${item.version || ''}`.trim(), value: item.name }));
   }
   if (!toolRes.error && toolRes.data) {
-    mcpToolOptions.value = getPageRecords(toolRes.data).map((item: any) => ({ label: item.name, value: item.name }));
+    mcpToolOptions.value = getPageRecords(toolRes.data).map((item: any) => ({ label: item.name, value: item.toolId || item.name }));
   }
   if (!modelRes.error && modelRes.data) {
     modelOptions.value = modelRes.data.map((item: any) => ({ label: item.modelName || item.name, value: item.modelName || item.name }));
@@ -210,6 +210,7 @@ async function saveDesigner() {
   if (!designer.workflowId) { window.$message?.warning('请先选择工作流'); return; }
   saving.value = true;
   try {
+    syncMcpToolsFromNodes();
     const { error, data } = await fetchSaveAgentWorkflow({
       workflowId: designer.workflowId,
       name: designer.name,
@@ -361,7 +362,20 @@ function getEdgeCount(wf: Api.AgentCenter.Workflow): number {
 }
 
 function splitComma(val: string | undefined) {
-  return val ? val.split(',').filter(Boolean) : [];
+  return val ? val.split(',').map(item => item.trim()).filter(Boolean) : [];
+}
+
+function joinComma(values: string[]) {
+  return values.filter(Boolean).join(',');
+}
+
+function syncMcpToolsFromNodes() {
+  const existing = splitComma(designer.mcpTools);
+  const nodeTools = designer.nodes
+    .filter((node: any) => node.type === 'MCP工具')
+    .map((node: any) => String(node.config?.toolId || '').trim())
+    .filter(Boolean);
+  designer.mcpTools = joinComma([...new Set([...existing, ...nodeTools])]);
 }
 
 onMounted(() => { loadData(); });

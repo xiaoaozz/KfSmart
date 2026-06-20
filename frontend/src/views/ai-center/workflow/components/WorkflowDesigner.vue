@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { NButton, NInput, NTag, NTooltip } from 'naive-ui';
+import { NButton, NInput, NSelect, NTag, NTooltip } from 'naive-ui';
 import type { WorkflowNode } from '../types/workflow';
 import WorkflowCanvas from './WorkflowCanvas.vue';
 import WorkflowNodePalette from './WorkflowNodePalette.vue';
@@ -58,6 +58,21 @@ function traceTagType(status: string): 'success' | 'error' | 'warning' {
   if (status === 'error' || status === 'failed') return 'error'
   return 'warning'
 }
+
+function splitComma(value?: string) {
+  return value ? value.split(',').map(item => item.trim()).filter(Boolean) : []
+}
+
+function joinComma(values: string[]) {
+  return values.filter(Boolean).join(',')
+}
+
+const boundMcpToolOptions = computed(() => {
+  const selected = splitComma(props.designer.mcpTools)
+  if (!selected.length) return props.mcpToolOptions
+  const selectedSet = new Set(selected)
+  return props.mcpToolOptions.filter(item => selectedSet.has(item.value))
+})
 </script>
 
 <template>
@@ -73,6 +88,19 @@ function traceTagType(status: string): 'success' | 'error' | 'warning' {
           <NInput v-model:value="props.designer.name" class="max-w-200px" size="small" :disabled="!hasSelectedWorkflow" placeholder="工作流名称" />
           <NTag v-if="props.designer.type" type="info" size="small" :bordered="false">{{ props.designer.type }}</NTag>
           <NTag v-if="props.designer.status" :type="props.designer.status === '运行中' ? 'success' : 'default'" size="small" :bordered="false">{{ props.designer.status }}</NTag>
+          <NSelect
+            :value="splitComma(props.designer.mcpTools)"
+            multiple
+            clearable
+            filterable
+            size="small"
+            class="w-260px"
+            :disabled="!hasSelectedWorkflow"
+            :options="props.mcpToolOptions"
+            max-tag-count="responsive"
+            placeholder="绑定 MCP 工具"
+            @update:value="(value: string[]) => (props.designer.mcpTools = joinComma(value))"
+          />
         </div>
         <div class="flex items-center gap-1">
           <NTooltip placement="bottom">
@@ -151,7 +179,7 @@ function traceTagType(status: string): 'success' | 'error' | 'warning' {
           :model-options="modelOptions"
           :knowledge-base-options="knowledgeBaseOptions"
           :prompt-options="promptOptions"
-          :mcp-tool-options="mcpToolOptions"
+          :mcp-tool-options="boundMcpToolOptions.length ? boundMcpToolOptions : mcpToolOptions"
           @delete="emit('deleteNode')"
         />
         <div v-else class="rounded-lg border border-dashed border-gray-200 py-10 text-center text-sm text-gray-400 dark:border-gray-700">

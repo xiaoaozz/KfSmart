@@ -1,6 +1,7 @@
 package com.smart.kf.service;
 
 import com.smart.kf.model.agent.McpToolConfig;
+import com.smart.kf.model.ApiKeyConfig;
 import com.smart.kf.model.agent.PromptTemplate;
 import com.smart.kf.model.agent.PromptTemplateHistory;
 import com.smart.kf.repository.agent.McpToolConfigRepository;
@@ -24,17 +25,20 @@ public class SharedResourceService {
     private final PromptTemplateHistoryRepository historyRepository;
     private final McpToolConfigRepository toolRepository;
     private final ApiKeyConfigService apiKeyConfigService;
+    private final McpToolInvocationService mcpToolInvocationService;
 
     public SharedResourceService(
         PromptTemplateRepository promptRepository,
         PromptTemplateHistoryRepository historyRepository,
         McpToolConfigRepository toolRepository,
-        ApiKeyConfigService apiKeyConfigService
+        ApiKeyConfigService apiKeyConfigService,
+        McpToolInvocationService mcpToolInvocationService
     ) {
         this.promptRepository = promptRepository;
         this.historyRepository = historyRepository;
         this.toolRepository = toolRepository;
         this.apiKeyConfigService = apiKeyConfigService;
+        this.mcpToolInvocationService = mcpToolInvocationService;
     }
 
     // ── Prompt 模板管理 ──
@@ -205,11 +209,12 @@ public class SharedResourceService {
     public PageResult<Map<String, Object>> listTools(String keyword, PageQuery query) {
         List<McpToolConfig> source = isBlank(keyword)
             ? toolRepository.findAll()
-            : toolRepository.findByNameContainingIgnoreCaseOrTypeContainingIgnoreCase(keyword, keyword);
+            : toolRepository.findByNameContainingIgnoreCaseOrTypeContainingIgnoreCaseOrToolNameContainingIgnoreCase(keyword, keyword, keyword);
         source.sort(Comparator.comparing(McpToolConfig::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return PageResult.fromList(source.stream().map(this::toToolResponse).toList(), query);
     }
 
+    @Transactional
     public Map<String, Object> saveTool(McpToolConfig request) {
         McpToolConfig tool = isBlank(request.getToolId())
             ? new McpToolConfig()
@@ -217,16 +222,28 @@ public class SharedResourceService {
         if (isBlank(tool.getToolId())) {
             tool.setToolId("mcp_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         }
+        if (isBlank(request.getName())) {
+            throw new IllegalArgumentException("工具名称不能为空");
+        }
         tool.setName(request.getName());
         tool.setType(isBlank(request.getType()) ? "MCP" : request.getType());
         tool.setStatus(isBlank(request.getStatus()) ? "在线" : request.getStatus());
+        tool.setToolName(isBlank(request.getToolName()) ? normalizeToolName(request.getName()) : request.getToolName().trim());
+        tool.setRequestMode(isBlank(request.getRequestMode()) ? "MCP_JSON_RPC" : request.getRequestMode());
+        tool.setProtocolVersion(isBlank(request.getProtocolVersion()) ? "2024-11-05" : request.getProtocolVersion());
         tool.setEndpoint(request.getEndpoint());
-        tool.setAuthType(request.getAuthType());
+        tool.setAuthType(isBlank(request.getAuthType()) ? "无认证" : request.getAuthType());
+        tool.setAuthHeaderName(isBlank(request.getAuthHeaderName()) ? "X-API-Key" : request.getAuthHeaderName());
         if (!isBlank(request.getApiKey()) && !request.getApiKey().contains("****")) {
             tool.setApiKey(request.getApiKey());
         }
         tool.setDescription(request.getDescription());
+        tool.setInputSchema(isBlank(request.getInputSchema()) ? defaultInputSchema() : request.getInputSchema());
         return toToolResponse(toolRepository.save(tool));
+    }
+
+    public Map<String, Object> testTool(String toolId, Map<String, Object> arguments) {
+        return mcpToolInvocationService.test(toolId, arguments);
     }
 
     @Transactional
@@ -238,10 +255,33 @@ public class SharedResourceService {
     // ── 模型管理 ──
 
     public List<Map<String, Object>> listModels() {
-        return apiKeyConfigService.listAll().stream().map(item -> {
-            Map<String, Object> row = new HashMap<>(item);
-            row.put("status", Boolean.TRUE.equals(item.get("active")) ? "激活中" : "可用");
-            row.put("scene", item.getOrDefault("remark", ""));
+        return apiKeyConfigService.findAll().stream().map(config -> {
+            Map<String, Object> row = new HashMap<>();
+            String provider = normalizeProvider(config.getProvider());
+            String modelName = config.getModelName();
+            String category = resolveModelCategory(provider, modelName);
+            List<String> tags = resolveModelTags(provider, modelName, config);
+
+            row.put("id", config.getId());
+            row.put("name", config.getName());
+            row.put("provider", config.getProvider());
+            row.put("providerLabel", resolveProviderLabel(provider));
+            row.put("apiUrl", config.getApiUrl());
+            row.put("modelName", modelName);
+            row.put("active", config.getActive());
+            row.put("authType", config.getAuthType());
+            row.put("temperature", config.getTemperature());
+            row.put("maxTokens", config.getMaxTokens());
+            row.put("topP", config.getTopP());
+            row.put("remark", config.getRemark());
+            row.put("status", Boolean.TRUE.equals(config.getActive()) ? "激活中" : "可用");
+            row.put("scene", config.getRemark() == null ? "" : config.getRemark());
+            row.put("icon", resolveModelIcon(provider));
+            row.put("category", category);
+            row.put("description", resolveModelDescription(config, category));
+            row.put("tags", tags);
+            row.put("createdAt", config.getCreatedAt());
+            row.put("updatedAt", config.getUpdatedAt());
             return row;
         }).toList();
     }
@@ -252,6 +292,72 @@ public class SharedResourceService {
         return value == null || value.isBlank();
     }
 
+    private String normalizeProvider(String provider) {
+        return provider == null ? "other" : provider.trim().toLowerCase();
+    }
+
+    private String resolveProviderLabel(String provider) {
+        return switch (provider) {
+            case "deepseek" -> "DeepSeek";
+            case "openai" -> "OpenAI";
+            case "qwen" -> "通义千问";
+            case "zhipu" -> "智谱 AI";
+            case "ernie" -> "文心一言";
+            case "anthropic" -> "Anthropic";
+            case "ollama" -> "Ollama";
+            default -> "其他";
+        };
+    }
+
+    private String resolveModelIcon(String provider) {
+        return switch (provider) {
+            case "deepseek" -> "DS";
+            case "openai" -> "AI";
+            case "qwen" -> "QW";
+            case "zhipu" -> "GLM";
+            case "ernie" -> "ERN";
+            case "anthropic" -> "CL";
+            case "ollama" -> "OL";
+            default -> "LLM";
+        };
+    }
+
+    private String resolveModelCategory(String provider, String modelName) {
+        String normalizedModel = modelName == null ? "" : modelName.toLowerCase();
+        if (normalizedModel.contains("embed")) {
+            return "向量模型";
+        }
+        if (normalizedModel.contains("vision") || normalizedModel.contains("vl") || normalizedModel.contains("omni")) {
+            return "多模态模型";
+        }
+        if (normalizedModel.contains("coder") || normalizedModel.contains("code")) {
+            return "代码模型";
+        }
+        if ("ollama".equals(provider)) {
+            return "本地模型";
+        }
+        return "对话模型";
+    }
+
+    private String resolveModelDescription(ApiKeyConfig config, String category) {
+        if (!isBlank(config.getRemark())) {
+            return config.getRemark();
+        }
+        return "%s 由 %s API Key 配置提供，适用于%s、工作流 LLM 节点和 Agent 调用。"
+            .formatted(config.getModelName(), resolveProviderLabel(normalizeProvider(config.getProvider())), category);
+    }
+
+    private List<String> resolveModelTags(String provider, String modelName, ApiKeyConfig config) {
+        String category = resolveModelCategory(provider, modelName);
+        String authType = isBlank(config.getAuthType()) ? "bearer" : config.getAuthType();
+        return List.of(
+            resolveProviderLabel(provider),
+            category,
+            Boolean.TRUE.equals(config.getActive()) ? "激活中" : "可用",
+            authType
+        );
+    }
+
     private Map<String, Object> toToolResponse(McpToolConfig tool) {
         Map<String, Object> row = new HashMap<>();
         row.put("id", tool.getId());
@@ -259,10 +365,18 @@ public class SharedResourceService {
         row.put("name", tool.getName());
         row.put("type", tool.getType());
         row.put("status", tool.getStatus());
+        row.put("toolName", tool.getToolName());
+        row.put("requestMode", tool.getRequestMode());
+        row.put("protocolVersion", tool.getProtocolVersion());
         row.put("endpoint", tool.getEndpoint());
         row.put("authType", tool.getAuthType());
+        row.put("authHeaderName", tool.getAuthHeaderName());
         row.put("apiKeyMasked", maskApiKey(tool.getApiKey()));
         row.put("description", tool.getDescription());
+        row.put("inputSchema", tool.getInputSchema());
+        row.put("lastTestStatus", tool.getLastTestStatus());
+        row.put("lastTestMessage", tool.getLastTestMessage());
+        row.put("lastTestAt", tool.getLastTestAt());
         row.put("callCount", tool.getCallCount());
         row.put("createdAt", tool.getCreatedAt());
         row.put("updatedAt", tool.getUpdatedAt());
@@ -277,5 +391,22 @@ public class SharedResourceService {
             return value;
         }
         return value.length() <= 8 ? "****" : value.substring(0, 3) + "****" + value.substring(value.length() - 4);
+    }
+
+    private String normalizeToolName(String value) {
+        if (isBlank(value)) {
+            return "mcp_tool";
+        }
+        String normalized = value.trim().toLowerCase()
+            .replaceAll("[^a-z0-9_\\u4e00-\\u9fa5-]", "_")
+            .replaceAll("_+", "_")
+            .replaceAll("^_|_$", "");
+        return normalized.isBlank() ? "mcp_tool" : normalized;
+    }
+
+    private String defaultInputSchema() {
+        return """
+            {"type":"object","properties":{"query":{"type":"string","description":"请求参数或查询内容"}},"required":["query"]}
+            """.trim();
     }
 }

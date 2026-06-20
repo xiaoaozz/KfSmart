@@ -64,6 +64,14 @@ export function fetchDeleteMcpTool(toolId: string) {
   return request({ url: `/resources/mcp-tools/${toolId}`, method: 'DELETE' });
 }
 
+export function fetchTestMcpTool(toolId: string, data: Record<string, any>) {
+  return request<{ success: boolean; message: string; result?: any }>({
+    url: `/resources/mcp-tools/${toolId}/test`,
+    method: 'POST',
+    data
+  });
+}
+
 export function fetchAgentModels() {
   return request<Api.AgentCenter.ModelConfig[]>({ url: '/resources/models' });
 }

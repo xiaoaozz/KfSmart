@@ -26,11 +26,9 @@ declare module "@elegant-router/types" {
     "ai-assistant_knowledge-base": "/ai-assistant/knowledge-base";
     "ai-center": "/ai-center";
     "ai-center_agent-management": "/ai-center/agent-management";
-    "ai-center_agent-marketplace": "/ai-center/agent-marketplace";
     "ai-center_mcp-tools": "/ai-center/mcp-tools";
     "ai-center_model-management": "/ai-center/model-management";
     "ai-center_prompt-management": "/ai-center/prompt-management";
-    "ai-center_run-analysis": "/ai-center/run-analysis";
     "ai-center_workflow": "/ai-center/workflow";
     "api-key-management": "/api-key-management";
     "home": "/home";
@@ -42,6 +40,7 @@ declare module "@elegant-router/types" {
     "permission-center_role-management": "/permission-center/role-management";
     "permission-center_user-management": "/permission-center/user-management";
     "personal-center": "/personal-center";
+    "run-analysis": "/run-analysis";
     "system-overview": "/system-overview";
     "user": "/user";
   };
@@ -87,6 +86,7 @@ declare module "@elegant-router/types" {
     | "org-tag"
     | "permission-center"
     | "personal-center"
+    | "run-analysis"
     | "system-overview"
     | "user"
   >;
@@ -114,11 +114,9 @@ declare module "@elegant-router/types" {
     | "ai-assistant_document-management"
     | "ai-assistant_knowledge-base"
     | "ai-center_agent-management"
-    | "ai-center_agent-marketplace"
     | "ai-center_mcp-tools"
     | "ai-center_model-management"
     | "ai-center_prompt-management"
-    | "ai-center_run-analysis"
     | "ai-center_workflow"
     | "api-key-management"
     | "home"
@@ -127,6 +125,7 @@ declare module "@elegant-router/types" {
     | "permission-center_role-management"
     | "permission-center_user-management"
     | "personal-center"
+    | "run-analysis"
     | "system-overview"
     | "user"
   >;
