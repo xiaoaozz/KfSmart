@@ -1,6 +1,7 @@
 package com.smart.kf.service;
 
 import com.smart.kf.model.agent.McpToolConfig;
+import com.smart.kf.model.ApiKeyConfig;
 import com.smart.kf.model.agent.PromptTemplate;
 import com.smart.kf.model.agent.PromptTemplateHistory;
 import com.smart.kf.repository.agent.McpToolConfigRepository;
@@ -238,10 +239,33 @@ public class SharedResourceService {
     // ── 模型管理 ──
 
     public List<Map<String, Object>> listModels() {
-        return apiKeyConfigService.listAll().stream().map(item -> {
-            Map<String, Object> row = new HashMap<>(item);
-            row.put("status", Boolean.TRUE.equals(item.get("active")) ? "激活中" : "可用");
-            row.put("scene", item.getOrDefault("remark", ""));
+        return apiKeyConfigService.findAll().stream().map(config -> {
+            Map<String, Object> row = new HashMap<>();
+            String provider = normalizeProvider(config.getProvider());
+            String modelName = config.getModelName();
+            String category = resolveModelCategory(provider, modelName);
+            List<String> tags = resolveModelTags(provider, modelName, config);
+
+            row.put("id", config.getId());
+            row.put("name", config.getName());
+            row.put("provider", config.getProvider());
+            row.put("providerLabel", resolveProviderLabel(provider));
+            row.put("apiUrl", config.getApiUrl());
+            row.put("modelName", modelName);
+            row.put("active", config.getActive());
+            row.put("authType", config.getAuthType());
+            row.put("temperature", config.getTemperature());
+            row.put("maxTokens", config.getMaxTokens());
+            row.put("topP", config.getTopP());
+            row.put("remark", config.getRemark());
+            row.put("status", Boolean.TRUE.equals(config.getActive()) ? "激活中" : "可用");
+            row.put("scene", config.getRemark() == null ? "" : config.getRemark());
+            row.put("icon", resolveModelIcon(provider));
+            row.put("category", category);
+            row.put("description", resolveModelDescription(config, category));
+            row.put("tags", tags);
+            row.put("createdAt", config.getCreatedAt());
+            row.put("updatedAt", config.getUpdatedAt());
             return row;
         }).toList();
     }
@@ -250,6 +274,72 @@ public class SharedResourceService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private String normalizeProvider(String provider) {
+        return provider == null ? "other" : provider.trim().toLowerCase();
+    }
+
+    private String resolveProviderLabel(String provider) {
+        return switch (provider) {
+            case "deepseek" -> "DeepSeek";
+            case "openai" -> "OpenAI";
+            case "qwen" -> "通义千问";
+            case "zhipu" -> "智谱 AI";
+            case "ernie" -> "文心一言";
+            case "anthropic" -> "Anthropic";
+            case "ollama" -> "Ollama";
+            default -> "其他";
+        };
+    }
+
+    private String resolveModelIcon(String provider) {
+        return switch (provider) {
+            case "deepseek" -> "DS";
+            case "openai" -> "AI";
+            case "qwen" -> "QW";
+            case "zhipu" -> "GLM";
+            case "ernie" -> "ERN";
+            case "anthropic" -> "CL";
+            case "ollama" -> "OL";
+            default -> "LLM";
+        };
+    }
+
+    private String resolveModelCategory(String provider, String modelName) {
+        String normalizedModel = modelName == null ? "" : modelName.toLowerCase();
+        if (normalizedModel.contains("embed")) {
+            return "向量模型";
+        }
+        if (normalizedModel.contains("vision") || normalizedModel.contains("vl") || normalizedModel.contains("omni")) {
+            return "多模态模型";
+        }
+        if (normalizedModel.contains("coder") || normalizedModel.contains("code")) {
+            return "代码模型";
+        }
+        if ("ollama".equals(provider)) {
+            return "本地模型";
+        }
+        return "对话模型";
+    }
+
+    private String resolveModelDescription(ApiKeyConfig config, String category) {
+        if (!isBlank(config.getRemark())) {
+            return config.getRemark();
+        }
+        return "%s 由 %s API Key 配置提供，适用于%s、工作流 LLM 节点和 Agent 调用。"
+            .formatted(config.getModelName(), resolveProviderLabel(normalizeProvider(config.getProvider())), category);
+    }
+
+    private List<String> resolveModelTags(String provider, String modelName, ApiKeyConfig config) {
+        String category = resolveModelCategory(provider, modelName);
+        String authType = isBlank(config.getAuthType()) ? "bearer" : config.getAuthType();
+        return List.of(
+            resolveProviderLabel(provider),
+            category,
+            Boolean.TRUE.equals(config.getActive()) ? "激活中" : "可用",
+            authType
+        );
     }
 
     private Map<String, Object> toToolResponse(McpToolConfig tool) {

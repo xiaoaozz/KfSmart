@@ -572,8 +572,8 @@ declare namespace Api {
       id: number;
       name: string;
       provider: string;
+      providerLabel: string;
       apiUrl: string;
-      apiKey: string;
       modelName: string;
       active: boolean;
       authType: string;
@@ -583,6 +583,11 @@ declare namespace Api {
       remark: string;
       status: string;
       scene: string;
+      icon: string;
+      category: string;
+      description: string;
+      tags: string[];
+      createdAt: string;
       updatedAt: string;
     }
 

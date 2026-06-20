@@ -173,7 +173,7 @@ const local: App.I18n.Schema = {
     'ai-center_workflow': 'Workflow',
     'ai-center_mcp-tools': 'MCP Tools',
     'ai-center_prompt-management': 'Prompt Management',
-    'ai-center_model-management': 'Model Management',
+    'ai-center_model-management': 'Model Marketplace',
     'ai-center_agent-marketplace': 'Agent Marketplace',
     'ai-center_run-analysis': 'Run Analysis',
     'personal-center': 'Personal Center',
