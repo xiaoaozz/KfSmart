@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NSpin, NTag } from 'naive-ui';
+import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NScrollbar, NSpin, NTag } from 'naive-ui';
 import debounce from 'lodash-es/debounce';
 import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import {
@@ -26,6 +26,60 @@ const selectedKbId = ref('');
 const selectedKnowledgeBase = computed(
   () => knowledgeBases.value.find(item => item.kbId === selectedKbId.value) || knowledgeBases.value[0] || null
 );
+
+const categoryMode = ref<'visibility' | 'status' | 'org'>('visibility');
+const activeCategory = ref('全部');
+
+const categoryList = computed(() => {
+  const values = knowledgeBases.value.map(item => {
+    if (categoryMode.value === 'visibility') return item.isPublic ? '公开' : '私有';
+    if (categoryMode.value === 'status') return getStatusText(item.status);
+    return item.orgTag || '未分组';
+  });
+  return [...new Set(values.filter(Boolean))];
+});
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { '全部': knowledgeBases.value.length };
+  knowledgeBases.value.forEach(item => {
+    const key =
+      categoryMode.value === 'visibility'
+        ? item.isPublic
+          ? '公开'
+          : '私有'
+        : categoryMode.value === 'status'
+          ? getStatusText(item.status)
+          : item.orgTag || '未分组';
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+});
+
+const filteredKnowledgeBases = computed(() => {
+  if (activeCategory.value === '全部') return knowledgeBases.value;
+  return knowledgeBases.value.filter(item => {
+    const key =
+      categoryMode.value === 'visibility'
+        ? item.isPublic
+          ? '公开'
+          : '私有'
+        : categoryMode.value === 'status'
+          ? getStatusText(item.status)
+          : item.orgTag || '未分组';
+    return key === activeCategory.value;
+  });
+});
+
+function switchCategoryMode(mode: 'visibility' | 'status' | 'org') {
+  categoryMode.value = mode;
+  activeCategory.value = '全部';
+}
+
+function handleCategoryClick(category: string) {
+  activeCategory.value = category;
+  const first = filteredKnowledgeBases.value[0];
+  if (first) selectedKbId.value = first.kbId;
+}
 
 // --------- 分页 ---------
 const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
@@ -191,72 +245,121 @@ function formatTime(time?: string) {
 </script>
 
 <template>
-  <div class="kb-overview-page h-full flex flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
-    <div class="min-h-0 flex-1 px-8 py-6">
-      <!-- 标题 -->
-      <h1 class="mb-6 text-2xl text-gray-900 font-bold dark:text-white">知识库</h1>
-
-      <!-- 统计卡片 -->
-      <div class="grid grid-cols-4 mb-6 gap-5">
-        <div
-          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-        >
-          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">{{ stats.knowledgeBaseCount }}</div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">知识库总数</div>
-        </div>
-        <div
-          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-        >
-          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">
-            {{ stats.documentCount.toLocaleString() }}
+  <div class="kb-overview-page h-full flex flex-col bg-[#f5f7fa] dark:bg-[#101014]">
+    <div class="min-h-0 flex-1 overflow-hidden lg:flex">
+      <div class="w-180px flex-shrink-0 border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-[#18181c] flex flex-col">
+        <div class="px-4 pb-2 pt-4">
+          <h2 class="mb-3 text-sm text-gray-800 font-semibold dark:text-gray-100">知识库分类</h2>
+          <div class="grid grid-cols-3 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'visibility' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('visibility')"
+            >
+              权限
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'status' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('status')"
+            >
+              状态
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'org' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('org')"
+            >
+              组织
+            </button>
           </div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">文档总数</div>
         </div>
-        <div
-          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-        >
-          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">{{ formatSize(stats.totalSize) }}</div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">存储使用</div>
-        </div>
-        <div
-          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-        >
-          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">
-            {{ stats.chunkCount.toLocaleString() }}
+        <NScrollbar class="flex-1">
+          <div class="space-y-0.5 px-2 pt-1">
+            <div
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === '全部' ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick('全部')"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:catalog class="text-base" />
+                  <span class="truncate">全部</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts['全部'] ?? 0 }}</span>
+              </div>
+            </div>
+            <div
+              v-for="cat in categoryList"
+              :key="cat"
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === cat ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick(cat)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:tag class="text-base" />
+                  <span class="truncate">{{ cat }}</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts[cat] ?? 0 }}</span>
+              </div>
+            </div>
           </div>
-          <div class="text-sm text-gray-500 dark:text-gray-400">关键词数量</div>
-        </div>
+        </NScrollbar>
       </div>
 
-      <!-- 搜索 + 新建按钮 -->
-      <div class="mb-4 flex items-center justify-between">
-        <NInput
-          v-model:value="searchKeyword"
-          placeholder="搜索知识库名称"
-          clearable
-          class="max-w-260px"
-          @input="debouncedSearch"
-          @clear="debouncedSearch"
-        >
-          <template #prefix>
-            <icon-carbon:search class="text-gray-400" />
-          </template>
-        </NInput>
-        <NButton type="primary" @click="createKbVisible = true">
-          <template #icon>
-            <icon-carbon:add />
-          </template>
-          新建知识库
-        </NButton>
-      </div>
+      <div class="min-w-0 flex flex-1 flex-col">
+        <div class="border-b border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
+          <div class="flex items-center justify-between gap-3">
+            <div class="grid min-w-0 flex-1 grid-cols-4 gap-3">
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-[#1e1e22]">
+                <div class="text-lg text-gray-900 font-semibold dark:text-white">{{ stats.knowledgeBaseCount }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">知识库</div>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-[#1e1e22]">
+                <div class="text-lg text-gray-900 font-semibold dark:text-white">{{ stats.documentCount.toLocaleString() }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">文档</div>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-[#1e1e22]">
+                <div class="truncate text-lg text-gray-900 font-semibold dark:text-white">{{ formatSize(stats.totalSize) }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">存储</div>
+              </div>
+              <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-[#1e1e22]">
+                <div class="text-lg text-gray-900 font-semibold dark:text-white">{{ stats.chunkCount.toLocaleString() }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">分块</div>
+              </div>
+            </div>
+            <NButton size="small" type="primary" @click="createKbVisible = true">
+              <template #icon><icon-carbon:add /></template>
+              新建知识库
+            </NButton>
+          </div>
+        </div>
 
-      <!-- 卡片列表 + 详情 -->
-      <div
-        class="min-h-520px overflow-hidden border border-gray-100 rounded-xl bg-white shadow-sm lg:flex dark:border-gray-700 dark:bg-gray-800"
-      >
-        <div class="min-w-0 flex-1 border-gray-100 lg:border-r dark:border-gray-700">
+        <div class="flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
+          <div class="flex items-center gap-2">
+            <NInput
+              v-model:value="searchKeyword"
+              placeholder="搜索知识库名称"
+              clearable
+              class="w-220px"
+              size="small"
+              @input="debouncedSearch"
+              @clear="debouncedSearch"
+            >
+              <template #prefix>
+                <icon-carbon:search class="text-gray-400" />
+              </template>
+            </NInput>
+            <span class="text-xs text-gray-400">当前 {{ filteredKnowledgeBases.length }} / {{ totalCount }}</span>
+          </div>
+        </div>
+
+        <div class="min-h-0 flex flex-1 overflow-hidden">
+          <div class="min-w-0 flex-1 border-r border-gray-100 dark:border-gray-700">
+            <NScrollbar class="h-full">
           <NSpin :show="loading">
-            <div v-if="knowledgeBases.length === 0 && !loading" class="py-20">
+            <div v-if="filteredKnowledgeBases.length === 0 && !loading" class="py-20">
               <NEmpty description="暂无知识库">
                 <template #extra>
                   <NButton size="small" type="primary" @click="createKbVisible = true">新建知识库</NButton>
@@ -265,7 +368,7 @@ function formatTime(time?: string) {
             </div>
             <div v-else class="grid grid-cols-1 gap-3 p-4 xl:grid-cols-2">
               <div
-                v-for="item in knowledgeBases"
+                v-for="item in filteredKnowledgeBases"
                 :key="item.kbId"
                 class="cursor-pointer border rounded-xl bg-white p-4 transition-all dark:bg-[#1e1e22] hover:shadow-md"
                 :class="
@@ -328,9 +431,10 @@ function formatTime(time?: string) {
               </div>
             </div>
           </NSpin>
+            </NScrollbar>
         </div>
 
-        <div class="w-full flex-shrink-0 bg-white lg:w-380px dark:bg-[#18181c]">
+        <div class="w-380px flex-shrink-0 bg-white dark:bg-[#18181c]">
           <template v-if="selectedKnowledgeBase">
             <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-700">
               <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">知识库详情</h2>
@@ -438,9 +542,10 @@ function formatTime(time?: string) {
             <NEmpty description="选择一个知识库查看详情" />
           </div>
         </div>
+        </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end border-t border-gray-100 px-4 py-3 lg:hidden dark:border-gray-700">
+        <div class="flex justify-end border-t border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-[#18181c]">
           <NPagination
             v-model:page="currentPage"
             :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
@@ -451,18 +556,6 @@ function formatTime(time?: string) {
             @update:page-size="handlePageSizeChange"
           />
         </div>
-      </div>
-
-      <div class="hidden justify-end px-4 py-3 lg:flex">
-        <NPagination
-          v-model:page="currentPage"
-          :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
-          :page-size="pageSize"
-          :page-sizes="pageSizeOptions"
-          show-size-picker
-          @update:page="handlePageChange"
-          @update:page-size="handlePageSizeChange"
-        />
       </div>
     </div>
 

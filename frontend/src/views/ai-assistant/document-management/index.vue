@@ -1,5 +1,5 @@
 <script setup lang="tsx">
-import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NPopconfirm, NSelect, NSpin, NTag } from 'naive-ui';
+import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NPopconfirm, NScrollbar, NSelect, NSpin, NTag } from 'naive-ui';
 import debounce from 'lodash-es/debounce';
 import { fakePaginationRequest } from '@/service/request';
 import { fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
@@ -20,6 +20,8 @@ const tabOptions = [
 const searchKeyword = ref('');
 const selectedFileType = ref('');
 const selectedKbId = ref('');
+const categoryMode = ref<'tab' | 'type' | 'kb'>('tab');
+const activeCategory = ref('全部');
 
 // --------- 筛选选项 ---------
 const filterOptions = ref<Api.KnowledgeBase.KnowledgeBaseFilterOptions>({
@@ -52,10 +54,32 @@ const fileTypeSelectOptions = computed(() => [
   ...filterOptions.value.fileTypes.map(t => ({ label: t, value: t }))
 ]);
 
+const categoryList = computed(() => {
+  if (categoryMode.value === 'tab') return tabOptions.map(item => item.label);
+  if (categoryMode.value === 'type') return fileTypeSelectOptions.value.filter(item => item.value).map(item => item.label);
+  return knowledgeBases.value.map(item => item.name);
+});
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { '全部': data.value.length };
+  data.value.forEach(item => {
+    const tabKey = activeTab.value === 'mine' ? '我创建的' : activeTab.value === 'recent' ? '最近更新' : '全部文档';
+    const typeKey = getFileType(item.fileName);
+    const kbKey = getKbName(item.kbId);
+    const key = categoryMode.value === 'tab' ? tabKey : categoryMode.value === 'type' ? typeKey : kbKey;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+});
+
 // --------- 文件预览 ---------
 const previewVisible = ref(false);
 const previewFileName = ref('');
 const previewFileMd5 = ref('');
+const previewModalStyle = {
+  width: '760px',
+  maxWidth: 'calc(100vw - 32px)'
+};
 
 function getPreviewFileIcon() {
   const ext = getFileExt(previewFileName.value);
@@ -134,13 +158,13 @@ function apiFn(pageParams?: Api.Common.CommonSearchParams) {
 // 文件类型图标映射（carbon 图标 + 背景色 + 图标色，风格与知识库图标一致）
 const fileIconMap: Record<string, { icon: string; bg: string; color: string }> = {
   pdf: { icon: 'icon-carbon-document-pdf', bg: 'bg-red-50', color: 'text-red-500' },
-  doc: { icon: 'icon-carbon-document-word', bg: 'bg-blue-50', color: 'text-blue-600' },
-  docx: { icon: 'icon-carbon-document-word', bg: 'bg-blue-50', color: 'text-blue-600' },
-  xls: { icon: 'icon-carbon-document-spreadsheet', bg: 'bg-green-50', color: 'text-green-600' },
-  xlsx: { icon: 'icon-carbon-document-spreadsheet', bg: 'bg-green-50', color: 'text-green-600' },
-  ppt: { icon: 'icon-carbon-document-presentation', bg: 'bg-orange-50', color: 'text-orange-500' },
-  pptx: { icon: 'icon-carbon-document-presentation', bg: 'bg-orange-50', color: 'text-orange-500' },
-  txt: { icon: 'icon-carbon-document-text', bg: 'bg-gray-50', color: 'text-gray-500' },
+  doc: { icon: 'icon-carbon-document-word-processor', bg: 'bg-blue-50', color: 'text-blue-600' },
+  docx: { icon: 'icon-carbon-document-word-processor', bg: 'bg-blue-50', color: 'text-blue-600' },
+  xls: { icon: 'icon-carbon-data-table', bg: 'bg-green-50', color: 'text-green-600' },
+  xlsx: { icon: 'icon-carbon-data-table', bg: 'bg-green-50', color: 'text-green-600' },
+  ppt: { icon: 'icon-carbon-document', bg: 'bg-orange-50', color: 'text-orange-500' },
+  pptx: { icon: 'icon-carbon-document', bg: 'bg-orange-50', color: 'text-orange-500' },
+  txt: { icon: 'icon-carbon-document', bg: 'bg-gray-50', color: 'text-gray-500' },
   md: { icon: 'icon-carbon-document', bg: 'bg-slate-50', color: 'text-slate-600' },
   jpg: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
   jpeg: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
@@ -228,6 +252,25 @@ function onTabChange(val: string) {
   getDataByPage();
 }
 
+function switchCategoryMode(mode: 'tab' | 'type' | 'kb') {
+  categoryMode.value = mode;
+  activeCategory.value = '全部';
+}
+
+function handleCategoryClick(category: string) {
+  activeCategory.value = category;
+  if (categoryMode.value === 'tab') {
+    const target = tabOptions.find(item => item.label === category);
+    activeTab.value = (target?.value || 'all') as 'all' | 'mine' | 'recent';
+  } else if (categoryMode.value === 'type') {
+    selectedFileType.value = category === '全部' ? '' : category;
+  } else {
+    const target = knowledgeBases.value.find(item => item.name === category);
+    selectedKbId.value = target?.kbId || '';
+  }
+  getDataByPage();
+}
+
 // --------- 上传 ---------
 const uploadVisible = ref(false);
 const activeKbForUpload = ref('');
@@ -258,80 +301,111 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="doc-management-page h-full flex flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
-    <div class="min-h-0 flex flex-col flex-1 px-8 py-6">
-      <!-- 标题 -->
-      <h1 class="mb-5 text-2xl text-gray-900 font-bold dark:text-white">文档管理</h1>
-
-      <!-- Tab -->
-      <div class="mb-5 flex items-center gap-0 border-b border-gray-200 dark:border-gray-700">
-        <button
-          v-for="tab in tabOptions"
-          :key="tab.value"
-          class="border-b-2 bg-transparent px-5 py-2.5 text-sm font-medium transition-colors -mb-px"
-          :class="[
-            activeTab === tab.value
-              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          ]"
-          @click="onTabChange(tab.value)"
-        >
-          {{ tab.label }}
-        </button>
+  <div class="doc-management-page h-full flex flex-col bg-[#f5f7fa] dark:bg-[#101014]">
+    <div class="min-h-0 flex-1 overflow-hidden lg:flex">
+      <div class="w-180px flex-shrink-0 border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-[#18181c] flex flex-col">
+        <div class="px-4 pb-2 pt-4">
+          <h2 class="mb-3 text-sm text-gray-800 font-semibold dark:text-gray-100">文档分类</h2>
+          <div class="grid grid-cols-3 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'tab' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('tab')"
+            >
+              范围
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'type' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('type')"
+            >
+              类型
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'kb' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('kb')"
+            >
+              知识库
+            </button>
+          </div>
+        </div>
+        <NScrollbar class="flex-1">
+          <div class="space-y-0.5 px-2 pt-1">
+            <div
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === '全部' ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick('全部')"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:catalog class="text-base" />
+                  <span class="truncate">全部</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts['全部'] ?? 0 }}</span>
+              </div>
+            </div>
+            <div
+              v-for="cat in categoryList"
+              :key="cat"
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === cat ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick(cat)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:tag class="text-base" />
+                  <span class="truncate">{{ cat }}</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts[cat] ?? 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </NScrollbar>
       </div>
 
-      <!-- 工具栏 -->
-      <div class="mb-4 flex items-center gap-3">
-        <!-- 搜索框 -->
-        <NInput
-          v-model:value="searchKeyword"
-          placeholder="搜索文档名称或关键词"
-          clearable
-          class="max-w-220px"
-          @input="debouncedSearch"
-          @clear="debouncedSearch"
-        >
-          <template #prefix>
-            <icon-carbon:search class="text-gray-400" />
-          </template>
-        </NInput>
+      <div class="min-w-0 flex flex-1 flex-col">
+        <div class="flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
+          <div class="flex items-center gap-2">
+            <NInput
+              v-model:value="searchKeyword"
+              placeholder="搜索文档名称或关键词"
+              clearable
+              class="w-220px"
+              size="small"
+              @input="debouncedSearch"
+              @clear="debouncedSearch"
+            >
+              <template #prefix>
+                <icon-carbon:search class="text-gray-400" />
+              </template>
+            </NInput>
+            <NSelect
+              v-model:value="selectedFileType"
+              :options="fileTypeSelectOptions"
+              placeholder="全部类型"
+              class="w-130px"
+              size="small"
+              @update:value="getDataByPage"
+            />
+            <NSelect
+              v-model:value="selectedKbId"
+              :options="kbSelectOptions"
+              placeholder="全部知识库"
+              class="w-160px"
+              size="small"
+              @update:value="getDataByPage"
+            />
+          </div>
+          <NButton size="small" type="primary" @click="handleUpload">
+            <template #icon><icon-carbon:add /></template>
+            上传文档
+          </NButton>
+        </div>
 
-        <!-- 文件类型 -->
-        <NSelect
-          v-model:value="selectedFileType"
-          :options="fileTypeSelectOptions"
-          placeholder="全部类型"
-          class="w-130px"
-          size="medium"
-          @update:value="getDataByPage"
-        />
-
-        <!-- 所属知识库 -->
-        <NSelect
-          v-model:value="selectedKbId"
-          :options="kbSelectOptions"
-          placeholder="全部知识库"
-          class="w-150px"
-          size="medium"
-          @update:value="getDataByPage"
-        />
-
-        <div class="flex-1" />
-
-        <!-- 上传文档按钮 -->
-        <NButton type="primary" @click="handleUpload">
-          <template #icon>
-            <icon-carbon:add />
-          </template>
-          上传文档
-        </NButton>
-      </div>
-
-      <!-- 卡片列表 + 详情 -->
-      <div
-        class="min-h-520px overflow-hidden border border-gray-100 rounded-xl bg-white shadow-sm lg:flex dark:border-gray-700 dark:bg-gray-800"
-      >
-        <div class="min-w-0 flex-1 border-gray-100 lg:border-r dark:border-gray-700">
+        <div class="min-h-0 flex flex-1 overflow-hidden">
+          <div class="min-w-0 flex-1 border-r border-gray-100 dark:border-gray-700">
+            <NScrollbar class="h-full">
           <NSpin :show="loading">
             <div v-if="data.length === 0 && !loading" class="py-20">
               <NEmpty description="暂无文档">
@@ -419,9 +493,10 @@ onMounted(async () => {
               </div>
             </div>
           </NSpin>
+            </NScrollbar>
         </div>
 
-        <div class="w-full flex-shrink-0 bg-white lg:w-380px dark:bg-[#18181c]">
+        <div class="w-380px flex-shrink-0 bg-white dark:bg-[#18181c]">
           <template v-if="selectedDocument">
             <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-700">
               <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">文档详情</h2>
@@ -538,15 +613,12 @@ onMounted(async () => {
             <NEmpty description="选择一个文档查看详情" />
           </div>
         </div>
+        </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end border-t border-gray-100 px-4 py-3 lg:hidden dark:border-gray-700">
+        <div class="flex justify-end border-t border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-[#18181c]">
           <NPagination v-bind="mobilePagination" />
         </div>
-      </div>
-
-      <div class="hidden justify-end px-4 py-3 lg:flex">
-        <NPagination v-bind="mobilePagination" />
       </div>
     </div>
 
@@ -554,12 +626,18 @@ onMounted(async () => {
     <UploadDialog v-model:visible="uploadVisible" :active-kb-id="activeKbForUpload" @submitted="getData" />
 
     <!-- 文件预览弹窗 -->
-    <NModal v-model:show="previewVisible" preset="card" class="doc-preview-modal">
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      class="doc-preview-modal"
+      :style="previewModalStyle"
+      :bordered="false"
+    >
       <template #header>
         <div class="w-full flex items-center justify-between">
           <div class="flex items-center gap-2">
             <SvgIcon :local-icon="getPreviewFileIcon()" class="text-16" />
-            <span class="font-medium">{{ previewFileName }}</span>
+            <span class="max-w-590px truncate font-medium">{{ previewFileName }}</span>
           </div>
           <NButton size="small" @click="handleDownloadPreview">
             <template #icon>
@@ -569,7 +647,7 @@ onMounted(async () => {
           </NButton>
         </div>
       </template>
-      <div>
+      <div class="doc-preview-body">
         <FilePreview :file-name="previewFileName" :file-md5="previewFileMd5" :visible="previewVisible" />
       </div>
     </NModal>
@@ -599,7 +677,38 @@ onMounted(async () => {
 }
 
 :deep(.doc-preview-modal) {
-  width: 80%;
-  max-width: 1000px;
+  border-radius: 10px;
+}
+
+:deep(.doc-preview-modal .n-card-header) {
+  padding: 14px 18px;
+}
+
+:deep(.doc-preview-modal .n-card__content) {
+  padding: 0;
+}
+
+.doc-preview-body {
+  max-height: min(68vh, 640px);
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+:deep(.doc-preview-body img),
+:deep(.doc-preview-body canvas),
+:deep(.doc-preview-body iframe),
+:deep(.doc-preview-body video) {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  :deep(.doc-preview-modal) {
+    max-width: calc(100vw - 24px);
+  }
+
+  .doc-preview-body {
+    max-height: 74vh;
+    padding: 12px;
+  }
 }
 </style>
