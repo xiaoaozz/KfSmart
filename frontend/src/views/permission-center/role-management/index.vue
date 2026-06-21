@@ -1,11 +1,11 @@
 <script setup lang="tsx">
-import { NButton, NPagination, NPopconfirm, NTag, NModal, NInput, NDataTable } from 'naive-ui';
+import { NButton, NDataTable, NInput, NModal, NPopconfirm, NTag } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { resolveComponent } from 'vue';
-import RoleOperateDialog from './modules/role-operate-dialog.vue';
-import { fetchGetAllRoles, fetchDeleteRole } from '@/service/api';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import debounce from 'lodash-es/debounce';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
+import { fetchDeleteRole, fetchGetAllRoles } from '@/service/api';
+import ListPagination from '@/components/common/list-pagination.vue';
+import RoleOperateDialog from './modules/role-operate-dialog.vue';
 
 type OperateType = 'add' | 'edit';
 const operateType = ref<OperateType>('add');
@@ -183,7 +183,7 @@ onMounted(() => getData());
 
 <template>
   <div class="role-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-    <div class="px-8 py-6 flex-1 min-h-0">
+    <div class="flex flex-1 flex-col min-h-0 px-8 py-6">
       <!-- 标题 -->
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">角色管理</h1>
 
@@ -219,7 +219,7 @@ onMounted(() => getData());
       </div>
 
       <!-- 表格 -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <NDataTable
           :columns="columns"
           :data="pagedData"
@@ -229,17 +229,13 @@ onMounted(() => getData());
           :row-key="row => row.id"
           :pagination="false"
         />
-        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-          <NPagination
-            v-model:page="page"
-            v-model:page-size="pageSize"
-            :item-count="filteredData.length"
-            :page-sizes="PAGINATION_PAGE_SIZE_OPTIONS"
-            show-size-picker
-            show-quick-jumper
-            :page-slot="5"
-          />
-        </div>
+        <ListPagination
+          v-model:page="page"
+          v-model:page-size="pageSize"
+          :item-count="filteredData.length"
+          show-quick-jumper
+          :page-slot="5"
+        />
       </div>
     </div>
 

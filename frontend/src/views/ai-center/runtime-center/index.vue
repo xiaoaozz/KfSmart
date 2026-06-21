@@ -2,9 +2,9 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { NButton, NEmpty, NInput, NPagination, NScrollbar, NSpin, NTag, NTooltip } from 'naive-ui';
+import { NButton, NEmpty, NInput, NScrollbar, NSpin, NTag, NTooltip } from 'naive-ui';
 import { VueMarkdownIt, VueMarkdownItProvider } from 'vue-markdown-shiki';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import {
   fetchAgentExecutionDetail,
   fetchCreateConversationSession,
@@ -18,6 +18,7 @@ import {
 } from '@/service/api';
 import { useAuthStore } from '@/store/modules/auth';
 import { getAvatarText, useUserAvatar } from '@/utils/avatar';
+import ListPagination from '@/components/common/list-pagination.vue';
 
 defineOptions({
   name: 'RuntimeCenter'
@@ -59,7 +60,6 @@ const conversationId = ref('');
 const inputMessage = ref('');
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
-const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 
 const catalog = ref<Api.Runtime.Catalog>({
   agents: [],
@@ -580,15 +580,12 @@ onMounted(async () => {
             </div>
           </NScrollbar>
 
-          <div class="runtime-pagination border-t border-slate-200 bg-white px-5 py-3">
-            <NPagination
-              v-model:page="currentPage"
-              v-model:page-size="pageSize"
-              :item-count="filteredApps.length"
-              :page-sizes="pageSizeOptions"
-              show-size-picker
-            />
-          </div>
+          <ListPagination
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :item-count="filteredApps.length"
+            class="runtime-pagination border-slate-200 px-5"
+          />
         </template>
 
         <template v-else>

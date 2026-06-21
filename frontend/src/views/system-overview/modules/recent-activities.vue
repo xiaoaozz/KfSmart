@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import { fetchGetRecentActivities } from '@/service/api/system';
+import ListPagination from '@/components/common/list-pagination.vue';
 
 defineOptions({
   name: 'RecentActivities'
@@ -14,7 +15,6 @@ const loading = ref(false);
 const activeType = ref<ActivityType>('all');
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
-const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const activityStats = ref<Api.System.RecentActivityStats>({
   todayActivities: 0,
   weekActivities: 0,
@@ -198,18 +198,15 @@ const getColorClasses = (color: string) => {
             </div>
           </div>
 
-          <div class="mt-3 h-9 flex justify-end border-t border-gray-100 pt-3 dark:border-gray-700">
-            <NPagination
-              v-model:page="currentPage"
-              :item-count="filteredActivities.length"
-              :page-size="pageSize"
-              :page-sizes="pageSizeOptions"
-              :disabled="filteredActivities.length === 0"
-              size="small"
-              show-size-picker
-              @update:page-size="handlePageSizeChange"
-            />
-          </div>
+          <ListPagination
+            v-model:page="currentPage"
+            :item-count="filteredActivities.length"
+            :page-size="pageSize"
+            :disabled="filteredActivities.length === 0"
+            size="small"
+            class="mt-3 px-0 pt-3"
+            @update:page-size="handlePageSizeChange"
+          />
         </div>
       </NSpin>
 

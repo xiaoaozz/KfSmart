@@ -5,7 +5,6 @@ import {
   NEmpty,
   NInput,
   NModal,
-  NPagination,
   NScrollbar,
   NSelect,
   NSpin,
@@ -13,6 +12,7 @@ import {
   NTag
 } from 'naive-ui';
 import dayjs from 'dayjs';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import { fetchMcpTools, fetchPromptTemplates } from '@/service/api/resource';
 import {
   fetchDeleteSkill,
@@ -28,6 +28,7 @@ import {
   fetchToggleSkillStatus
 } from '@/service/api/skills';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
 
 type SelectOption = {
   label: string;
@@ -51,7 +52,7 @@ const categoryMode = ref<CategoryMode>('category');
 const keyword = ref('');
 const activeCategory = ref('全部');
 const page = ref(1);
-const pageSize = ref(12);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const total = ref(0);
 
 const skillList = ref<Api.AgentCenter.Skill[]>([]);
@@ -623,19 +624,14 @@ onMounted(initialize);
             </div>
           </NScrollbar>
 
-          <div class="border-t border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
-            <div class="flex justify-end">
-              <NPagination
-                v-model:page="page"
-                v-model:page-size="pageSize"
-                :item-count="total"
-                :page-sizes="[12, 24, 48]"
-                show-size-picker
-                @update:page="loadSkills"
-                @update:page-size="loadSkills"
-              />
-            </div>
-          </div>
+          <ListPagination
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            :item-count="total"
+            class="px-5 dark:bg-[#18181c]"
+            @update:page="loadSkills"
+            @update:page-size="loadSkills"
+          />
         </div>
 
         <div

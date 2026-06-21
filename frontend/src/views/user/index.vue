@@ -1,9 +1,10 @@
 <script setup lang="tsx">
-import { NButton, NInput, NPagination, NSelect, NTag, NSpace } from 'naive-ui';
+import { NButton, NInput, NSelect, NSpace, NTag } from 'naive-ui';
+import debounce from 'lodash-es/debounce';
+import { enableStatusOptions } from '@/constants/common';
+import ListPagination from '@/components/common/list-pagination.vue';
 import OrgTagSettingDialog from './modules/org-tag-setting-dialog.vue';
 import RoleSettingDialog from './modules/role-setting-dialog.vue';
-import { enableStatusOptions } from '@/constants/common';
-import debounce from 'lodash-es/debounce';
 
 function apiFn(params: Api.User.SearchParams) {
   return request<Api.User.List>({ url: '/admin/users/list', params });
@@ -102,7 +103,7 @@ function handleRole(row: Api.User.Item) {
 
 <template>
   <div class="user-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-    <div class="px-8 py-6 flex-1 min-h-0">
+    <div class="flex flex-1 flex-col min-h-0 px-8 py-6">
       <!-- 标题 -->
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">用户管理</h1>
 
@@ -150,7 +151,7 @@ function handleRole(row: Api.User.Item) {
       </div>
 
       <!-- 表格 -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <NDataTable
           :columns="columns"
           :data="data"
@@ -161,9 +162,7 @@ function handleRole(row: Api.User.Item) {
           :row-key="row => row.id"
           :pagination="false"
         />
-        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-          <NPagination v-bind="mobilePagination" />
-        </div>
+        <ListPagination v-bind="mobilePagination" />
       </div>
     </div>
 

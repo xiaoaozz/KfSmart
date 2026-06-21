@@ -1,11 +1,12 @@
 <script setup lang="tsx">
-import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NPopconfirm, NScrollbar, NSelect, NSpin, NTag } from 'naive-ui';
+import { NButton, NDivider, NEmpty, NInput, NModal, NPopconfirm, NScrollbar, NSelect, NSpin, NTag } from 'naive-ui';
 import debounce from 'lodash-es/debounce';
 import { fakePaginationRequest } from '@/service/request';
 import { fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import { fileSize, getFileExt } from '@/utils/common';
 import { UploadStatus } from '@/enum';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
 import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from '@/views/ai-assistant/knowledge-base/modules/upload-dialog.vue';
 
@@ -636,9 +637,7 @@ onMounted(async () => {
         </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end border-t border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-[#18181c]">
-          <NPagination v-bind="mobilePagination" />
-        </div>
+        <ListPagination v-bind="mobilePagination" class="dark:bg-[#18181c]" />
       </div>
     </div>
 

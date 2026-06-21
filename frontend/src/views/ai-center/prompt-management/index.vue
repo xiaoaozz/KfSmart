@@ -21,6 +21,8 @@ import {
   fetchTogglePromptStatus
 } from '@/service/api/resource';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 
 type PageView = 'list' | 'edit';
 
@@ -29,6 +31,9 @@ const keyword = ref('');
 const activeCategory = ref('全部');
 const categories = ref<string[]>([]);
 const promptList = ref<Api.AgentCenter.PromptTemplate[]>([]);
+const currentPage = ref(1);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
+const totalCount = ref(0);
 const loading = ref(false);
 const selectedPrompt = ref<Api.AgentCenter.PromptTemplate | null>(null);
 
@@ -62,6 +67,10 @@ function getPageRecords<T>(data: any): T[] {
   return data?.records || data?.content || data?.data || [];
 }
 
+function getPageTotal(data: any, fallback = 0): number {
+  return data?.totalElements ?? data?.total ?? fallback;
+}
+
 async function loadCategories() {
   const { data, error } = await fetchPromptCategories();
   if (!error && data && data.length > 0) {
@@ -74,7 +83,7 @@ async function loadCategories() {
 
 async function loadPrompts() {
   loading.value = true;
-  const params: Record<string, any> = { page: 1, size: 50 };
+  const params: Record<string, any> = { page: currentPage.value, size: pageSize.value };
   if (keyword.value) params.keyword = keyword.value;
   if (activeCategory.value !== '全部') params.category = activeCategory.value;
 
@@ -82,6 +91,7 @@ async function loadPrompts() {
   loading.value = false;
   if (!error && data) {
     promptList.value = getPageRecords<Api.AgentCenter.PromptTemplate>(data);
+    totalCount.value = getPageTotal(data, promptList.value.length);
   }
 }
 
@@ -91,10 +101,23 @@ function selectPrompt(item: Api.AgentCenter.PromptTemplate) {
 
 function handleCategoryClick(cat: string) {
   activeCategory.value = cat;
+  currentPage.value = 1;
   loadPrompts();
 }
 
 async function handleSearch() {
+  currentPage.value = 1;
+  await loadPrompts();
+}
+
+async function handlePageChange(page: number) {
+  currentPage.value = page;
+  await loadPrompts();
+}
+
+async function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
   await loadPrompts();
 }
 
@@ -457,6 +480,14 @@ onMounted(async () => {
               </NSpin>
             </div>
           </NScrollbar>
+          <ListPagination
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :item-count="totalCount"
+            :disabled="loading"
+            @update:page="handlePageChange"
+            @update:page-size="handlePageSizeChange"
+          />
         </div>
 
         <!-- 右侧详情面板 -->

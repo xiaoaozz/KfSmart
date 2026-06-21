@@ -30,6 +30,8 @@ import {
 import { fetchSkills } from '@/service/api/skills';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 
 type SelectOption = {
   label: string;
@@ -69,6 +71,8 @@ const debugLoading = ref(false);
 const createVisible = ref(false);
 const createForm = ref({ name: '', type: '知识问答', description: '' });
 const loading = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 
 // ─── 列表数据 ───
 const agentList = ref<Api.AgentCenter.Workflow[]>([]);
@@ -105,6 +109,13 @@ const filteredAgents = computed(() => {
   return list;
 });
 
+const paginatedAgents = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredAgents.value.slice(start, start + pageSize.value);
+});
+
+const agentPageCount = computed(() => Math.max(1, Math.ceil(filteredAgents.value.length / pageSize.value)));
+
 const selectedPromptTemplates = computed(() => {
   const refs = splitComma(agentDetail.promptRefs);
   return refs
@@ -128,6 +139,7 @@ const promptPreviewStats = computed(() => {
 function switchCategoryMode(mode: 'type' | 'status') {
   categoryMode.value = mode;
   activeCategory.value = '全部';
+  currentPage.value = 1;
 }
 
 // ─── Agent 详情 ───
@@ -264,15 +276,25 @@ async function loadData() {
     agentList.value = getPageRecords<Api.AgentCenter.Workflow>(agentRes.data);
     const types = [...new Set(agentList.value.map(a => a.type).filter(Boolean))];
     agentTypes.value = types;
+    if (currentPage.value > agentPageCount.value) {
+      currentPage.value = agentPageCount.value;
+    }
   }
 }
 
 async function searchAgents() {
+  currentPage.value = 1;
   await loadData();
 }
 
 function handleCategoryClick(cat: string) {
   activeCategory.value = cat;
+  currentPage.value = 1;
+}
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
 }
 
 // ─── CRUD 操作 ───
@@ -658,7 +680,7 @@ onMounted(() => {
                 </div>
                 <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                   <div
-                    v-for="item in filteredAgents"
+                    v-for="item in paginatedAgents"
                     :key="getAgentId(item)"
                     class="cursor-pointer rounded-xl border bg-white p-4 transition-all hover:shadow-md dark:bg-[#1e1e22] dark:border-gray-700"
                     :class="getAgentId(selectedAgent) === getAgentId(item)
@@ -712,6 +734,14 @@ onMounted(() => {
               </NSpin>
             </div>
           </NScrollbar>
+          <ListPagination
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :page-count="agentPageCount"
+            :item-count="filteredAgents.length"
+            :disabled="loading"
+            @update:page-size="handlePageSizeChange"
+          />
         </div>
 
         <!-- 右侧详情面板 -->
@@ -980,7 +1010,7 @@ onMounted(() => {
               <template #icon><icon-carbon:launch /></template>
               发布
             </NButton>
-            <NButton size="small" secondary type="success" @click="goToRuntime(agentDetail)">
+            <NButton size="small" secondary type="success" @click="goToRuntime({ agentId: agentDetail.agentId })">
               <template #icon><icon-carbon:play-filled /></template>
               运行界面
             </NButton>

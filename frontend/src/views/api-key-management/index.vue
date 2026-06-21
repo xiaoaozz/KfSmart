@@ -1,6 +1,7 @@
 <script setup lang="tsx">
 import { NButton, NPopconfirm, NTag, NTooltip } from 'naive-ui';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
+import ListPagination from '@/components/common/list-pagination.vue';
 import ApiKeyOperateDialog from './modules/api-key-operate-dialog.vue';
 
 interface ApiKeyItem {
@@ -26,7 +27,6 @@ const dialogVisible = ref(false);
 const operateType = ref<'add' | 'edit'>('add');
 const editingData = ref<ApiKeyItem | null>(null);
 const activatingId = ref<number | null>(null);
-const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
 const pagedData = computed(() => {
@@ -275,7 +275,7 @@ onMounted(() => {
 
 <template>
   <div class="api-key-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-    <div class="px-8 py-6 flex-1 min-h-0">
+    <div class="flex flex-1 flex-col min-h-0 px-8 py-6">
       <!-- 标题 -->
       <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">API Key 配置列表</h1>
 
@@ -304,7 +304,7 @@ onMounted(() => {
       </div>
 
       <!-- 表格 -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <NDataTable
           :columns="columns"
           :data="pagedData"
@@ -315,16 +315,12 @@ onMounted(() => {
           :row-key="(row: ApiKeyItem) => row.id"
           :row-class-name="(row: ApiKeyItem) => (row.active ? 'bg-green-50 dark:bg-green-900/20' : '')"
         />
-        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-          <NPagination
-            v-model:page="currentPage"
-            :page-count="Math.max(1, Math.ceil(data.length / pageSize))"
-            :page-size="pageSize"
-            :page-sizes="pageSizeOptions"
-            show-size-picker
-            @update:page-size="handlePageSizeChange"
-          />
-        </div>
+        <ListPagination
+          v-model:page="currentPage"
+          :page-count="Math.max(1, Math.ceil(data.length / pageSize))"
+          :page-size="pageSize"
+          @update:page-size="handlePageSizeChange"
+        />
       </div>
     </div>
 
