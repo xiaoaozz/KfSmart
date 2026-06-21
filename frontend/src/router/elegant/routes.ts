@@ -104,7 +104,7 @@ export const generatedRoutes = [
           title: 'ai-center_agent-management',
           i18nKey: 'route.ai-center_agent-management',
           icon: 'carbon:bot',
-          order: 1
+          order: 5
         }
       },
       {
@@ -126,7 +126,7 @@ export const generatedRoutes = [
           title: 'ai-center_model-management',
           i18nKey: 'route.ai-center_model-management',
           icon: 'carbon:model',
-          order: 5
+          order: 7
         }
       },
       {
@@ -137,7 +137,7 @@ export const generatedRoutes = [
           title: 'ai-center_prompt-management',
           i18nKey: 'route.ai-center_prompt-management',
           icon: 'carbon:text-annotation-toggle',
-          order: 5
+          order: 2
         }
       },
       {
@@ -146,7 +146,9 @@ export const generatedRoutes = [
         component: 'view.ai-center_runtime-center',
         meta: {
           title: 'ai-center_runtime-center',
-          i18nKey: 'route.ai-center_runtime-center'
+          i18nKey: 'route.ai-center_runtime-center',
+          icon: 'carbon:play-filled',
+          order: 1
         }
       },
       {
@@ -155,7 +157,9 @@ export const generatedRoutes = [
         component: 'view.ai-center_skills',
         meta: {
           title: 'ai-center_skills',
-          i18nKey: 'route.ai-center_skills'
+          i18nKey: 'route.ai-center_skills',
+          icon: 'carbon:skill-level-advanced',
+          order: 3
         }
       },
       {
@@ -166,7 +170,7 @@ export const generatedRoutes = [
           title: 'ai-center_workflow',
           i18nKey: 'route.ai-center_workflow',
           icon: 'carbon:flow-stream',
-          order: 3
+          order: 6
         }
       }
     ]
