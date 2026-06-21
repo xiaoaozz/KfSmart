@@ -20,6 +20,7 @@ import {
   fetchSavePromptTemplate,
   fetchTogglePromptStatus
 } from '@/service/api/resource';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 
 type PageView = 'list' | 'edit';
 
@@ -405,14 +406,22 @@ onMounted(async () => {
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">{{ item.name }}</h3>
                         <p v-if="item.description" class="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{{ item.description }}</p>
                       </div>
-                      <NTag
-                        :type="item.status === '启用' ? 'success' : 'default'"
-                        size="small"
-                        :bordered="false"
-                        class="ml-2 flex-shrink-0"
-                      >
-                        {{ item.status }}
-                      </NTag>
+                      <div class="ml-2 flex flex-shrink-0 items-center gap-1">
+                        <FavoriteButton
+                          type="prompt"
+                          :target-id="item.templateId"
+                          :title="item.name"
+                          :description="item.description"
+                          :meta="`${item.category || '未分类'} ${item.version || ''}`"
+                        />
+                        <NTag
+                          :type="item.status === '启用' ? 'success' : 'default'"
+                          size="small"
+                          :bordered="false"
+                        >
+                          {{ item.status }}
+                        </NTag>
+                      </div>
                     </div>
 
                     <div v-if="getTagList(item.tags).length > 0" class="flex flex-wrap gap-1.5 mb-3">
@@ -526,6 +535,16 @@ onMounted(async () => {
                 </div>
 
                 <div class="flex flex-wrap gap-2 pt-1">
+                  <FavoriteButton
+                    type="prompt"
+                    :target-id="selectedPrompt.templateId"
+                    :title="selectedPrompt.name"
+                    :description="selectedPrompt.description"
+                    :meta="`${selectedPrompt.category || '未分类'} ${selectedPrompt.version || ''}`"
+                    size="small"
+                    :text="false"
+                    show-label
+                  />
                   <NButton size="small" type="primary" @click="openEdit(selectedPrompt)">
                     <template #icon><icon-carbon:edit /></template>
                     编辑

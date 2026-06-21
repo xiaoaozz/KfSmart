@@ -27,6 +27,7 @@ import {
   fetchTestSkill,
   fetchToggleSkillStatus
 } from '@/service/api/skills';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 
 type SelectOption = {
   label: string;
@@ -555,9 +556,18 @@ onMounted(initialize);
                           </p>
                         </div>
                       </div>
-                      <NTag :type="getStatusTagType(item.status)" size="small" :bordered="false">
-                        {{ item.status || '草稿' }}
-                      </NTag>
+                      <div class="flex flex-shrink-0 items-center gap-1">
+                        <FavoriteButton
+                          type="skill"
+                          :target-id="item.skillId"
+                          :title="item.name"
+                          :description="item.description"
+                          :meta="item.category || item.status || ''"
+                        />
+                        <NTag :type="getStatusTagType(item.status)" size="small" :bordered="false">
+                          {{ item.status || '草稿' }}
+                        </NTag>
+                      </div>
                     </div>
 
                     <div class="grid grid-cols-3 gap-2 text-xs">
@@ -753,6 +763,16 @@ onMounted(initialize);
                 </div>
 
                 <div class="flex flex-wrap gap-2 pt-1">
+                  <FavoriteButton
+                    type="skill"
+                    :target-id="selectedSkill.skillId"
+                    :title="selectedSkill.name"
+                    :description="selectedSkill.description"
+                    :meta="selectedSkill.category || selectedSkill.status || ''"
+                    size="small"
+                    :text="false"
+                    show-label
+                  />
                   <NButton size="small" type="primary" @click="openEdit(selectedSkill.skillId)">
                     <template #icon><icon-carbon:edit /></template>
                     编辑

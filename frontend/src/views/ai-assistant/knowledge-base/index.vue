@@ -7,6 +7,7 @@ import {
   fetchGetKnowledgeBaseStats,
   fetchGetKnowledgeBases
 } from '@/service/api/knowledge-base';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 
 // --------- 统计数字 ---------
@@ -399,9 +400,18 @@ function formatTime(time?: string) {
                       </p>
                     </div>
                   </div>
-                  <NTag :type="getStatusType(item.status)" size="small" :bordered="false" class="flex-shrink-0">
-                    {{ getStatusText(item.status) }}
-                  </NTag>
+                  <div class="flex flex-shrink-0 items-center gap-1">
+                    <FavoriteButton
+                      type="knowledge"
+                      :target-id="item.kbId"
+                      :title="item.name"
+                      :description="item.description"
+                      :meta="`${item.fileCount || 0} 个文档`"
+                    />
+                    <NTag :type="getStatusType(item.status)" size="small" :bordered="false">
+                      {{ getStatusText(item.status) }}
+                    </NTag>
+                  </div>
                 </div>
 
                 <div class="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-2 text-center dark:bg-[#18181c]">
@@ -527,6 +537,16 @@ function formatTime(time?: string) {
               </div>
 
               <div class="flex gap-2 pt-2">
+                <FavoriteButton
+                  type="knowledge"
+                  :target-id="selectedKnowledgeBase.kbId"
+                  :title="selectedKnowledgeBase.name"
+                  :description="selectedKnowledgeBase.description"
+                  :meta="`${selectedKnowledgeBase.fileCount || 0} 个文档`"
+                  size="small"
+                  :text="false"
+                  show-label
+                />
                 <NButton size="small" type="primary" @click="handleEdit(selectedKnowledgeBase)">
                   <template #icon><icon-carbon:edit /></template>
                   编辑

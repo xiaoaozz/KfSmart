@@ -29,6 +29,7 @@ import {
 } from '@/service/api/resource';
 import { fetchSkills } from '@/service/api/skills';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 
 type SelectOption = {
   label: string;
@@ -675,14 +676,22 @@ onMounted(() => {
                           <p v-if="item.description" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{{ item.description }}</p>
                         </div>
                       </div>
-                      <NTag
-                        :type="item.status === '运行中' ? 'success' : 'default'"
-                        size="small"
-                        :bordered="false"
-                        class="ml-2 flex-shrink-0"
-                      >
-                        {{ item.status || '草稿' }}
-                      </NTag>
+                      <div class="ml-2 flex flex-shrink-0 items-center gap-1">
+                        <FavoriteButton
+                          type="agent"
+                          :target-id="getAgentId(item)"
+                          :title="item.name"
+                          :description="item.description"
+                          :meta="item.type || item.status || ''"
+                        />
+                        <NTag
+                          :type="item.status === '运行中' ? 'success' : 'default'"
+                          size="small"
+                          :bordered="false"
+                        >
+                          {{ item.status || '草稿' }}
+                        </NTag>
+                      </div>
                     </div>
 
                     <div class="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 mt-2">
@@ -899,6 +908,16 @@ onMounted(() => {
 
                 <!-- 操作按钮 -->
                 <div class="flex flex-wrap gap-2 pt-1">
+                  <FavoriteButton
+                    type="agent"
+                    :target-id="getAgentId(selectedAgent)"
+                    :title="selectedAgent.name"
+                    :description="selectedAgent.description"
+                    :meta="selectedAgent.type || selectedAgent.status || ''"
+                    size="small"
+                    :text="false"
+                    show-label
+                  />
                   <NButton size="small" type="primary" @click="editAgent(selectedAgent)">
                     <template #icon><icon-carbon:edit /></template>
                     编辑

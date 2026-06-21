@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
+import { fetchGetNotificationPreferences, fetchUpdateNotificationPreferences } from '@/service/api';
 import { useNotificationStore } from '@/store/modules/notification';
 
 defineOptions({ name: 'MessageNotification' });
 
 const notificationStore = useNotificationStore();
 const saving = ref(false);
+const loadingPreferences = ref(false);
 
 const settings = reactive({
   systemAlert: true,
@@ -61,13 +63,25 @@ const groups = [
 
 async function saveSettings() {
   saving.value = true;
-  await new Promise(r => setTimeout(r, 800));
+  const { data, error } = await fetchUpdateNotificationPreferences({ ...settings });
   saving.value = false;
+  if (error) return;
+  if (data) Object.assign(settings, data);
   window.$message?.success('通知设置已保存');
+}
+
+async function loadSettings() {
+  loadingPreferences.value = true;
+  const { data, error } = await fetchGetNotificationPreferences();
+  loadingPreferences.value = false;
+  if (!error && data) {
+    Object.assign(settings, data);
+  }
 }
 
 onMounted(() => {
   notificationStore.fetchNotifications();
+  loadSettings();
 });
 
 async function handleMarkAllRead() {
@@ -189,6 +203,7 @@ const actionTypeLabel: Record<string, string> = {
       <div class="flex items-center justify-between mb-3">
         <h3 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">通知偏好设置</h3>
       </div>
+      <NSpin :show="loadingPreferences">
       <div class="space-y-3">
         <div
           v-for="group in groups"
@@ -221,6 +236,7 @@ const actionTypeLabel: Record<string, string> = {
           保存设置
         </NButton>
       </div>
+      </NSpin>
     </div>
   </div>
 </template>

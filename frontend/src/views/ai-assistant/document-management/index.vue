@@ -5,6 +5,7 @@ import { fakePaginationRequest } from '@/service/request';
 import { fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import { fileSize, getFileExt } from '@/utils/common';
 import { UploadStatus } from '@/enum';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from '@/views/ai-assistant/knowledge-base/modules/upload-dialog.vue';
 
@@ -449,7 +450,16 @@ onMounted(async () => {
                       </p>
                     </div>
                   </div>
-                  <NTag size="small" :bordered="false" class="flex-shrink-0">{{ getFileType(item.fileName) }}</NTag>
+                  <div class="flex flex-shrink-0 items-center gap-1">
+                    <FavoriteButton
+                      type="document"
+                      :target-id="item.fileMd5"
+                      :title="item.fileName"
+                      :description="getKbName(item.kbId)"
+                      :meta="`${getFileType(item.fileName)} · ${fileSize(item.totalSize || 0)}`"
+                    />
+                    <NTag size="small" :bordered="false">{{ getFileType(item.fileName) }}</NTag>
+                  </div>
                 </div>
 
                 <div class="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-2 text-center dark:bg-[#18181c]">
@@ -585,6 +595,16 @@ onMounted(async () => {
               </div>
 
               <div class="flex flex-wrap gap-2 pt-2">
+                <FavoriteButton
+                  type="document"
+                  :target-id="selectedDocument.fileMd5"
+                  :title="selectedDocument.fileName"
+                  :description="getKbName(selectedDocument.kbId)"
+                  :meta="`${getFileType(selectedDocument.fileName)} · ${fileSize(selectedDocument.totalSize || 0)}`"
+                  size="small"
+                  :text="false"
+                  show-label
+                />
                 <NButton
                   size="small"
                   type="primary"

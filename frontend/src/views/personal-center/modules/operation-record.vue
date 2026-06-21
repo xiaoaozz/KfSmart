@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { fetchGetOperationRecords } from '@/service/api';
 import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 
 defineOptions({ name: 'OperationRecord' });
@@ -9,11 +10,12 @@ const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
 const filterType = ref('all');
 const searchText = ref('');
+const loading = ref(false);
 
 type OpType = 'login' | 'upload' | 'chat' | 'knowledge' | 'profile' | 'delete';
 
 interface OperationRecord {
-  id: number;
+  id: string;
   type: OpType;
   action: string;
   detail: string;
@@ -23,23 +25,7 @@ interface OperationRecord {
   status: 'success' | 'failed';
 }
 
-const allRecords = ref<OperationRecord[]>([
-  { id: 1, type: 'login', action: '用户登录', detail: '账号密码登录成功', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-04 14:30:22', status: 'success' },
-  { id: 2, type: 'upload', action: '上传文档', detail: '上传文件「PaiSmart技术文档v2.pdf」到知识库', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-04 13:45:11', status: 'success' },
-  { id: 3, type: 'chat', action: '发起对话', detail: '新建对话「如何优化向量检索性能」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-04 11:22:05', status: 'success' },
-  { id: 4, type: 'knowledge', action: '创建知识库', detail: '创建知识库「大模型应用开发指南」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-03 16:10:33', status: 'success' },
-  { id: 5, type: 'profile', action: '修改资料', detail: '更新个人简介和部门信息', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-03 10:05:47', status: 'success' },
-  { id: 6, type: 'delete', action: '删除文档', detail: '从知识库中删除「旧版技术方案.docx」', ip: '10.0.0.55', device: 'Safari / iOS', time: '2024-06-02 20:33:18', status: 'success' },
-  { id: 7, type: 'upload', action: '上传文档', detail: '上传文件「接口文档v1.3.md」失败', ip: '10.0.0.55', device: 'Safari / iOS', time: '2024-06-02 18:15:42', status: 'failed' },
-  { id: 8, type: 'chat', action: '删除对话', detail: '删除历史对话「Spring Boot 配置问题」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-02 09:22:00', status: 'success' },
-  { id: 9, type: 'login', action: '用户登出', detail: '主动退出登录', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-06-01 22:05:11', status: 'success' },
-  { id: 10, type: 'knowledge', action: '修改知识库', detail: '更新知识库「技术文档库」的权限设置为公开', ip: '172.16.0.22', device: 'Firefox / Windows', time: '2024-06-01 14:30:09', status: 'success' },
-  { id: 11, type: 'profile', action: '修改密码', detail: '通过旧密码验证后修改登录密码', ip: '172.16.0.22', device: 'Firefox / Windows', time: '2024-05-31 11:08:44', status: 'success' },
-  { id: 12, type: 'upload', action: '批量上传', detail: '批量上传 5 份文档到「Java开发规范库」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-30 15:45:22', status: 'success' },
-  { id: 13, type: 'login', action: '登录失败', detail: '密码错误，登录失败', ip: '203.0.113.42', device: 'Unknown', time: '2024-05-30 08:05:33', status: 'failed' },
-  { id: 14, type: 'chat', action: '发起对话', detail: '新建对话「数据库优化建议」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-29 13:20:15', status: 'success' },
-  { id: 15, type: 'delete', action: '删除知识库', detail: '删除知识库「废弃测试库」', ip: '192.168.1.100', device: 'Chrome / macOS', time: '2024-05-28 10:15:50', status: 'success' }
-]);
+const allRecords = ref<OperationRecord[]>([]);
 
 const typeOptions = [
   { label: '全部类型', value: 'all' },
@@ -103,6 +89,22 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
   profile: { icon: 'carbon:user', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20' },
   delete: { icon: 'carbon:trash-can', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20' }
 };
+
+function formatTime(value: string) {
+  if (!value) return '--';
+  return value.replace('T', ' ').substring(0, 19);
+}
+
+async function loadRecords() {
+  loading.value = true;
+  const { data, error } = await fetchGetOperationRecords();
+  loading.value = false;
+  if (!error && data) {
+    allRecords.value = data as OperationRecord[];
+  }
+}
+
+onMounted(loadRecords);
 </script>
 
 <template>
@@ -128,6 +130,7 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
     </div>
 
     <!-- 记录列表 -->
+    <NSpin :show="loading">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
       <div v-if="pagedRecords.length > 0" class="divide-y divide-gray-100 dark:divide-gray-700">
         <div
@@ -154,7 +157,7 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-5 break-all">{{ record.detail }}</p>
               </div>
 
-              <span class="text-xs text-gray-400 flex-shrink-0 leading-5 whitespace-nowrap">{{ record.time }}</span>
+              <span class="text-xs text-gray-400 flex-shrink-0 leading-5 whitespace-nowrap">{{ formatTime(record.time) }}</span>
             </div>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-gray-400">
@@ -190,5 +193,6 @@ const typeConfig: Record<OpType, { icon: string; color: string; bg: string }> = 
         />
       </div>
     </div>
+    </NSpin>
   </div>
 </template>

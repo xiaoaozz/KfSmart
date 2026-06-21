@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { fetchChangePassword } from '@/service/api';
 import { fetchLoginStatistics } from '@/service/api/login-record';
 
 defineOptions({ name: 'AccountSecurity' });
@@ -7,6 +8,8 @@ defineOptions({ name: 'AccountSecurity' });
 const changePwdVisible = ref(false);
 const changePwdLoading = ref(false);
 const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' });
+const authStore = useAuthStore();
+const { userInfo } = storeToRefs(authStore);
 
 async function submitChangePwd() {
   if (!pwdForm.value.oldPwd || !pwdForm.value.newPwd) {
@@ -17,15 +20,25 @@ async function submitChangePwd() {
     window.$message?.error('两次输入的密码不一致');
     return;
   }
+  if (pwdForm.value.newPwd.length < 8) {
+    window.$message?.error('新密码不能少于8位');
+    return;
+  }
   changePwdLoading.value = true;
-  await new Promise(r => setTimeout(r, 800));
+  const { error } = await fetchChangePassword(pwdForm.value.oldPwd, pwdForm.value.newPwd);
   changePwdLoading.value = false;
+  if (error) return;
   changePwdVisible.value = false;
   window.$message?.success('密码修改成功');
   pwdForm.value = { oldPwd: '', newPwd: '', confirmPwd: '' };
 }
 
-const securityItems = [
+const hasEmail = computed(() => Boolean(userInfo.value.email));
+const hasPhone = computed(() => Boolean(userInfo.value.phone));
+const securityScore = computed(() => 40 + (hasEmail.value ? 25 : 0) + (hasPhone.value ? 25 : 0));
+const scoreColor = computed(() => (securityScore.value >= 80 ? '#16A34A' : securityScore.value >= 60 ? '#F97316' : '#EF4444'));
+
+const securityItems = computed(() => [
   {
     id: 'pwd',
     title: '登录密码',
@@ -39,19 +52,19 @@ const securityItems = [
     id: 'email',
     title: '绑定邮箱',
     desc: '绑定邮箱可用于找回密码、接收通知',
-    status: '未绑定',
-    level: 'warning' as const,
-    action: '立即绑定',
-    onClick: () => { window.$message?.info('邮箱绑定功能即将开放'); }
+    status: hasEmail.value ? '已绑定' : '未绑定',
+    level: hasEmail.value ? 'success' as const : 'warning' as const,
+    action: hasEmail.value ? '修改' : '立即绑定',
+    onClick: () => { window.$message?.info('请在个人资料中维护联系邮箱'); }
   },
   {
     id: 'phone',
     title: '手机验证',
     desc: '绑定手机号，开启短信验证保护账号',
-    status: '未绑定',
-    level: 'warning' as const,
-    action: '立即绑定',
-    onClick: () => { window.$message?.info('手机绑定功能即将开放'); }
+    status: hasPhone.value ? '已绑定' : '未绑定',
+    level: hasPhone.value ? 'success' as const : 'warning' as const,
+    action: hasPhone.value ? '修改' : '立即绑定',
+    onClick: () => { window.$message?.info('请在个人资料中维护联系电话'); }
   },
   {
     id: 'twofa',
@@ -62,7 +75,7 @@ const securityItems = [
     action: '开启',
     onClick: () => { window.$message?.info('双因素认证功能即将开放'); }
   }
-];
+]);
 
 const loginRecords = ref<Array<{ time: string; ip: string; device: string; location: string; status: string }>>([]);
 const loginRecordsLoading = ref(false);
@@ -121,11 +134,11 @@ onMounted(() => {
           <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">完善安全设置可提升账号保护等级</p>
         </div>
         <div class="text-right">
-          <span class="text-2xl font-bold text-orange-500">40</span>
+          <span class="text-2xl font-bold" :style="{ color: scoreColor }">{{ securityScore }}</span>
           <span class="text-xs text-gray-400 ml-1">/ 100</span>
         </div>
       </div>
-      <NProgress type="line" :percentage="40" indicator-placement="inside" color="#F97316" />
+      <NProgress type="line" :percentage="securityScore" indicator-placement="inside" :color="scoreColor" />
     </div>
 
     <!-- 安全项列表 -->
