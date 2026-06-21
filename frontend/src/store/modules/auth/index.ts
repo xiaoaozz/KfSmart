@@ -28,6 +28,10 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     primaryOrg: '',
     avatar: '',
     avatarVersion: Date.now(),
+    email: '',
+    phone: '',
+    bio: '',
+    notificationPreferences: undefined,
     permissions: [] as string[] // RBAC 权限编码列表
   });
 

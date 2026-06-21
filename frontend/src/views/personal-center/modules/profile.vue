@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { UploadCustomRequestOptions, UploadFileInfo } from 'naive-ui';
-import { fetchUpdateUserAvatar } from '@/service/api';
+import { fetchUpdateUserAvatar, fetchUpdateUserProfile } from '@/service/api';
 import { useUserAvatar } from '@/utils/avatar';
 
 defineOptions({ name: 'PersonalProfile' });
@@ -19,12 +19,33 @@ const form = ref({
   bio: '',
 });
 
+function syncFormFromStore() {
+  form.value = {
+    email: userInfo.value.email || '',
+    phone: userInfo.value.phone || '',
+    bio: userInfo.value.bio || ''
+  };
+}
+
 async function saveProfile() {
   saving.value = true;
-  await new Promise(r => setTimeout(r, 800));
+  const { data, error } = await fetchUpdateUserProfile({
+    email: form.value.email,
+    phone: form.value.phone,
+    bio: form.value.bio
+  });
   saving.value = false;
+  if (error) {
+    return;
+  }
+  Object.assign(userInfo.value, data);
   editing.value = false;
   window.$message?.success('个人资料保存成功');
+}
+
+function cancelEdit() {
+  syncFormFromStore();
+  editing.value = false;
 }
 
 function beforeAvatarUpload({ file }: { file: UploadFileInfo }) {
@@ -67,6 +88,16 @@ async function uploadAvatar({ file, onFinish, onError }: UploadCustomRequestOpti
 }
 
 const bioLength = computed(() => form.value.bio.length);
+
+watch(
+  userInfo,
+  () => {
+    if (!editing.value) {
+      syncFormFromStore();
+    }
+  },
+  { immediate: true, deep: true }
+);
 </script>
 
 <template>
@@ -112,7 +143,7 @@ const bioLength = computed(() => form.value.bio.length);
               姓名
             </div>
             <div class="flex-1 px-5 py-3.5 text-sm text-gray-800 dark:text-gray-100 flex items-center">
-              {{ userInfo.username }}
+              {{ userInfo.email || '未设置' }}
             </div>
           </div>
         </div>
@@ -195,7 +226,7 @@ const bioLength = computed(() => form.value.bio.length);
 
         <!-- 编辑模式下的操作按钮 -->
         <div v-if="editing" class="flex justify-end gap-2 mt-4">
-          <NButton size="small" @click="editing = false">取消</NButton>
+          <NButton size="small" @click="cancelEdit">取消</NButton>
           <NButton size="small" type="primary" :loading="saving" @click="saveProfile">保存修改</NButton>
         </div>
       </div>

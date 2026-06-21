@@ -69,6 +69,18 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl; // 用户头像访问地址
 
+    @Column(name = "email", length = 128)
+    private String email;
+
+    @Column(name = "phone", length = 32)
+    private String phone;
+
+    @Column(name = "bio", columnDefinition = "TEXT")
+    private String bio;
+
+    @Column(name = "notification_preferences", columnDefinition = "TEXT")
+    private String notificationPreferences;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

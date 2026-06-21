@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FavoriteButton from '@/components/common/favorite-button.vue';
+
 defineOptions({
   name: 'SessionList'
 });
@@ -235,6 +237,15 @@ function renderHighlightedText(text: string) {
                     </template>
                     {{ session.isPinned ? '取消置顶' : '置顶' }}
                   </NButton>
+
+                  <FavoriteButton
+                    type="chat"
+                    :target-id="session.id"
+                    :title="session.title || '新会话'"
+                    :description="session.lastMessage || session.targetDescription || ''"
+                    :meta="`${session.messageCount || 0} 条消息`"
+                    show-label
+                  />
 
                   <NButton
                     text

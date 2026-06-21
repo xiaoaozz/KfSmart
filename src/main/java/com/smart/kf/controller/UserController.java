@@ -4,14 +4,18 @@ import com.smart.kf.exception.CustomException;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.KnowledgeBase;
 import com.smart.kf.model.User;
+import com.smart.kf.model.UserFavorite;
 import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.KnowledgeBaseRepository;
+import com.smart.kf.repository.LoginRecordRepository;
+import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
+import com.smart.kf.utils.PasswordUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -63,6 +67,12 @@ public class UserController {
     private RbacService rbacService;
     @Autowired
     private KnowledgeBaseRepository knowledgeBaseRepository;
+
+    @Autowired
+    private UserFavoriteRepository userFavoriteRepository;
+
+    @Autowired
+    private LoginRecordRepository loginRecordRepository;
 
     // 用户注册接口
     // 接收用户请求体中的用户名和密码，并调用用户服务进行注册
@@ -190,6 +200,10 @@ public class UserController {
             // 添加主组织标签信息
             displayUserData.put("primaryOrg", user.getPrimaryOrg());
             displayUserData.put("avatar", user.getAvatarUrl());
+            displayUserData.put("email", user.getEmail());
+            displayUserData.put("phone", user.getPhone());
+            displayUserData.put("bio", user.getBio());
+            displayUserData.put("notificationPreferences", parseNotificationPreferences(user.getNotificationPreferences()));
             
             // 添加 RBAC 权限编码列表（用于前端菜单/按钮权限控制）
             Set<String> permissions = rbacService.getUserPermissions(username);
@@ -211,6 +225,114 @@ public class UserController {
             LogUtils.logBusinessError("GET_USER_INFO", username, "获取用户信息异常: %s", e, e.getMessage());
             monitor.end("获取用户信息异常: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateCurrentUserProfile(
+            @RequestHeader("Authorization") String token,
+            @RequestBody UpdateProfileRequest request) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("UPDATE_USER_PROFILE");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+
+            String email = normalizeText(request.email(), 128);
+            String phone = normalizeText(request.phone(), 32);
+            String bio = normalizeText(request.bio(), 500);
+            if (email != null && !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new CustomException("邮箱格式不正确", HttpStatus.BAD_REQUEST);
+            }
+            if (phone != null && !phone.matches("^[0-9+\\-()\\s]{6,32}$")) {
+                throw new CustomException("手机号格式不正确", HttpStatus.BAD_REQUEST);
+            }
+
+            user.setEmail(email);
+            user.setPhone(phone);
+            user.setBio(bio);
+            userRepository.save(user);
+
+            LogUtils.logUserOperation(username, "UPDATE_PROFILE", "profile", "SUCCESS");
+            monitor.end("更新个人资料成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Profile updated successfully", "data", buildUserProfileData(user)));
+        } catch (CustomException e) {
+            monitor.end("更新个人资料失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("UPDATE_USER_PROFILE", username, "更新个人资料异常: %s", e, e.getMessage());
+            monitor.end("更新个人资料异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    @PutMapping("/me/password")
+    public ResponseEntity<?> changeCurrentUserPassword(
+            @RequestHeader("Authorization") String token,
+            @RequestBody ChangePasswordRequest request) {
+        LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("CHANGE_PASSWORD");
+        String username = null;
+        try {
+            username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            if (request.oldPassword() == null || request.newPassword() == null || request.newPassword().length() < 8) {
+                throw new CustomException("新密码不能少于8位", HttpStatus.BAD_REQUEST);
+            }
+            if (!PasswordUtil.matches(request.oldPassword(), user.getPassword())) {
+                throw new CustomException("当前密码不正确", HttpStatus.BAD_REQUEST);
+            }
+            if (PasswordUtil.matches(request.newPassword(), user.getPassword())) {
+                throw new CustomException("新密码不能与当前密码相同", HttpStatus.BAD_REQUEST);
+            }
+
+            user.setPassword(PasswordUtil.encode(request.newPassword()));
+            userRepository.save(user);
+
+            LogUtils.logUserOperation(username, "CHANGE_PASSWORD", "password", "SUCCESS");
+            monitor.end("修改密码成功");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Password changed successfully"));
+        } catch (CustomException e) {
+            monitor.end("修改密码失败: " + e.getMessage());
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("CHANGE_PASSWORD", username, "修改密码异常: %s", e, e.getMessage());
+            monitor.end("修改密码异常: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
+        }
+    }
+
+    @GetMapping("/notification-preferences")
+    public ResponseEntity<?> getNotificationPreferences(@RequestHeader("Authorization") String token) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Get notification preferences successful", "data", parseNotificationPreferences(user.getNotificationPreferences())));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/notification-preferences")
+    public ResponseEntity<?> updateNotificationPreferences(
+            @RequestHeader("Authorization") String token,
+            @RequestBody Map<String, Boolean> preferences) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            Map<String, Boolean> normalized = defaultNotificationPreferences();
+            if (preferences != null) {
+                preferences.forEach((key, value) -> {
+                    if (normalized.containsKey(key) && value != null) {
+                        normalized.put(key, value);
+                    }
+                });
+            }
+            user.setNotificationPreferences(serializeNotificationPreferences(normalized));
+            userRepository.save(user);
+            LogUtils.logUserOperation(username, "UPDATE_NOTIFICATION_PREFS", "notification_preferences", "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Notification preferences updated successfully", "data", normalized));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
         }
     }
 
@@ -526,9 +648,149 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "Internal server error"));
         }
     }
+
+    @GetMapping("/favorites")
+    public ResponseEntity<?> getFavorites(@RequestHeader("Authorization") String token) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            List<Map<String, Object>> favorites = userFavoriteRepository.findByUserOrderByUpdatedAtDesc(user)
+                    .stream()
+                    .map(this::buildFavoriteData)
+                    .toList();
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Get favorites successful", "data", favorites));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/favorites")
+    public ResponseEntity<?> saveFavorite(
+            @RequestHeader("Authorization") String token,
+            @RequestBody FavoriteRequest request) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            validateFavoriteRequest(request);
+            UserFavorite favorite = userFavoriteRepository
+                    .findByUserAndTypeAndTargetId(user, request.type(), request.targetId())
+                    .orElseGet(UserFavorite::new);
+            favorite.setUser(user);
+            favorite.setType(request.type());
+            favorite.setTargetId(request.targetId());
+            favorite.setTitle(normalizeText(request.title(), 255));
+            favorite.setDescription(normalizeText(request.description(), 1000));
+            favorite.setMeta(normalizeText(request.meta(), 128));
+            favorite.setStarred(request.starred() == null || request.starred());
+            UserFavorite saved = userFavoriteRepository.save(favorite);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Favorite saved successfully", "data", buildFavoriteData(saved)));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/favorites/{id}/starred")
+    public ResponseEntity<?> updateFavoriteStarred(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long id,
+            @RequestBody Map<String, Boolean> request) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            UserFavorite favorite = userFavoriteRepository.findByIdAndUser(id, user)
+                    .orElseThrow(() -> new CustomException("收藏不存在", HttpStatus.NOT_FOUND));
+            favorite.setStarred(Boolean.TRUE.equals(request.get("starred")));
+            UserFavorite saved = userFavoriteRepository.save(favorite);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Favorite updated successfully", "data", buildFavoriteData(saved)));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/favorites/{id}")
+    public ResponseEntity<?> deleteFavorite(@RequestHeader("Authorization") String token, @PathVariable Long id) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            UserFavorite favorite = userFavoriteRepository.findByIdAndUser(id, user)
+                    .orElseThrow(() -> new CustomException("收藏不存在", HttpStatus.NOT_FOUND));
+            userFavoriteRepository.delete(favorite);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Favorite deleted successfully"));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/operation-records")
+    public ResponseEntity<?> getOperationRecords(@RequestHeader("Authorization") String token) {
+        try {
+            String username = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            User user = requireCurrentUser(username);
+            List<Map<String, Object>> records = new ArrayList<>();
+            loginRecordRepository.findTop10ByUserIdOrderByLoginTimeDesc(user.getId()).forEach(record -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "login-" + record.getId());
+                item.put("type", "login");
+                item.put("action", "SUCCESS".equals(record.getStatus()) ? "用户登录" : "登录失败");
+                item.put("detail", "SUCCESS".equals(record.getStatus()) ? "账号密码登录成功" : (record.getFailReason() == null ? "登录失败" : record.getFailReason()));
+                item.put("ip", record.getIpAddress());
+                item.put("device", record.getDeviceInfo());
+                item.put("time", record.getLoginTime());
+                item.put("status", "SUCCESS".equals(record.getStatus()) ? "success" : "failed");
+                records.add(item);
+            });
+            findOwnFiles(user).forEach(file -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "file-" + file.getId());
+                item.put("type", "upload");
+                item.put("action", file.getStatus() == 1 ? "上传文档" : "上传处理中");
+                item.put("detail", "上传文件「" + file.getFileName() + "」" + (file.getKbId() == null ? "" : "到知识库 " + file.getKbId()));
+                item.put("ip", "--");
+                item.put("device", "--");
+                item.put("time", file.getCreatedAt());
+                item.put("status", file.getStatus() == 1 ? "success" : "failed");
+                records.add(item);
+            });
+            conversationRepository.findByUserId(user.getId()).forEach(conversation -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "chat-" + conversation.getId());
+                item.put("type", "chat");
+                item.put("action", "发起对话");
+                item.put("detail", truncateOperationDetail(conversation.getQuestion()));
+                item.put("ip", "--");
+                item.put("device", "--");
+                item.put("time", conversation.getTimestamp());
+                item.put("status", "success");
+                records.add(item);
+            });
+            knowledgeBaseRepository.findByCreatedBy(user).forEach(kb -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", "kb-" + kb.getId());
+                item.put("type", "knowledge");
+                item.put("action", "创建知识库");
+                item.put("detail", "创建知识库「" + kb.getName() + "」");
+                item.put("ip", "--");
+                item.put("device", "--");
+                item.put("time", kb.getCreatedAt());
+                item.put("status", "success");
+                records.add(item);
+            });
+
+            records.sort((a, b) -> String.valueOf(b.get("time")).compareTo(String.valueOf(a.get("time"))));
+            return ResponseEntity.ok(Map.of("code", 200, "message", "Get operation records successful", "data", records.stream().limit(200).toList()));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        }
+    }
     
     // 用户请求记录类
     public record UserRequest(String username, String password) {}
+
+    public record UpdateProfileRequest(String email, String phone, String bio) {}
+
+    public record ChangePasswordRequest(String oldPassword, String newPassword) {}
+
+    public record FavoriteRequest(String type, String targetId, String title, String description, String meta, Boolean starred) {}
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
@@ -590,12 +852,106 @@ public class UserController {
         stats.put("knowledgeBaseCount", ownKnowledgeBases.size());
         stats.put("weekActiveDays", weekActiveDays);
         stats.put("totalStorage", totalStorage);
-        stats.put("favoriteCount", 0);
+        stats.put("favoriteCount", userFavoriteRepository.countByUser(user));
         stats.put("usageTrends", usageTrends);
         stats.put("topKnowledgeBases", buildTopKnowledgeBases(ownKnowledgeBases, completedFiles));
         stats.put("featureUsage", buildFeatureUsage(totalConversations, completedFiles.size(), ownKnowledgeBases.size()));
         stats.put("rangeDays", days);
         return stats;
+    }
+
+    private User requireCurrentUser(String username) {
+        if (username == null || username.isEmpty()) {
+            throw new CustomException("Invalid token", HttpStatus.UNAUTHORIZED);
+        }
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
+    }
+
+    private Map<String, Object> buildUserProfileData(User user) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("email", user.getEmail());
+        data.put("phone", user.getPhone());
+        data.put("bio", user.getBio());
+        data.put("updatedAt", user.getUpdatedAt());
+        return data;
+    }
+
+    private String normalizeText(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.length() > maxLength) {
+            throw new CustomException("输入内容长度不能超过 " + maxLength + " 个字符", HttpStatus.BAD_REQUEST);
+        }
+        return normalized;
+    }
+
+    private Map<String, Boolean> defaultNotificationPreferences() {
+        Map<String, Boolean> defaults = new LinkedHashMap<>();
+        defaults.put("systemAlert", true);
+        defaults.put("newMessage", true);
+        defaults.put("knowledgeUpdate", true);
+        defaults.put("uploadComplete", true);
+        defaults.put("mentionMe", true);
+        defaults.put("weeklyReport", false);
+        defaults.put("emailDigest", false);
+        defaults.put("browserPush", false);
+        return defaults;
+    }
+
+    private Map<String, Boolean> parseNotificationPreferences(String raw) {
+        Map<String, Boolean> preferences = defaultNotificationPreferences();
+        if (raw == null || raw.isBlank()) {
+            return preferences;
+        }
+        for (String pair : raw.split(";")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && preferences.containsKey(parts[0])) {
+                preferences.put(parts[0], Boolean.parseBoolean(parts[1]));
+            }
+        }
+        return preferences;
+    }
+
+    private String serializeNotificationPreferences(Map<String, Boolean> preferences) {
+        return preferences.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(";"));
+    }
+
+    private void validateFavoriteRequest(FavoriteRequest request) {
+        if (request == null || request.type() == null || request.targetId() == null || request.title() == null) {
+            throw new CustomException("收藏类型、目标和标题不能为空", HttpStatus.BAD_REQUEST);
+        }
+        if (!Set.of("chat", "agent", "workflow", "knowledge", "document", "prompt", "skill", "mcp_tool", "model").contains(request.type())) {
+            throw new CustomException("收藏类型不支持", HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private Map<String, Object> buildFavoriteData(UserFavorite favorite) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", favorite.getId());
+        data.put("type", favorite.getType());
+        data.put("targetId", favorite.getTargetId());
+        data.put("title", favorite.getTitle());
+        data.put("desc", favorite.getDescription());
+        data.put("meta", favorite.getMeta());
+        data.put("starred", favorite.isStarred());
+        data.put("createdAt", favorite.getCreatedAt());
+        data.put("updatedAt", favorite.getUpdatedAt());
+        return data;
+    }
+
+    private String truncateOperationDetail(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() <= 80 ? text : text.substring(0, 80) + "...";
     }
 
     private List<FileUpload> findOwnFiles(User user) {

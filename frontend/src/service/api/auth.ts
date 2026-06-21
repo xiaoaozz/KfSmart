@@ -49,6 +49,64 @@ export function fetchUpdateUserAvatar(file: File) {
   });
 }
 
+/** Update current user profile */
+export function fetchUpdateUserProfile(data: Pick<Api.User.Profile, 'email' | 'phone' | 'bio'>) {
+  return request<Api.User.Profile>({
+    url: '/users/me',
+    method: 'put',
+    data
+  });
+}
+
+/** Change current user password */
+export function fetchChangePassword(oldPassword: string, newPassword: string) {
+  return request({
+    url: '/users/me/password',
+    method: 'put',
+    data: { oldPassword, newPassword }
+  });
+}
+
+export function fetchGetNotificationPreferences() {
+  return request<Api.User.NotificationPreferences>({ url: '/users/notification-preferences' });
+}
+
+export function fetchUpdateNotificationPreferences(data: Api.User.NotificationPreferences) {
+  return request<Api.User.NotificationPreferences>({
+    url: '/users/notification-preferences',
+    method: 'put',
+    data
+  });
+}
+
+export function fetchGetFavorites() {
+  return request<Api.User.FavoriteItem[]>({ url: '/users/favorites' });
+}
+
+export function fetchSaveFavorite(data: Api.User.FavoritePayload) {
+  return request<Api.User.FavoriteItem>({
+    url: '/users/favorites',
+    method: 'post',
+    data
+  });
+}
+
+export function fetchUpdateFavoriteStarred(id: number, starred: boolean) {
+  return request<Api.User.FavoriteItem>({
+    url: `/users/favorites/${id}/starred`,
+    method: 'put',
+    data: { starred }
+  });
+}
+
+export function fetchDeleteFavorite(id: number) {
+  return request({ url: `/users/favorites/${id}`, method: 'delete' });
+}
+
+export function fetchGetOperationRecords() {
+  return request<Api.User.OperationRecord[]>({ url: '/users/operation-records' });
+}
+
 /** Get personal usage statistics */
 export function fetchGetUsageStats(days: 7 | 30 = 7) {
   return request<Api.User.UsageStats>({ url: '/users/usage-stats', params: { days } });

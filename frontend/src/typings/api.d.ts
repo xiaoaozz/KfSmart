@@ -50,6 +50,10 @@ declare namespace Api {
       primaryOrg: string;
       avatar?: string | null;
       avatarVersion?: number;
+      email?: string | null;
+      phone?: string | null;
+      bio?: string | null;
+      notificationPreferences?: User.NotificationPreferences;
       /** RBAC 权限编码列表（如 ['kb:read', 'kb:write', 'chat:use']） */
       permissions: string[];
     }
@@ -163,6 +167,58 @@ declare namespace Api {
       topKnowledgeBases: TopKnowledgeBase[];
       featureUsage: FeatureUsage[];
       rangeDays: number;
+    }
+
+    interface Profile {
+      email?: string | null;
+      phone?: string | null;
+      bio?: string | null;
+      updatedAt?: string;
+    }
+
+    interface NotificationPreferences {
+      systemAlert: boolean;
+      newMessage: boolean;
+      knowledgeUpdate: boolean;
+      uploadComplete: boolean;
+      mentionMe: boolean;
+      weeklyReport: boolean;
+      emailDigest: boolean;
+      browserPush: boolean;
+    }
+
+    type FavoriteType = 'chat' | 'agent' | 'workflow' | 'knowledge' | 'document' | 'prompt' | 'skill' | 'mcp_tool' | 'model' | string;
+
+    interface FavoritePayload {
+      type: FavoriteType;
+      targetId: string;
+      title: string;
+      description?: string | null;
+      meta?: string | null;
+      starred?: boolean;
+    }
+
+    interface FavoriteItem {
+      id: number;
+      type: FavoriteType;
+      targetId: string;
+      title: string;
+      desc?: string | null;
+      meta?: string | null;
+      starred: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }
+
+    interface OperationRecord {
+      id: string;
+      type: 'login' | 'upload' | 'chat' | 'knowledge' | 'profile' | 'delete';
+      action: string;
+      detail: string;
+      ip: string;
+      device: string;
+      time: string;
+      status: 'success' | 'failed';
     }
   }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NButton, NEmpty, NInput, NSpin, NTag } from 'naive-ui';
 import { fetchAgentModels } from '@/service/api/resource';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 
 const loading = ref(false);
 const keyword = ref('');
@@ -133,6 +134,13 @@ onMounted(loadModels);
                 </div>
                 <p class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{{ model.name }}</p>
               </div>
+              <FavoriteButton
+                type="model"
+                :target-id="model.modelName || model.name || model.id"
+                :title="model.modelName || model.name"
+                :description="model.description"
+                :meta="model.providerLabel || model.provider || ''"
+              />
             </div>
 
             <p class="mb-4 line-clamp-3 min-h-15 text-sm leading-5 text-gray-600 dark:text-gray-300">

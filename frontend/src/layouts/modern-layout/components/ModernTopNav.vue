@@ -3,7 +3,8 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/modules/auth';
 import { useRouterPush } from '@/hooks/common/router';
-import { getAvatarText, getVersionedAvatarUrl } from '@/utils/avatar';
+import { getAvatarText } from '@/utils/avatar';
+import { Avatar } from '@/components/base';
 
 defineOptions({
   name: 'ModernTopNav'
@@ -12,7 +13,6 @@ defineOptions({
 const router = useRouter();
 const authStore = useAuthStore();
 const { toLogin } = useRouterPush();
-const avatarUrl = computed(() => getVersionedAvatarUrl(authStore.userInfo.avatar, authStore.userInfo.avatarVersion));
 const avatarText = computed(() => getAvatarText(authStore.userInfo.username));
 
 // 导航菜单配置
@@ -37,7 +37,7 @@ const navMenus = computed(() => [
 const currentPath = computed(() => router.currentRoute.value.path);
 
 function isActive(path: string) {
-  return currentPath.value === path || currentPath.value.startsWith(path + '/');
+  return currentPath.value === path || currentPath.value.startsWith(`${path}/`);
 }
 
 function navigateTo(path: string) {
@@ -91,6 +91,8 @@ function handleUserMenuSelect(key: string) {
     case 'logout':
       handleLogout();
       break;
+    default:
+      break;
   }
 }
 </script>
@@ -115,10 +117,11 @@ function handleUserMenuSelect(key: string) {
           <button
             v-for="menu in navMenus"
             :key="menu.path"
-            :class="['nav-item', { active: isActive(menu.path) }]"
+            class="nav-item"
+            :class="{ active: isActive(menu.path) }"
             @click="navigateTo(menu.path)"
           >
-            <div :class="[menu.icon, 'nav-icon']" />
+            <div class="nav-icon" :class="menu.icon" />
             <span class="nav-label">{{ menu.name }}</span>
           </button>
         </div>
@@ -147,22 +150,19 @@ function handleUserMenuSelect(key: string) {
         <!-- 用户头像 -->
         <div class="user-avatar-section">
           <NDropdown :options="userMenuOptions" @select="handleUserMenuSelect">
-            <div class="user-avatar">
-              <div v-if="avatarUrl" class="avatar-img">
-                <img :src="avatarUrl" alt="User Avatar" />
-              </div>
-              <div v-else class="avatar-placeholder">
-                {{ avatarText }}
-              </div>
-            </div>
+            <Avatar
+              :src="authStore.userInfo.avatar || ''"
+              :text="avatarText"
+              :version="authStore.userInfo.avatarVersion"
+              :size="36"
+              class="user-avatar"
+            />
           </NDropdown>
         </div>
       </div>
     </div>
   </header>
 </template>
-
-
 
 <style scoped lang="scss">
 .modern-top-nav {
@@ -352,41 +352,13 @@ function handleUserMenuSelect(key: string) {
 /* 用户头像 */
 .user-avatar-section {
   .user-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    overflow: hidden;
     cursor: pointer;
     border: 2px solid rgba(102, 126, 234, 0.2);
     transition: all 0.2s ease;
 
     &:hover {
       border-color: #667eea;
-      transform: scale(1.1);
       box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    }
-
-    .avatar-img {
-      width: 100%;
-      height: 100%;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-    }
-
-    .avatar-placeholder {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #5865f2 0%, #3ba55c 100%);
-      color: white;
-      font-weight: 700;
-      font-size: 16px;
     }
   }
 }

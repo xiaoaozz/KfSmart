@@ -22,6 +22,7 @@ import {
   fetchSaveMcpTool,
   fetchTestMcpTool
 } from '@/service/api/resource';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 
 type McpToolForm = Partial<Api.AgentCenter.McpTool> & {
   enabled?: boolean;
@@ -290,9 +291,18 @@ function deleteTool(toolId: string) {
                 </div>
               </div>
             </div>
-            <NTag :type="item.status === '在线' ? 'success' : 'warning'" size="small" :bordered="false">
-              {{ item.status }}
-            </NTag>
+            <div class="flex shrink-0 items-center gap-1">
+              <FavoriteButton
+                type="mcp_tool"
+                :target-id="item.toolId"
+                :title="item.name"
+                :description="item.description"
+                :meta="item.toolName || item.requestMode || ''"
+              />
+              <NTag :type="item.status === '在线' ? 'success' : 'warning'" size="small" :bordered="false">
+                {{ item.status }}
+              </NTag>
+            </div>
           </div>
 
           <p class="mb-3 line-clamp-2 min-h-38px text-sm text-gray-600 dark:text-gray-300">

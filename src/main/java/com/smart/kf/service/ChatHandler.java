@@ -46,6 +46,7 @@ public class ChatHandler {
     private static final Duration CONVERSATION_TTL = Duration.ofDays(7);
     private static final int CHUNK_CONTEXT_EXPAND_COUNT = 1;
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String CHAT_SESSION_SCOPE = "chat";
 
     private enum StreamTerminalState {
         ACTIVE,
@@ -218,8 +219,8 @@ public class ChatHandler {
     }
 
     public void ensureLegacyConversationIndex(String userId, List<String> legacyUserIds) {
-        boolean hasCurrentData = !getUserConversationIds(userId).isEmpty()
-                || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId)));
+        boolean hasCurrentData = !getUserConversationIds(userId, CHAT_SESSION_SCOPE).isEmpty()
+                || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId, CHAT_SESSION_SCOPE)));
         if (hasCurrentData) {
             return;
         }
@@ -232,17 +233,21 @@ public class ChatHandler {
             List<String> legacyConversationIds = getConversationIdsFromKey(userConversationIdsKey(legacyUserId));
             if (!legacyConversationIds.isEmpty()) {
                 for (int i = legacyConversationIds.size() - 1; i >= 0; i--) {
-                    attachConversationToUser(userId, legacyConversationIds.get(i));
+                    String conversationId = legacyConversationIds.get(i);
+                    Map<String, Object> meta = getConversationMeta(conversationId);
+                    if (isChatSession(meta)) {
+                        attachConversationToUser(userId, conversationId);
+                    }
                 }
             }
 
             String legacyCurrentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(legacyUserId));
-            if (hasText(legacyCurrentConversationId)) {
+            if (hasText(legacyCurrentConversationId) && isChatSession(getConversationMeta(legacyCurrentConversationId))) {
                 attachConversationToUser(userId, legacyCurrentConversationId);
             }
 
-            if (!getUserConversationIds(userId).isEmpty()
-                    || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId)))) {
+            if (!getUserConversationIds(userId, CHAT_SESSION_SCOPE).isEmpty()
+                    || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId, CHAT_SESSION_SCOPE)))) {
                 logger.info("已为用户 {} 迁移旧会话索引，来源用户键: {}", userId, legacyUserId);
                 return;
             }
@@ -250,17 +255,29 @@ public class ChatHandler {
     }
 
     public String getCurrentConversationId(String userId) {
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId));
+        return getCurrentConversationId(userId, CHAT_SESSION_SCOPE);
+    }
+
+    private String getCurrentConversationId(String userId, Map<String, Object> metadata) {
+        return getCurrentConversationId(userId, sessionScope(metadata));
+    }
+
+    private String getCurrentConversationId(String userId, String scope) {
+        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
         if (hasText(currentConversationId)) {
-            attachConversationToUser(userId, currentConversationId);
-            return currentConversationId;
+            if (matchesSessionScope(getConversationMeta(currentConversationId), scope)) {
+                attachConversationToUser(userId, currentConversationId);
+                return currentConversationId;
+            }
+            redisTemplate.delete(userCurrentConversationKey(userId, scope));
         }
 
-        List<String> conversationIds = getUserConversationIds(userId);
-        if (!conversationIds.isEmpty()) {
-            currentConversationId = conversationIds.get(0);
-            redisTemplate.opsForValue().set(userCurrentConversationKey(userId), currentConversationId, CONVERSATION_TTL);
-            return currentConversationId;
+        List<String> conversationIds = getUserConversationIds(userId, scope);
+        for (String conversationId : conversationIds) {
+            if (matchesSessionScope(getConversationMeta(conversationId), scope)) {
+                redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), conversationId, CONVERSATION_TTL);
+                return conversationId;
+            }
         }
 
         return null;
@@ -271,12 +288,19 @@ public class ChatHandler {
             return false;
         }
 
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId));
+        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
+        if (userId.equals(toStringValue(sessionMeta.get("userId"), ""))) {
+            return true;
+        }
+
+        String scope = sessionScope(sessionMeta);
+        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
         if (conversationId.equals(currentConversationId)) {
             return true;
         }
 
-        return getUserConversationIds(userId).contains(conversationId);
+        return getUserConversationIds(userId, scope).contains(conversationId)
+                || getUserConversationIds(userId, CHAT_SESSION_SCOPE).contains(conversationId);
     }
 
     public List<Map<String, Object>> getConversationMessages(String userId, String conversationId) {
@@ -304,16 +328,32 @@ public class ChatHandler {
         return messages;
     }
 
-    public List<Map<String, Object>> getConversationSessions(String userId) {
-        return getConversationSessions(userId, null, null, null);
-    }
-
     public List<Map<String, Object>> getConversationSessions(String userId, String sessionType, String targetType, String targetId) {
-        List<String> conversationIds = getUserConversationIds(userId);
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId));
+        String scope = sessionScope(sessionType, targetType, targetId);
+        List<String> conversationIds = getUserConversationIds(userId, scope);
+        List<String> legacyConversationIds = CHAT_SESSION_SCOPE.equals(scope)
+                ? conversationIds
+                : getUserConversationIds(userId, CHAT_SESSION_SCOPE);
+        for (String legacyConversationId : legacyConversationIds) {
+            if (conversationIds.contains(legacyConversationId)) {
+                continue;
+            }
+            Map<String, Object> legacyMeta = getConversationMeta(legacyConversationId);
+            if (matchesSessionFilters(legacyMeta, sessionType, targetType, targetId)) {
+                conversationIds.add(legacyConversationId);
+                attachConversationToUser(userId, legacyConversationId);
+            }
+        }
+
+        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
         if (hasText(currentConversationId) && !conversationIds.contains(currentConversationId)) {
-            conversationIds.add(0, currentConversationId);
-            saveUserConversationIds(userId, conversationIds);
+            Map<String, Object> currentMeta = getConversationMeta(currentConversationId);
+            if (matchesSessionFilters(currentMeta, sessionType, targetType, targetId)) {
+                conversationIds.add(0, currentConversationId);
+                saveUserConversationIds(userId, scope, conversationIds);
+            } else {
+                redisTemplate.delete(userCurrentConversationKey(userId, scope));
+            }
         }
 
         List<Map<String, Object>> sessions = new ArrayList<>();
@@ -332,12 +372,8 @@ public class ChatHandler {
         return sessions;
     }
 
-    public Map<String, Object> createConversationSession(String userId) {
-        return createConversationSession(userId, null);
-    }
-
     public Map<String, Object> createConversationSession(String userId, Map<String, Object> metadata) {
-        String currentConversationId = getCurrentConversationId(userId);
+        String currentConversationId = getCurrentConversationId(userId, metadata);
         if (hasText(currentConversationId)
                 && isConversationEmpty(currentConversationId)
                 && currentConversationMatches(currentConversationId, metadata)) {
@@ -374,21 +410,29 @@ public class ChatHandler {
             throw new CustomException("会话不存在或无权删除", HttpStatus.NOT_FOUND);
         }
 
-        List<String> conversationIds = getUserConversationIds(userId);
+        List<String> conversationIds;
+        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
+        String scope = sessionScope(sessionMeta);
+        conversationIds = getUserConversationIds(userId, scope);
         conversationIds.removeIf(conversationId::equals);
-        saveUserConversationIds(userId, conversationIds);
+        saveUserConversationIds(userId, scope, conversationIds);
+
+        List<String> legacyConversationIds = getUserConversationIds(userId, CHAT_SESSION_SCOPE);
+        if (!CHAT_SESSION_SCOPE.equals(scope) && legacyConversationIds.removeIf(conversationId::equals)) {
+            saveUserConversationIds(userId, CHAT_SESSION_SCOPE, legacyConversationIds);
+        }
 
         redisTemplate.delete(conversationHistoryKey(conversationId));
         redisTemplate.delete(conversationMetaKey(conversationId));
 
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId));
+        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
         String nextConversationId = null;
         if (conversationId.equals(currentConversationId)) {
             if (!conversationIds.isEmpty()) {
                 nextConversationId = conversationIds.get(0);
-                redisTemplate.opsForValue().set(userCurrentConversationKey(userId), nextConversationId, CONVERSATION_TTL);
+                redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), nextConversationId, CONVERSATION_TTL);
             } else {
-                redisTemplate.delete(userCurrentConversationKey(userId));
+                redisTemplate.delete(userCurrentConversationKey(userId, scope));
             }
         } else if (hasText(currentConversationId)) {
             nextConversationId = currentConversationId;
@@ -469,13 +513,14 @@ public class ChatHandler {
             return;
         }
 
-        List<String> conversationIds = getUserConversationIds(userId);
+        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
+        String scope = sessionScope(sessionMeta);
+        List<String> conversationIds = getUserConversationIds(userId, scope);
         conversationIds.removeIf(conversationId::equals);
         conversationIds.add(0, conversationId);
-        saveUserConversationIds(userId, conversationIds);
-        redisTemplate.opsForValue().set(userCurrentConversationKey(userId), conversationId, CONVERSATION_TTL);
+        saveUserConversationIds(userId, scope, conversationIds);
+        redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), conversationId, CONVERSATION_TTL);
 
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
         if (sessionMeta.isEmpty()) {
             saveConversationMeta(conversationId, buildConversationMetaFromHistory(userId, conversationId, getConversationHistory(conversationId)));
         } else {
@@ -484,8 +529,8 @@ public class ChatHandler {
         redisTemplate.expire(conversationHistoryKey(conversationId), CONVERSATION_TTL);
     }
 
-    private List<String> getUserConversationIds(String userId) {
-        return getConversationIdsFromKey(userConversationIdsKey(userId));
+    private List<String> getUserConversationIds(String userId, String scope) {
+        return getConversationIdsFromKey(userConversationIdsKey(userId, scope));
     }
 
     private List<String> getConversationIdsFromKey(String key) {
@@ -503,10 +548,10 @@ public class ChatHandler {
         }
     }
 
-    private void saveUserConversationIds(String userId, List<String> conversationIds) {
+    private void saveUserConversationIds(String userId, String scope, List<String> conversationIds) {
         try {
             String json = objectMapper.writeValueAsString(conversationIds);
-            redisTemplate.opsForValue().set(userConversationIdsKey(userId), json, CONVERSATION_TTL);
+            redisTemplate.opsForValue().set(userConversationIdsKey(userId, scope), json, CONVERSATION_TTL);
         } catch (JsonProcessingException e) {
             logger.error("序列化会话索引失败: {}, userId={}", e.getMessage(), userId, e);
         }
@@ -598,6 +643,9 @@ public class ChatHandler {
     }
 
     private boolean matchesSessionFilters(Map<String, Object> meta, String sessionType, String targetType, String targetId) {
+        if (!hasText(sessionType) && !hasText(targetType) && !hasText(targetId)) {
+            return isChatSession(meta);
+        }
         return matchesMetaValue(meta.get("sessionType"), sessionType)
                 && matchesMetaValue(meta.get("targetType"), targetType)
                 && matchesMetaValue(meta.get("targetId"), targetId);
@@ -618,6 +666,43 @@ public class ChatHandler {
         return matchesMetaValue(currentMeta.get("sessionType"), toStringValue(metadata.get("sessionType"), ""))
                 && matchesMetaValue(currentMeta.get("targetType"), toStringValue(metadata.get("targetType"), ""))
                 && matchesMetaValue(currentMeta.get("targetId"), toStringValue(metadata.get("targetId"), ""));
+    }
+
+    private boolean isChatSession(Map<String, Object> meta) {
+        return meta == null || !hasText(toStringValue(meta.get("sessionType"), ""));
+    }
+
+    private boolean matchesSessionScope(Map<String, Object> meta, String scope) {
+        if (CHAT_SESSION_SCOPE.equals(scope)) {
+            return isChatSession(meta);
+        }
+        return scope.equals(sessionScope(meta));
+    }
+
+    private String sessionScope(Map<String, Object> meta) {
+        if (meta == null || meta.isEmpty()) {
+            return CHAT_SESSION_SCOPE;
+        }
+        return sessionScope(
+                toStringValue(meta.get("sessionType"), ""),
+                toStringValue(meta.get("targetType"), ""),
+                toStringValue(meta.get("targetId"), "")
+        );
+    }
+
+    private String sessionScope(String sessionType, String targetType, String targetId) {
+        if (!hasText(sessionType)) {
+            return CHAT_SESSION_SCOPE;
+        }
+
+        StringBuilder scope = new StringBuilder(sessionType.trim());
+        if (hasText(targetType)) {
+            scope.append(':').append(targetType.trim());
+        }
+        if (hasText(targetId)) {
+            scope.append(':').append(targetId.trim());
+        }
+        return scope.toString();
     }
 
     private void applyExtraSessionMeta(Map<String, Object> targetMeta, Map<String, Object> extraMeta) {
@@ -1179,11 +1264,25 @@ public class ChatHandler {
     }
 
     private String userConversationIdsKey(String userId) {
-        return "user:" + userId + ":conversation_ids";
+        return userConversationIdsKey(userId, CHAT_SESSION_SCOPE);
+    }
+
+    private String userConversationIdsKey(String userId, String scope) {
+        if (CHAT_SESSION_SCOPE.equals(scope)) {
+            return "user:" + userId + ":conversation_ids";
+        }
+        return "user:" + userId + ":conversation_ids:" + scope;
     }
 
     private String userCurrentConversationKey(String userId) {
-        return "user:" + userId + ":current_conversation";
+        return userCurrentConversationKey(userId, CHAT_SESSION_SCOPE);
+    }
+
+    private String userCurrentConversationKey(String userId, String scope) {
+        if (CHAT_SESSION_SCOPE.equals(scope)) {
+            return "user:" + userId + ":current_conversation";
+        }
+        return "user:" + userId + ":current_conversation:" + scope;
     }
 
     private String currentTimestamp() {

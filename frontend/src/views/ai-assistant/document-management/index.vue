@@ -1,14 +1,13 @@
 <script setup lang="tsx">
-import { NButton, NDataTable, NInput, NModal, NPagination, NPopconfirm, NSelect, NTag, NTooltip } from 'naive-ui';
+import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NPopconfirm, NScrollbar, NSelect, NSpin, NTag } from 'naive-ui';
+import debounce from 'lodash-es/debounce';
 import { fakePaginationRequest } from '@/service/request';
+import { fetchGetKnowledgeBaseFilterOptions, fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
+import { fileSize, getFileExt } from '@/utils/common';
 import { UploadStatus } from '@/enum';
+import FavoriteButton from '@/components/common/favorite-button.vue';
 import FilePreview from '@/components/custom/file-preview.vue';
 import UploadDialog from '@/views/ai-assistant/knowledge-base/modules/upload-dialog.vue';
-import { fetchGetKnowledgeBases, fetchGetKnowledgeBaseFilterOptions } from '@/service/api/knowledge-base';
-import { getFileExt } from '@/utils/common';
-import debounce from 'lodash-es/debounce';
-
-const appStore = useAppStore();
 
 // --------- Tab ---------
 const activeTab = ref<'all' | 'mine' | 'recent'>('all');
@@ -22,6 +21,8 @@ const tabOptions = [
 const searchKeyword = ref('');
 const selectedFileType = ref('');
 const selectedKbId = ref('');
+const categoryMode = ref<'tab' | 'type' | 'kb'>('tab');
+const activeCategory = ref('全部');
 
 // --------- 筛选选项 ---------
 const filterOptions = ref<Api.KnowledgeBase.KnowledgeBaseFilterOptions>({
@@ -40,7 +41,8 @@ async function loadFilterOptions() {
     fetchGetKnowledgeBases({ size: 100 })
   ]);
   if (!filterRes.error && filterRes.data) filterOptions.value = filterRes.data;
-  if (!kbRes.error && kbRes.data) knowledgeBases.value = kbRes.data.records || kbRes.data.content || kbRes.data.data || [];
+  if (!kbRes.error && kbRes.data)
+    knowledgeBases.value = kbRes.data.records || kbRes.data.content || kbRes.data.data || [];
 }
 
 const kbSelectOptions = computed(() => [
@@ -53,10 +55,32 @@ const fileTypeSelectOptions = computed(() => [
   ...filterOptions.value.fileTypes.map(t => ({ label: t, value: t }))
 ]);
 
+const categoryList = computed(() => {
+  if (categoryMode.value === 'tab') return tabOptions.map(item => item.label);
+  if (categoryMode.value === 'type') return fileTypeSelectOptions.value.filter(item => item.value).map(item => item.label);
+  return knowledgeBases.value.map(item => item.name);
+});
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { '全部': data.value.length };
+  data.value.forEach(item => {
+    const tabKey = activeTab.value === 'mine' ? '我创建的' : activeTab.value === 'recent' ? '最近更新' : '全部文档';
+    const typeKey = getFileType(item.fileName);
+    const kbKey = getKbName(item.kbId);
+    const key = categoryMode.value === 'tab' ? tabKey : categoryMode.value === 'type' ? typeKey : kbKey;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+});
+
 // --------- 文件预览 ---------
 const previewVisible = ref(false);
 const previewFileName = ref('');
 const previewFileMd5 = ref('');
+const previewModalStyle = {
+  width: '760px',
+  maxWidth: 'calc(100vw - 32px)'
+};
 
 function getPreviewFileIcon() {
   const ext = getFileExt(previewFileName.value);
@@ -71,12 +95,6 @@ function handleFilePreview(fileName: string, fileMd5: string) {
   previewFileName.value = fileName;
   previewFileMd5.value = fileMd5;
   previewVisible.value = true;
-}
-
-function closeFilePreview() {
-  previewVisible.value = false;
-  previewFileName.value = '';
-  previewFileMd5.value = '';
 }
 
 async function handleDownloadPreview() {
@@ -121,7 +139,7 @@ async function handleDownloadPreview() {
       }
     }
   } catch (err: any) {
-    window.$message?.error('下载失败：' + (err.message || '网络错误'));
+    window.$message?.error(`下载失败：${err.message || '网络错误'}`);
   }
 }
 
@@ -140,165 +158,83 @@ function apiFn(pageParams?: Api.Common.CommonSearchParams) {
 
 // 文件类型图标映射（carbon 图标 + 背景色 + 图标色，风格与知识库图标一致）
 const fileIconMap: Record<string, { icon: string; bg: string; color: string }> = {
-  pdf:  { icon: 'icon-carbon-document-pdf',          bg: 'bg-red-50',     color: 'text-red-500' },
-  doc:  { icon: 'icon-carbon-document-word',         bg: 'bg-blue-50',    color: 'text-blue-600' },
-  docx: { icon: 'icon-carbon-document-word',         bg: 'bg-blue-50',    color: 'text-blue-600' },
-  xls:  { icon: 'icon-carbon-document-spreadsheet',  bg: 'bg-green-50',   color: 'text-green-600' },
-  xlsx: { icon: 'icon-carbon-document-spreadsheet',  bg: 'bg-green-50',   color: 'text-green-600' },
-  ppt:  { icon: 'icon-carbon-document-presentation', bg: 'bg-orange-50',  color: 'text-orange-500' },
-  pptx: { icon: 'icon-carbon-document-presentation', bg: 'bg-orange-50',  color: 'text-orange-500' },
-  txt:  { icon: 'icon-carbon-document-text',         bg: 'bg-gray-50',    color: 'text-gray-500' },
-  md:   { icon: 'icon-carbon-document',              bg: 'bg-slate-50',   color: 'text-slate-600' },
-  jpg:  { icon: 'icon-carbon-image',                 bg: 'bg-purple-50',  color: 'text-purple-500' },
-  jpeg: { icon: 'icon-carbon-image',                 bg: 'bg-purple-50',  color: 'text-purple-500' },
-  png:  { icon: 'icon-carbon-image',                 bg: 'bg-purple-50',  color: 'text-purple-500' },
-  gif:  { icon: 'icon-carbon-image',                 bg: 'bg-purple-50',  color: 'text-purple-500' },
-  csv:  { icon: 'icon-carbon-data-table',            bg: 'bg-teal-50',    color: 'text-teal-600' },
-  json: { icon: 'icon-carbon-document',              bg: 'bg-yellow-50',  color: 'text-yellow-600' },
-  zip:  { icon: 'icon-carbon-zip',                   bg: 'bg-gray-50',    color: 'text-gray-500' },
+  pdf: { icon: 'icon-carbon-document-pdf', bg: 'bg-red-50', color: 'text-red-500' },
+  doc: { icon: 'icon-carbon-document-word-processor', bg: 'bg-blue-50', color: 'text-blue-600' },
+  docx: { icon: 'icon-carbon-document-word-processor', bg: 'bg-blue-50', color: 'text-blue-600' },
+  xls: { icon: 'icon-carbon-data-table', bg: 'bg-green-50', color: 'text-green-600' },
+  xlsx: { icon: 'icon-carbon-data-table', bg: 'bg-green-50', color: 'text-green-600' },
+  ppt: { icon: 'icon-carbon-document', bg: 'bg-orange-50', color: 'text-orange-500' },
+  pptx: { icon: 'icon-carbon-document', bg: 'bg-orange-50', color: 'text-orange-500' },
+  txt: { icon: 'icon-carbon-document', bg: 'bg-gray-50', color: 'text-gray-500' },
+  md: { icon: 'icon-carbon-document', bg: 'bg-slate-50', color: 'text-slate-600' },
+  jpg: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
+  jpeg: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
+  png: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
+  gif: { icon: 'icon-carbon-image', bg: 'bg-purple-50', color: 'text-purple-500' },
+  csv: { icon: 'icon-carbon-data-table', bg: 'bg-teal-50', color: 'text-teal-600' },
+  json: { icon: 'icon-carbon-document', bg: 'bg-yellow-50', color: 'text-yellow-600' },
+  zip: { icon: 'icon-carbon-zip', bg: 'bg-gray-50', color: 'text-gray-500' }
 };
 
-function renderIcon(fileName: string) {
+function getFileIconConfig(fileName: string) {
   const ext = getFileExt(fileName)?.toLowerCase();
-  const cfg = ext
+  return ext
     ? (fileIconMap[ext] ?? { icon: 'icon-carbon-document', bg: 'bg-gray-50', color: 'text-gray-400' })
     : { icon: 'icon-carbon-document', bg: 'bg-gray-50', color: 'text-gray-400' };
-  return (
-    <div class={`w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
-      <span class={`${cfg.icon} ${cfg.color} text-base`} />
-    </div>
-  );
 }
 
 const store = useKnowledgeBaseStore();
 const { tasks } = storeToRefs(store);
 
-const { columns, data, getData, getDataByPage, loading, mobilePagination } = useTable({
+const { data, getData, getDataByPage, loading, mobilePagination } = useTable({
   apiFn,
   immediate: false,
-  columns: () => [
-    {
-      key: 'fileName',
-      title: '文档名称',
-      width: 200,
-      align: 'left',
-      titleAlign: 'left',
-      render: row => {
-        const displayName = row.fileName.length > 20 ? row.fileName.slice(0, 20) + '…' : row.fileName;
-        return (
-          <div class="flex items-center gap-1.5">
-            {renderIcon(row.fileName)}
-            <NTooltip placement="top" trigger="hover" style="max-width: 420px">
-              {{
-                trigger: () => (
-                  <span
-                    class="cursor-pointer hover:text-primary transition-colors truncate"
-                    style="max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block;"
-                    onClick={() => handleFilePreview(row.fileName, row.fileMd5)}
-                  >
-                    {displayName}
-                  </span>
-                ),
-                default: () => row.fileName
-              }}
-            </NTooltip>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'kbId',
-      title: '知识库',
-      width: 140,
-      align: 'left',
-      titleAlign: 'left',
-      render: row => {
-        const kb = knowledgeBases.value.find(k => k.kbId === row.kbId);
-        const name = kb?.name || row.kbId || '-';
-        return (
-          <NTooltip placement="top" trigger="hover" style="max-width: 300px">
-            {{
-              trigger: () => (
-                <span style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 120px; display: inline-block;">
-                  {name}
-                </span>
-              ),
-              default: () => name
-            }}
-          </NTooltip>
-        );
-      }
-    },
-    {
-      key: 'status',
-      title: '类型',
-      width: 80,
-      align: 'center',
-      titleAlign: 'center',
-      render: row => {
-        const ext = getFileExt(row.fileName);
-        return <NTag size="small">{ext?.toUpperCase() || '-'}</NTag>;
-      }
-    },
-    {
-      key: 'totalSize',
-      title: '大小',
-      width: 100,
-      align: 'center',
-      titleAlign: 'center',
-      render: row => fileSize(row.totalSize)
-    },
-    {
-      key: 'createdAt',
-      title: '更新时间',
-      width: 160,
-      align: 'center',
-      titleAlign: 'center',
-      render: row => dayjs(row.createdAt).format('YYYY-MM-DD HH:mm')
-    },
-    {
-      key: 'operate',
-      title: '操作',
-      width: 160,
-      align: 'center',
-      titleAlign: 'center',
-      render: row => (
-        <div class="flex items-center justify-center gap-2">
-          <NButton
-            text
-            size="small"
-            type="primary"
-            onClick={() => handleFilePreview(row.fileName, row.fileMd5)}
-          >
-            预览
-          </NButton>
-          <NButton
-            text
-            size="small"
-            type="info"
-            onClick={async () => {
-              previewFileName.value = row.fileName;
-              previewFileMd5.value = row.fileMd5;
-              await handleDownloadPreview();
-            }}
-          >
-            下载
-          </NButton>
-          <NPopconfirm onPositiveClick={() => handleDelete(row.fileMd5)}>
-            {{
-              trigger: () => (
-                <NButton text size="small" type="error">
-                  删除
-                </NButton>
-              ),
-              default: () => '确认删除该文档吗？此操作不可撤销。'
-            }}
-          </NPopconfirm>
-        </div>
-      )
-    }
-  ]
+  columns: () => []
 });
+
+const selectedFileMd5 = ref('');
+
+const selectedDocument = computed(
+  () => data.value.find(item => item.fileMd5 === selectedFileMd5.value) || data.value[0] || null
+);
+
+function selectDocument(row: Api.KnowledgeBase.UploadTask) {
+  selectedFileMd5.value = row.fileMd5;
+}
+
+function getKbName(kbId?: string | null) {
+  return knowledgeBases.value.find(kb => kb.kbId === kbId)?.name || kbId || '-';
+}
+
+function getFileType(fileName: string) {
+  return getFileExt(fileName)?.toUpperCase() || 'FILE';
+}
+
+function formatTime(time?: string) {
+  return time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-';
+}
+
+function getUploadStatusText(status?: UploadStatus | string) {
+  if (status === UploadStatus.Uploading) return '上传中';
+  if (status === UploadStatus.Completed) return '已上传';
+  if (status === UploadStatus.Pending) return '等待中';
+  if (status === UploadStatus.Paused) return '已暂停';
+  if (status === UploadStatus.Break) return '已中断';
+  return status || '已上传';
+}
+
+function getUploadStatusType(status?: UploadStatus | string) {
+  if (status === UploadStatus.Break) return 'error';
+  if (status === UploadStatus.Uploading) return 'info';
+  if (status === UploadStatus.Pending || status === UploadStatus.Paused) return 'warning';
+  return 'success';
+}
+
+async function downloadDocument(row: Api.KnowledgeBase.UploadTask) {
+  previewFileName.value = row.fileName;
+  previewFileMd5.value = row.fileMd5;
+  await handleDownloadPreview();
+}
 
 async function handleDelete(fileMd5: string) {
   const { error } = await request({ url: `/documents/${fileMd5}`, method: 'DELETE' });
@@ -314,6 +250,25 @@ const debouncedSearch = debounce(() => getDataByPage(), 300);
 // --------- Tab 切换 ---------
 function onTabChange(val: string) {
   activeTab.value = val as 'all' | 'mine' | 'recent';
+  getDataByPage();
+}
+
+function switchCategoryMode(mode: 'tab' | 'type' | 'kb') {
+  categoryMode.value = mode;
+  activeCategory.value = '全部';
+}
+
+function handleCategoryClick(category: string) {
+  activeCategory.value = category;
+  if (categoryMode.value === 'tab') {
+    const target = tabOptions.find(item => item.label === category);
+    activeTab.value = (target?.value || 'all') as 'all' | 'mine' | 'recent';
+  } else if (categoryMode.value === 'type') {
+    selectedFileType.value = category === '全部' ? '' : category;
+  } else {
+    const target = knowledgeBases.value.find(item => item.name === category);
+    selectedKbId.value = target?.kbId || '';
+  }
   getDataByPage();
 }
 
@@ -334,6 +289,12 @@ watch(
   }
 );
 
+watch(data, list => {
+  if (!list.some(item => item.fileMd5 === selectedFileMd5.value)) {
+    selectedFileMd5.value = list[0]?.fileMd5 || '';
+  }
+});
+
 onMounted(async () => {
   await loadFilterOptions();
   await getData();
@@ -341,111 +302,362 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="doc-management-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-    <div class="px-8 py-6 flex-1 min-h-0 flex flex-col">
-      <!-- 标题 -->
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-5">文档管理</h1>
-
-      <!-- Tab -->
-      <div class="flex items-center gap-0 mb-5 border-b border-gray-200 dark:border-gray-700">
-        <button
-          v-for="tab in tabOptions"
-          :key="tab.value"
-          :class="[
-            'px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px bg-transparent',
-            activeTab === tab.value
-              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          ]"
-          @click="onTabChange(tab.value)"
-        >
-          {{ tab.label }}
-        </button>
+  <div class="doc-management-page h-full flex flex-col bg-[#f5f7fa] dark:bg-[#101014]">
+    <div class="min-h-0 flex-1 overflow-hidden lg:flex">
+      <div class="w-180px flex-shrink-0 border-r border-gray-200 bg-white dark:border-gray-700 dark:bg-[#18181c] flex flex-col">
+        <div class="px-4 pb-2 pt-4">
+          <h2 class="mb-3 text-sm text-gray-800 font-semibold dark:text-gray-100">文档分类</h2>
+          <div class="grid grid-cols-3 rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800">
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'tab' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('tab')"
+            >
+              范围
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'type' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('type')"
+            >
+              类型
+            </button>
+            <button
+              class="rounded-md py-1 text-xs font-medium transition-all"
+              :class="categoryMode === 'kb' ? 'bg-white text-gray-800 shadow-sm dark:bg-[#1e1e22] dark:text-gray-100' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
+              @click="switchCategoryMode('kb')"
+            >
+              知识库
+            </button>
+          </div>
+        </div>
+        <NScrollbar class="flex-1">
+          <div class="space-y-0.5 px-2 pt-1">
+            <div
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === '全部' ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick('全部')"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:catalog class="text-base" />
+                  <span class="truncate">全部</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts['全部'] ?? 0 }}</span>
+              </div>
+            </div>
+            <div
+              v-for="cat in categoryList"
+              :key="cat"
+              class="cursor-pointer rounded-lg px-3 py-2 text-sm transition-all"
+              :class="activeCategory === cat ? 'bg-primary-50 text-primary-600 font-medium dark:bg-primary-900/20 dark:text-primary-400' : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'"
+              @click="handleCategoryClick(cat)"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex min-w-0 items-center gap-2">
+                  <icon-carbon:tag class="text-base" />
+                  <span class="truncate">{{ cat }}</span>
+                </div>
+                <span class="text-xs opacity-60">{{ categoryCounts[cat] ?? 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </NScrollbar>
       </div>
 
-      <!-- 工具栏 -->
-      <div class="flex items-center gap-3 mb-4">
-        <!-- 搜索框 -->
-        <NInput
-          v-model:value="searchKeyword"
-          placeholder="搜索文档名称或关键词"
-          clearable
-          class="max-w-220px"
-          @input="debouncedSearch"
-          @clear="debouncedSearch"
-        >
-          <template #prefix>
-            <icon-carbon:search class="text-gray-400" />
+      <div class="min-w-0 flex flex-1 flex-col">
+        <div class="flex items-center justify-between border-b border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
+          <div class="flex items-center gap-2">
+            <NInput
+              v-model:value="searchKeyword"
+              placeholder="搜索文档名称或关键词"
+              clearable
+              class="w-220px"
+              size="small"
+              @input="debouncedSearch"
+              @clear="debouncedSearch"
+            >
+              <template #prefix>
+                <icon-carbon:search class="text-gray-400" />
+              </template>
+            </NInput>
+            <NSelect
+              v-model:value="selectedFileType"
+              :options="fileTypeSelectOptions"
+              placeholder="全部类型"
+              class="w-130px"
+              size="small"
+              @update:value="getDataByPage"
+            />
+            <NSelect
+              v-model:value="selectedKbId"
+              :options="kbSelectOptions"
+              placeholder="全部知识库"
+              class="w-160px"
+              size="small"
+              @update:value="getDataByPage"
+            />
+          </div>
+          <NButton size="small" type="primary" @click="handleUpload">
+            <template #icon><icon-carbon:add /></template>
+            上传文档
+          </NButton>
+        </div>
+
+        <div class="min-h-0 flex flex-1 overflow-hidden">
+          <div class="min-w-0 flex-1 border-r border-gray-100 dark:border-gray-700">
+            <NScrollbar class="h-full">
+          <NSpin :show="loading">
+            <div v-if="data.length === 0 && !loading" class="py-20">
+              <NEmpty description="暂无文档">
+                <template #extra>
+                  <NButton size="small" type="primary" @click="handleUpload">上传文档</NButton>
+                </template>
+              </NEmpty>
+            </div>
+            <div v-else class="grid grid-cols-1 gap-3 p-4 xl:grid-cols-2">
+              <div
+                v-for="item in data"
+                :key="item.fileMd5"
+                class="cursor-pointer border rounded-xl bg-white p-4 transition-all dark:bg-[#1e1e22] hover:shadow-md"
+                :class="
+                  selectedDocument?.fileMd5 === item.fileMd5
+                    ? 'border-primary-400 shadow-sm ring-1 ring-primary-200 dark:border-primary-500 dark:ring-primary-800'
+                    : 'border-gray-200 hover:border-primary-300 dark:border-gray-700 dark:hover:border-primary-600'
+                "
+                @click="selectDocument(item)"
+              >
+                <div class="mb-3 flex items-start justify-between gap-3">
+                  <div class="min-w-0 flex items-center gap-3">
+                    <div
+                      class="h-10 w-10 flex flex-shrink-0 items-center justify-center rounded-xl"
+                      :class="getFileIconConfig(item.fileName).bg"
+                    >
+                      <span
+                        class="text-xl"
+                        :class="[getFileIconConfig(item.fileName).icon, getFileIconConfig(item.fileName).color]"
+                      />
+                    </div>
+                    <div class="min-w-0">
+                      <h3
+                        class="truncate text-sm text-gray-900 font-semibold transition-colors dark:text-gray-100 hover:text-primary-600"
+                        @click.stop="handleFilePreview(item.fileName, item.fileMd5)"
+                      >
+                        {{ item.fileName }}
+                      </h3>
+                      <p class="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                        {{ getKbName(item.kbId) }}
+                      </p>
+                    </div>
+                  </div>
+                  <div class="flex flex-shrink-0 items-center gap-1">
+                    <FavoriteButton
+                      type="document"
+                      :target-id="item.fileMd5"
+                      :title="item.fileName"
+                      :description="getKbName(item.kbId)"
+                      :meta="`${getFileType(item.fileName)} · ${fileSize(item.totalSize || 0)}`"
+                    />
+                    <NTag size="small" :bordered="false">{{ getFileType(item.fileName) }}</NTag>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-2 text-center dark:bg-[#18181c]">
+                  <div>
+                    <div class="truncate text-sm text-gray-900 font-semibold dark:text-gray-100">
+                      {{ fileSize(item.totalSize || 0) }}
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">大小</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-gray-900 font-semibold dark:text-gray-100">
+                      {{ item.progress ?? 100 }}%
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">进度</div>
+                  </div>
+                  <div>
+                    <div class="truncate text-sm text-gray-900 font-semibold dark:text-gray-100">
+                      {{ getUploadStatusText(item.status) }}
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">状态</div>
+                  </div>
+                </div>
+
+                <div class="mt-3 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                  <span class="min-w-0 flex items-center gap-1">
+                    <icon-carbon:time class="text-sm" />
+                    <span>{{ formatTime(item.createdAt || item.mergedAt) }}</span>
+                  </span>
+                  <div class="flex items-center gap-2">
+                    <NButton
+                      text
+                      size="tiny"
+                      type="primary"
+                      @click.stop="handleFilePreview(item.fileName, item.fileMd5)"
+                    >
+                      预览
+                    </NButton>
+                    <NButton text size="tiny" type="info" @click.stop="downloadDocument(item)">下载</NButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </NSpin>
+            </NScrollbar>
+        </div>
+
+        <div class="w-380px flex-shrink-0 bg-white dark:bg-[#18181c]">
+          <template v-if="selectedDocument">
+            <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-700">
+              <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">文档详情</h2>
+            </div>
+            <div class="p-5 space-y-4">
+              <div class="flex items-start gap-3">
+                <div
+                  class="h-12 w-12 flex flex-shrink-0 items-center justify-center rounded-xl"
+                  :class="getFileIconConfig(selectedDocument.fileName).bg"
+                >
+                  <span
+                    class="text-2xl"
+                    :class="[
+                      getFileIconConfig(selectedDocument.fileName).icon,
+                      getFileIconConfig(selectedDocument.fileName).color
+                    ]"
+                  />
+                </div>
+                <div class="min-w-0">
+                  <h3 class="break-all text-base text-gray-900 font-semibold dark:text-gray-50">
+                    {{ selectedDocument.fileName }}
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ getKbName(selectedDocument.kbId) }}</p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <NTag type="info" :bordered="false" size="small">{{ getFileType(selectedDocument.fileName) }}</NTag>
+                <NTag :type="getUploadStatusType(selectedDocument.status)" :bordered="false" size="small">
+                  {{ getUploadStatusText(selectedDocument.status) }}
+                </NTag>
+              </div>
+
+              <NDivider class="!my-2" />
+
+              <div class="grid grid-cols-3 gap-2">
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="truncate text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ fileSize(selectedDocument.totalSize || 0) }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">文件大小</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ selectedDocument.progress ?? 100 }}%
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">处理进度</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="truncate text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ selectedDocument.uploadedChunks?.length || 0 }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">分片</div>
+                </div>
+              </div>
+
+              <div class="text-sm space-y-2">
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">知识库</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">{{ getKbName(selectedDocument.kbId) }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">权限</span>
+                  <span class="text-gray-700 dark:text-gray-300">
+                    {{ selectedDocument.isPublic || selectedDocument.public ? '公开' : '私有' }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">组织标签</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">
+                    {{ selectedDocument.orgTagName || selectedDocument.orgTag || '-' }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">上传时间</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{ formatTime(selectedDocument.createdAt) }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">完成时间</span>
+                  <span class="text-gray-700 dark:text-gray-300">{{ formatTime(selectedDocument.mergedAt) }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">MD5</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">{{ selectedDocument.fileMd5 }}</span>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2 pt-2">
+                <FavoriteButton
+                  type="document"
+                  :target-id="selectedDocument.fileMd5"
+                  :title="selectedDocument.fileName"
+                  :description="getKbName(selectedDocument.kbId)"
+                  :meta="`${getFileType(selectedDocument.fileName)} · ${fileSize(selectedDocument.totalSize || 0)}`"
+                  size="small"
+                  :text="false"
+                  show-label
+                />
+                <NButton
+                  size="small"
+                  type="primary"
+                  @click="handleFilePreview(selectedDocument.fileName, selectedDocument.fileMd5)"
+                >
+                  <template #icon><icon-carbon:view /></template>
+                  预览
+                </NButton>
+                <NButton size="small" secondary type="info" @click="downloadDocument(selectedDocument)">
+                  <template #icon><icon-mdi-download /></template>
+                  下载
+                </NButton>
+                <NPopconfirm @positive-click="handleDelete(selectedDocument.fileMd5)">
+                  <template #trigger>
+                    <NButton size="small" secondary type="error">
+                      <template #icon><icon-carbon:trash-can /></template>
+                      删除
+                    </NButton>
+                  </template>
+                  确认删除该文档吗？此操作不可撤销。
+                </NPopconfirm>
+              </div>
+            </div>
           </template>
-        </NInput>
-
-        <!-- 文件类型 -->
-        <NSelect
-          v-model:value="selectedFileType"
-          :options="fileTypeSelectOptions"
-          placeholder="全部类型"
-          class="w-130px"
-          size="medium"
-          @update:value="getDataByPage"
-        />
-
-        <!-- 所属知识库 -->
-        <NSelect
-          v-model:value="selectedKbId"
-          :options="kbSelectOptions"
-          placeholder="全部知识库"
-          class="w-150px"
-          size="medium"
-          @update:value="getDataByPage"
-        />
-
-        <div class="flex-1" />
-
-        <!-- 上传文档按钮 -->
-        <NButton type="primary" @click="handleUpload">
-          <template #icon>
-            <icon-carbon:add />
-          </template>
-          上传文档
-        </NButton>
-      </div>
-
-      <!-- 表格 -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <NDataTable
-          striped
-          :columns="columns"
-          :data="data"
-          size="medium"
-          :scroll-x="800"
-          :loading="loading"
-          :row-key="row => row.fileMd5"
-          remote
-          :pagination="false"
-          class="doc-table"
-        />
+          <div v-else class="py-20">
+            <NEmpty description="选择一个文档查看详情" />
+          </div>
+        </div>
+        </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+        <div class="flex justify-end border-t border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-[#18181c]">
           <NPagination v-bind="mobilePagination" />
         </div>
       </div>
     </div>
 
     <!-- 上传文档对话框 -->
-    <UploadDialog
-      v-model:visible="uploadVisible"
-      :active-kb-id="activeKbForUpload"
-      @submitted="getData"
-    />
+    <UploadDialog v-model:visible="uploadVisible" :active-kb-id="activeKbForUpload" @submitted="getData" />
 
     <!-- 文件预览弹窗 -->
-    <NModal v-model:show="previewVisible" preset="card" style="width: 80%; max-width: 1000px;">
+    <NModal
+      v-model:show="previewVisible"
+      preset="card"
+      class="doc-preview-modal"
+      :style="previewModalStyle"
+      :bordered="false"
+    >
       <template #header>
-        <div class="flex items-center justify-between w-full">
+        <div class="w-full flex items-center justify-between">
           <div class="flex items-center gap-2">
             <SvgIcon :local-icon="getPreviewFileIcon()" class="text-16" />
-            <span class="font-medium">{{ previewFileName }}</span>
+            <span class="max-w-590px truncate font-medium">{{ previewFileName }}</span>
           </div>
           <NButton size="small" @click="handleDownloadPreview">
             <template #icon>
@@ -455,12 +667,8 @@ onMounted(async () => {
           </NButton>
         </div>
       </template>
-      <div>
-        <FilePreview
-          :file-name="previewFileName"
-          :file-md5="previewFileMd5"
-          :visible="previewVisible"
-        />
+      <div class="doc-preview-body">
+        <FilePreview :file-name="previewFileName" :file-md5="previewFileMd5" :visible="previewVisible" />
       </div>
     </NModal>
   </div>
@@ -478,22 +686,49 @@ onMounted(async () => {
   ::-webkit-scrollbar-thumb {
     background: #d1d5db;
     border-radius: 3px;
-    &:hover { background: #9ca3af; }
+    &:hover {
+      background: #9ca3af;
+    }
   }
 }
 
-/* 表格行间距优化 */
-:deep(.doc-table) {
-  .n-data-table-th,
-  .n-data-table-td {
-    padding-top: 12px;
-    padding-bottom: 12px;
+.min-h-520px {
+  min-height: 520px;
+}
+
+:deep(.doc-preview-modal) {
+  border-radius: 10px;
+}
+
+:deep(.doc-preview-modal .n-card-header) {
+  padding: 14px 18px;
+}
+
+:deep(.doc-preview-modal .n-card__content) {
+  padding: 0;
+}
+
+.doc-preview-body {
+  max-height: min(68vh, 640px);
+  overflow: auto;
+  padding: 12px 14px 14px;
+}
+
+:deep(.doc-preview-body img),
+:deep(.doc-preview-body canvas),
+:deep(.doc-preview-body iframe),
+:deep(.doc-preview-body video) {
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  :deep(.doc-preview-modal) {
+    max-width: calc(100vw - 24px);
   }
 
-  // 首列左侧与页面边距对齐
-  th:first-child,
-  td:first-child {
-    padding-left: 40px !important;
+  .doc-preview-body {
+    max-height: 74vh;
+    padding: 12px;
   }
 }
 </style>

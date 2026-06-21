@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { NAvatar, NButton, NEmpty, NInput, NPagination, NScrollbar, NSpin, NTag, NTooltip } from 'naive-ui';
+import { storeToRefs } from 'pinia';
+import { NButton, NEmpty, NInput, NPagination, NScrollbar, NSpin, NTag, NTooltip } from 'naive-ui';
 import { VueMarkdownIt, VueMarkdownItProvider } from 'vue-markdown-shiki';
 import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
 import {
@@ -15,6 +16,8 @@ import {
   fetchUpdateConversationPin,
   fetchWorkflowExecutionDetail
 } from '@/service/api';
+import { useAuthStore } from '@/store/modules/auth';
+import { getAvatarText, useUserAvatar } from '@/utils/avatar';
 
 defineOptions({
   name: 'RuntimeCenter'
@@ -36,6 +39,9 @@ type TraceItem = {
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
+const { userInfo } = storeToRefs(authStore);
+const { avatarText } = useUserAvatar(userInfo);
 
 const catalogLoading = ref(false);
 const sessionsLoading = ref(false);
@@ -92,6 +98,7 @@ const pagedApps = computed(() => {
 const activeApp = computed(() => allApps.value.find(item => item.id === selectedAppId.value) || null);
 const runtimeType = computed<RuntimeType>(() => activeApp.value?.type || 'agent');
 const isExecutionView = computed(() => Boolean(activeApp.value));
+const assistantAvatarText = computed(() => getAvatarText(activeApp.value?.name || getAppTypeLabel(runtimeType.value)));
 
 const runtimeStats = computed(() => {
   const items = allApps.value;
@@ -220,6 +227,12 @@ function renderResultContent(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+function handleCopy(content: unknown) {
+  const text = renderResultContent(content);
+  navigator.clipboard.writeText(text);
+  window.$message?.success('已复制');
 }
 
 async function loadCatalog() {
@@ -649,8 +662,12 @@ onMounted(async () => {
                           @keydown.enter.prevent="loadMessages(session.id)"
                         >
                           <div class="flex items-start gap-3">
-                            <div class="runtime-history-avatar" :class="{ active: conversationId === session.id }">
-                              <icon-carbon:chat />
+                            <div
+                              class="runtime-history-avatar"
+                              :class="{ active: conversationId === session.id, pinned: session.isPinned }"
+                            >
+                              <icon-carbon:chat class="runtime-history-avatar-icon" />
+                              <span v-if="session.isPinned" class="runtime-history-avatar-dot" />
                             </div>
 
                             <div class="min-w-0 flex-1 text-left">
@@ -755,15 +772,26 @@ onMounted(async () => {
                               </div>
                             </div>
                           </div>
-                          <NAvatar round :size="34" class="runtime-user-avatar">
-                            <icon-carbon:user />
-                          </NAvatar>
+                          <Avatar
+                            :src="userInfo.avatar || ''"
+                            :text="avatarText"
+                            :version="userInfo.avatarVersion"
+                            :size="38"
+                            class="runtime-user-avatar"
+                          />
                         </div>
 
                         <div v-else class="runtime-message-row assistant">
-                          <NAvatar round :size="34" class="runtime-assistant-avatar">
-                            <icon-carbon:play />
-                          </NAvatar>
+                          <div
+                            class="runtime-dialog-avatar runtime-dialog-avatar-assistant"
+                            :class="runtimeType"
+                            :aria-label="`${activeApp?.name || '运行应用'}头像`"
+                          >
+                            <span class="runtime-dialog-avatar-text">{{ assistantAvatarText }}</span>
+                            <span class="runtime-dialog-avatar-badge runtime-dialog-avatar-badge--assistant">
+                              <icon-carbon:play />
+                            </span>
+                          </div>
                           <div class="runtime-message-body assistant">
                             <div class="runtime-message-title assistant">
                               <span>运行结果</span>
@@ -785,6 +813,25 @@ onMounted(async () => {
                               <div class="runtime-content runtime-markdown">
                                 <VueMarkdownIt :content="renderResultContent(message.content)" />
                               </div>
+                            </div>
+                            <div v-if="message.status !== 'pending'" class="runtime-message-actions">
+                              <NButton
+                                text
+                                size="tiny"
+                                class="runtime-copy-action"
+                                @click="
+                                  handleCopy(
+                                    message.status === 'error'
+                                      ? message.errorMessage || message.content
+                                      : message.content
+                                  )
+                                "
+                              >
+                                <template #icon>
+                                  <icon-mynaui:copy />
+                                </template>
+                                <span>复制</span>
+                              </NButton>
                             </div>
                           </div>
                         </div>
@@ -1084,21 +1131,55 @@ onMounted(async () => {
 }
 
 .runtime-history-avatar {
+  position: relative;
   display: flex;
   height: 36px;
   width: 36px;
   flex: 0 0 36px;
   align-items: center;
   justify-content: center;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  background: #f1f5f9;
-  color: #64748b;
+  background: #f8fafc;
+  color: #475569;
   font-size: 16px;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
 }
 
 .runtime-history-avatar.active {
-  background: #dbeafe;
+  border-color: #93c5fd;
+  background: #eff6ff;
   color: #2563eb;
+}
+
+.runtime-history-avatar.pinned {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.runtime-history-avatar.active.pinned {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.runtime-history-avatar-icon {
+  font-size: 17px;
+}
+
+.runtime-history-avatar-dot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  height: 9px;
+  width: 9px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #f59e0b;
 }
 
 .runtime-danger-action {
@@ -1171,14 +1252,75 @@ onMounted(async () => {
 
 .runtime-user-avatar {
   margin-top: 24px;
-  background: #e2e8f0;
-  color: #475569;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.runtime-assistant-avatar {
-  margin-top: 24px;
-  background: linear-gradient(135deg, #3b82f6, #7c3aed);
+.runtime-dialog-avatar {
+  position: relative;
+  margin-top: 22px;
+  display: inline-flex;
+  height: 38px;
+  width: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.runtime-dialog-avatar::before {
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  content: '';
+}
+
+.runtime-dialog-avatar-assistant {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.runtime-dialog-avatar-assistant.workflow {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.runtime-dialog-avatar-text {
+  position: relative;
+  z-index: 1;
+}
+
+.runtime-dialog-avatar-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 2;
+  display: inline-flex;
+  height: 16px;
+  width: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.runtime-dialog-avatar-badge--assistant {
+  background: #2563eb;
   color: #fff;
+}
+
+.runtime-dialog-avatar-assistant.workflow .runtime-dialog-avatar-badge--assistant {
+  background: #16a34a;
 }
 
 .runtime-bubble {
@@ -1228,6 +1370,27 @@ onMounted(async () => {
   line-height: 1.7;
 }
 
+.runtime-message-actions {
+  margin-top: 6px;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.runtime-copy-action {
+  color: #64748b;
+  opacity: 0.72;
+  transition:
+    color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.runtime-copy-action:hover {
+  color: #334155;
+  opacity: 1;
+}
+
 .runtime-markdown :deep(.prose) {
   max-width: none;
   color: inherit;
@@ -1236,6 +1399,7 @@ onMounted(async () => {
 
 .runtime-markdown :deep(.prose p) {
   margin: 0.75em 0;
+  line-height: 1.7;
 }
 
 .runtime-markdown :deep(.prose p:first-child) {
@@ -1259,6 +1423,110 @@ onMounted(async () => {
   border-radius: 8px;
   background: rgba(15, 23, 42, 0.06);
   padding: 12px;
+  margin: 0.75em 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.runtime-markdown :deep(.prose pre code) {
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 0.86em;
+}
+
+.runtime-markdown :deep(.prose ul),
+.runtime-markdown :deep(.prose ol) {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+}
+
+.runtime-markdown :deep(.prose li) {
+  margin: 0.375em 0;
+  line-height: 1.6;
+}
+
+.runtime-markdown :deep(.prose blockquote) {
+  margin: 0.75em 0;
+  border-left: 3px solid #3b82f6;
+  padding-left: 1em;
+  color: #64748b;
+  font-style: italic;
+}
+
+.runtime-markdown :deep(.prose h1),
+.runtime-markdown :deep(.prose h2),
+.runtime-markdown :deep(.prose h3),
+.runtime-markdown :deep(.prose h4),
+.runtime-markdown :deep(.prose h5),
+.runtime-markdown :deep(.prose h6) {
+  margin: 1em 0 0.5em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.runtime-markdown :deep(.prose h1:first-child),
+.runtime-markdown :deep(.prose h2:first-child),
+.runtime-markdown :deep(.prose h3:first-child),
+.runtime-markdown :deep(.prose h4:first-child),
+.runtime-markdown :deep(.prose h5:first-child),
+.runtime-markdown :deep(.prose h6:first-child) {
+  margin-top: 0;
+}
+
+.runtime-markdown :deep(.prose h1) {
+  font-size: 1.5em;
+}
+
+.runtime-markdown :deep(.prose h2) {
+  font-size: 1.3em;
+}
+
+.runtime-markdown :deep(.prose h3) {
+  font-size: 1.15em;
+}
+
+.runtime-markdown :deep(.prose h4) {
+  font-size: 1em;
+}
+
+.runtime-markdown :deep(.prose a) {
+  color: #3b82f6;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.runtime-markdown :deep(.prose a:hover) {
+  color: #2563eb;
+}
+
+.runtime-markdown :deep(.prose table) {
+  width: 100%;
+  margin: 1em 0;
+  border-collapse: collapse;
+  font-size: 0.875em;
+}
+
+.runtime-markdown :deep(.prose th),
+.runtime-markdown :deep(.prose td) {
+  border: 1px solid #e5e7eb;
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.runtime-markdown :deep(.prose th) {
+  background: rgba(15, 23, 42, 0.03);
+  font-weight: 600;
+}
+
+.runtime-markdown :deep(.prose tr:nth-child(even)) {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+.runtime-markdown :deep(.prose hr) {
+  margin: 1.5em 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
 }
 
 .runtime-input-box {

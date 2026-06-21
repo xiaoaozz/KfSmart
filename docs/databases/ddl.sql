@@ -6,10 +6,30 @@ CREATE TABLE users (
                        org_tags VARCHAR(255) DEFAULT NULL COMMENT '用户所属组织标签，多个用逗号分隔',
                        primary_org VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '用户主组织标签',
                        avatar_url VARCHAR(512) DEFAULT NULL COMMENT '用户头像访问地址',
+                       email VARCHAR(128) DEFAULT NULL COMMENT '联系邮箱',
+                       phone VARCHAR(32) DEFAULT NULL COMMENT '联系电话',
+                       bio TEXT DEFAULT NULL COMMENT '个人简介',
+                       notification_preferences TEXT DEFAULT NULL COMMENT '通知偏好设置',
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                        INDEX idx_username (username) COMMENT '用户名索引'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+CREATE TABLE user_favorites (
+                                id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '收藏唯一标识',
+                                user_id BIGINT NOT NULL COMMENT '用户ID',
+                                type VARCHAR(32) NOT NULL COMMENT '收藏类型：chat/document/knowledge',
+                                target_id VARCHAR(128) NOT NULL COMMENT '收藏目标ID',
+                                title VARCHAR(255) NOT NULL COMMENT '收藏标题',
+                                description TEXT DEFAULT NULL COMMENT '收藏描述',
+                                meta VARCHAR(128) DEFAULT NULL COMMENT '收藏补充信息',
+                                starred BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否星标',
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                UNIQUE KEY uk_user_favorite_target (user_id, type, target_id),
+                                INDEX idx_user_favorite_user (user_id),
+                                INDEX idx_user_favorite_type (type),
+                                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户收藏表';
 CREATE TABLE organization_tags (
                                    tag_id VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY COMMENT '标签唯一标识',
                                    name VARCHAR(100) NOT NULL COMMENT '标签名称',
