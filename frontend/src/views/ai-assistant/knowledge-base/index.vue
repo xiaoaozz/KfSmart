@@ -1,11 +1,13 @@
 <script setup lang="tsx">
-import { NButton, NDataTable, NInput, NModal, NPagination, NTag, NTooltip } from 'naive-ui';
-
-import type { DataTableColumns } from 'naive-ui';
-import { fetchGetKnowledgeBases, fetchDeleteKnowledgeBase, fetchGetKnowledgeBaseStats } from '@/service/api/knowledge-base';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
-import CreateKbDialog from './modules/create-kb-dialog.vue';
+import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NSpin, NTag } from 'naive-ui';
 import debounce from 'lodash-es/debounce';
+import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import {
+  fetchDeleteKnowledgeBase,
+  fetchGetKnowledgeBaseStats,
+  fetchGetKnowledgeBases
+} from '@/service/api/knowledge-base';
+import CreateKbDialog from './modules/create-kb-dialog.vue';
 
 // --------- 统计数字 ---------
 const stats = ref({
@@ -19,6 +21,11 @@ const stats = ref({
 const knowledgeBases = ref<Api.KnowledgeBase.KnowledgeBaseInfo[]>([]);
 const loading = ref(false);
 const searchKeyword = ref('');
+const selectedKbId = ref('');
+
+const selectedKnowledgeBase = computed(
+  () => knowledgeBases.value.find(item => item.kbId === selectedKbId.value) || knowledgeBases.value[0] || null
+);
 
 // --------- 分页 ---------
 const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
@@ -34,6 +41,10 @@ const editingKb = ref<Api.KnowledgeBase.KnowledgeBaseInfo | null>(null);
 function handleEdit(row: Api.KnowledgeBase.KnowledgeBaseInfo) {
   editingKb.value = row;
   editKbVisible.value = true;
+}
+
+function selectKnowledgeBase(row: Api.KnowledgeBase.KnowledgeBaseInfo) {
+  selectedKbId.value = row.kbId;
 }
 
 // --------- 删除知识库弹窗 ---------
@@ -107,6 +118,9 @@ async function loadKnowledgeBases() {
       const records = data.records || data.content || data.data || [];
       knowledgeBases.value = records;
       totalCount.value = data.totalElements ?? data.total ?? records.length;
+      if (!records.some(item => item.kbId === selectedKbId.value)) {
+        selectedKbId.value = records[0]?.kbId || '';
+      }
     }
 
     if (!statsRes.error && statsRes.data) {
@@ -139,166 +153,83 @@ function formatSize(bytes: number) {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let i = 0;
   let v = bytes;
-  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
   return `${v.toFixed(1)} ${units[i]}`;
 }
 
 // --------- 图标映射 ---------
 const iconMap: Record<string, { icon: string; bg: string; color: string }> = {
-  'folder':     { icon: 'icon-carbon-folder',       bg: 'bg-blue-50',   color: 'text-blue-500' },
-  'enterprise': { icon: 'icon-carbon-enterprise',   bg: 'bg-purple-50', color: 'text-purple-500' },
-  'product':    { icon: 'icon-carbon-product',      bg: 'bg-green-50',  color: 'text-green-500' },
-  'code':       { icon: 'icon-carbon-code',         bg: 'bg-orange-50', color: 'text-orange-500' },
-  'tool-kit':   { icon: 'icon-carbon-tool-kit',     bg: 'bg-rose-50',   color: 'text-rose-500' },
-  'chart-line': { icon: 'icon-carbon-chart-line',   bg: 'bg-teal-50',   color: 'text-teal-500' },
-  'catalog':    { icon: 'icon-carbon-catalog',      bg: 'bg-indigo-50', color: 'text-indigo-500' },
-  'bookmark':   { icon: 'icon-carbon-bookmark',     bg: 'bg-pink-50',   color: 'text-pink-500' },
-  'data-base':  { icon: 'icon-carbon-data-base',    bg: 'bg-blue-50',   color: 'text-blue-500' }
+  folder: { icon: 'icon-carbon-folder', bg: 'bg-blue-50', color: 'text-blue-500' },
+  enterprise: { icon: 'icon-carbon-enterprise', bg: 'bg-purple-50', color: 'text-purple-500' },
+  product: { icon: 'icon-carbon-product', bg: 'bg-green-50', color: 'text-green-500' },
+  code: { icon: 'icon-carbon-code', bg: 'bg-orange-50', color: 'text-orange-500' },
+  'tool-kit': { icon: 'icon-carbon-tool-kit', bg: 'bg-rose-50', color: 'text-rose-500' },
+  'chart-line': { icon: 'icon-carbon-chart-line', bg: 'bg-teal-50', color: 'text-teal-500' },
+  catalog: { icon: 'icon-carbon-catalog', bg: 'bg-indigo-50', color: 'text-indigo-500' },
+  bookmark: { icon: 'icon-carbon-bookmark', bg: 'bg-pink-50', color: 'text-pink-500' },
+  'data-base': { icon: 'icon-carbon-data-base', bg: 'bg-blue-50', color: 'text-blue-500' }
 };
 
 function getIconConfig(icon: string) {
   return iconMap[icon] ?? iconMap['data-base'];
 }
 
-// --------- 表格列 ---------
-const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(() => [
-  {
-    key: 'name',
-    title: '知识库名称',
-    width: 160,
-    render: row => {
-      const cfg = getIconConfig(row.icon || 'data-base');
-      return (
-      <div class="flex items-center gap-2">
-        <div class={`w-7 h-7 rounded-lg ${cfg.bg} flex items-center justify-center flex-shrink-0`}>
-          <span class={`${cfg.icon} ${cfg.color} text-base`} />
-        </div>
-        <NTooltip placement="top" trigger="hover" style="max-width: 360px">
-          {{
-            trigger: () => (
-              <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 100px;">
-                { row.name }
-              </div>
-            ),
-            default: () => row.name
-          }}
-        </NTooltip>
-      </div>
-    );
-    }
-  },
-  {
-    key: 'description',
-    title: '描述',
-    width: 200,
-    ellipsis: {
-      tooltip: true
-    },
-    render: row => (
-      <NTooltip placement="top" trigger="hover" style="max-width: 360px">
-        {{
-          trigger: () => (
-            <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 180px;">
-              { row.description || '-' }
-            </div>
-          ),
-          default: () => row.description || '-'
-        }}
-      </NTooltip>
-    )
-  },
-  {
-    key: 'fileCount',
-    title: '文档数',
-    width: 80,
-    align: 'center',
-    titleAlign: 'center'
-  },
-  {
-    key: 'chunkCount',
-    title: '分块数',
-    width: 80,
-    align: 'center',
-    titleAlign: 'center'
-  },
-  {
-    key: 'updatedAt',
-    title: '更新时间',
-    width: 150,
-    align: 'center',
-    titleAlign: 'center',
-    render: row => row.updatedAt ? dayjs(row.updatedAt).format('YYYY-MM-DD HH:mm') : '-'
-  },
-  {
-    key: 'status',
-    title: '状态',
-    width: 80,
-    align: 'center',
-    titleAlign: 'center',
-    render: row => (
-      <NTag type={row.status === '正常' || row.status === 'active' ? 'success' : 'warning'} size="small">
-        { row.status === '正常' || row.status === 'active' ? '已启用' : row.status }
-      </NTag>
-    )
-  },
-  {
-    key: 'operate',
-    title: '操作',
-    width: 120,
-    align: 'center',
-    titleAlign: 'center',
-    render: row => (
-      <div class="flex items-center justify-center gap-2">
-        <NButton
-          text
-          size="small"
-          type="primary"
-          onClick={() => handleEdit(row)}
-        >
-          编辑
-        </NButton>
-        <NButton
-          text
-          size="small"
-          type="error"
-          onClick={() => handleDeleteClick(row)}
-        >
-          删除
-        </NButton>
-      </div>
-    )
-  }
-]);
+function getStatusType(status?: string) {
+  return status === '正常' || status === 'active' ? 'success' : 'warning';
+}
+
+function getStatusText(status?: string) {
+  return status === '正常' || status === 'active' ? '已启用' : status || '未启用';
+}
+
+function formatTime(time?: string) {
+  return time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-';
+}
 </script>
 
 <template>
-  <div class="kb-overview-page h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-y-auto">
-    <div class="px-8 py-6 flex-1 min-h-0">
+  <div class="kb-overview-page h-full flex flex-col overflow-y-auto bg-gray-50 dark:bg-gray-900">
+    <div class="min-h-0 flex-1 px-8 py-6">
       <!-- 标题 -->
-      <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">知识库</h1>
+      <h1 class="mb-6 text-2xl text-gray-900 font-bold dark:text-white">知识库</h1>
 
       <!-- 统计卡片 -->
-      <div class="grid grid-cols-4 gap-5 mb-6">
-        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl px-6 py-5 shadow-sm border border-gray-100 dark:border-gray-700">
-          <div class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{{ stats.knowledgeBaseCount }}</div>
+      <div class="grid grid-cols-4 mb-6 gap-5">
+        <div
+          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">{{ stats.knowledgeBaseCount }}</div>
           <div class="text-sm text-gray-500 dark:text-gray-400">知识库总数</div>
         </div>
-        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl px-6 py-5 shadow-sm border border-gray-100 dark:border-gray-700">
-          <div class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{{ stats.documentCount.toLocaleString() }}</div>
+        <div
+          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">
+            {{ stats.documentCount.toLocaleString() }}
+          </div>
           <div class="text-sm text-gray-500 dark:text-gray-400">文档总数</div>
         </div>
-        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl px-6 py-5 shadow-sm border border-gray-100 dark:border-gray-700">
-          <div class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{{ formatSize(stats.totalSize) }}</div>
+        <div
+          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">{{ formatSize(stats.totalSize) }}</div>
           <div class="text-sm text-gray-500 dark:text-gray-400">存储使用</div>
         </div>
-        <div class="stat-card bg-white dark:bg-gray-800 rounded-xl px-6 py-5 shadow-sm border border-gray-100 dark:border-gray-700">
-          <div class="text-3xl font-bold text-gray-900 dark:text-white mb-1">{{ stats.chunkCount.toLocaleString() }}</div>
+        <div
+          class="stat-card border border-gray-100 rounded-xl bg-white px-6 py-5 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div class="mb-1 text-3xl text-gray-900 font-bold dark:text-white">
+            {{ stats.chunkCount.toLocaleString() }}
+          </div>
           <div class="text-sm text-gray-500 dark:text-gray-400">关键词数量</div>
         </div>
       </div>
 
       <!-- 搜索 + 新建按钮 -->
-      <div class="flex items-center justify-between mb-4">
+      <div class="mb-4 flex items-center justify-between">
         <NInput
           v-model:value="searchKeyword"
           placeholder="搜索知识库名称"
@@ -319,22 +250,197 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
         </NButton>
       </div>
 
-      <!-- 表格 -->
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <NDataTable
-          :columns="columns"
-          :data="knowledgeBases"
-          :loading="loading"
-          :row-key="row => row.kbId"
-          size="small"
-          :pagination="false"
-          :scroll-x="800"
-          striped
-          class="kb-table"
-        />
+      <!-- 卡片列表 + 详情 -->
+      <div
+        class="min-h-520px overflow-hidden border border-gray-100 rounded-xl bg-white shadow-sm lg:flex dark:border-gray-700 dark:bg-gray-800"
+      >
+        <div class="min-w-0 flex-1 border-gray-100 lg:border-r dark:border-gray-700">
+          <NSpin :show="loading">
+            <div v-if="knowledgeBases.length === 0 && !loading" class="py-20">
+              <NEmpty description="暂无知识库">
+                <template #extra>
+                  <NButton size="small" type="primary" @click="createKbVisible = true">新建知识库</NButton>
+                </template>
+              </NEmpty>
+            </div>
+            <div v-else class="grid grid-cols-1 gap-3 p-4 xl:grid-cols-2">
+              <div
+                v-for="item in knowledgeBases"
+                :key="item.kbId"
+                class="cursor-pointer border rounded-xl bg-white p-4 transition-all dark:bg-[#1e1e22] hover:shadow-md"
+                :class="
+                  selectedKnowledgeBase?.kbId === item.kbId
+                    ? 'border-primary-400 shadow-sm ring-1 ring-primary-200 dark:border-primary-500 dark:ring-primary-800'
+                    : 'border-gray-200 hover:border-primary-300 dark:border-gray-700 dark:hover:border-primary-600'
+                "
+                @click="selectKnowledgeBase(item)"
+              >
+                <div class="mb-3 flex items-start justify-between gap-3">
+                  <div class="min-w-0 flex items-center gap-3">
+                    <div
+                      class="h-10 w-10 flex flex-shrink-0 items-center justify-center rounded-xl"
+                      :class="getIconConfig(item.icon || 'data-base').bg"
+                    >
+                      <span
+                        class="text-xl"
+                        :class="[
+                          getIconConfig(item.icon || 'data-base').icon,
+                          getIconConfig(item.icon || 'data-base').color
+                        ]"
+                      />
+                    </div>
+                    <div class="min-w-0">
+                      <h3 class="truncate text-sm text-gray-900 font-semibold dark:text-gray-100">{{ item.name }}</h3>
+                      <p class="line-clamp-1 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{ item.description || '暂无描述' }}
+                      </p>
+                    </div>
+                  </div>
+                  <NTag :type="getStatusType(item.status)" size="small" :bordered="false" class="flex-shrink-0">
+                    {{ getStatusText(item.status) }}
+                  </NTag>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-2 text-center dark:bg-[#18181c]">
+                  <div>
+                    <div class="text-sm text-gray-900 font-semibold dark:text-gray-100">{{ item.fileCount || 0 }}</div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">文档</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-gray-900 font-semibold dark:text-gray-100">{{ item.chunkCount || 0 }}</div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">分块</div>
+                  </div>
+                  <div>
+                    <div class="truncate text-sm text-gray-900 font-semibold dark:text-gray-100">
+                      {{ formatSize(item.totalSize || 0) }}
+                    </div>
+                    <div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">容量</div>
+                  </div>
+                </div>
+
+                <div class="mt-3 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                  <span class="min-w-0 flex items-center gap-1">
+                    <icon-carbon:tag class="text-sm" />
+                    <span class="truncate">{{ item.orgTag || (item.isPublic ? '公开' : '私有') }}</span>
+                  </span>
+                  <span>{{ formatTime(item.updatedAt) }}</span>
+                </div>
+              </div>
+            </div>
+          </NSpin>
+        </div>
+
+        <div class="w-full flex-shrink-0 bg-white lg:w-380px dark:bg-[#18181c]">
+          <template v-if="selectedKnowledgeBase">
+            <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-700">
+              <h2 class="text-sm text-gray-800 font-semibold dark:text-gray-100">知识库详情</h2>
+            </div>
+            <div class="p-5 space-y-4">
+              <div class="flex items-start gap-3">
+                <div
+                  class="h-12 w-12 flex flex-shrink-0 items-center justify-center rounded-xl"
+                  :class="getIconConfig(selectedKnowledgeBase.icon || 'data-base').bg"
+                >
+                  <span
+                    class="text-2xl"
+                    :class="[
+                      getIconConfig(selectedKnowledgeBase.icon || 'data-base').icon,
+                      getIconConfig(selectedKnowledgeBase.icon || 'data-base').color
+                    ]"
+                  />
+                </div>
+                <div class="min-w-0">
+                  <h3 class="text-base text-gray-900 font-semibold dark:text-gray-50">
+                    {{ selectedKnowledgeBase.name }}
+                  </h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{ selectedKnowledgeBase.description || '暂无描述' }}
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <NTag :type="getStatusType(selectedKnowledgeBase.status)" :bordered="false" size="small">
+                  {{ getStatusText(selectedKnowledgeBase.status) }}
+                </NTag>
+                <NTag :type="selectedKnowledgeBase.isPublic ? 'success' : 'default'" :bordered="false" size="small">
+                  {{ selectedKnowledgeBase.isPublic ? '公开' : '私有' }}
+                </NTag>
+              </div>
+
+              <NDivider class="!my-2" />
+
+              <div class="grid grid-cols-3 gap-2">
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ selectedKnowledgeBase.fileCount || 0 }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">文档数</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ selectedKnowledgeBase.chunkCount || 0 }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">分块数</div>
+                </div>
+                <div class="rounded-lg bg-gray-50 px-2 py-2 text-center dark:bg-[#1e1e22]">
+                  <div class="truncate text-base text-gray-900 font-semibold dark:text-gray-100">
+                    {{ formatSize(selectedKnowledgeBase.totalSize || 0) }}
+                  </div>
+                  <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">存储</div>
+                </div>
+              </div>
+
+              <div class="text-sm space-y-2">
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">组织标签</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">
+                    {{ selectedKnowledgeBase.orgTag || '-' }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">创建人</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">
+                    {{ selectedKnowledgeBase.createdBy || '-' }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">创建时间</span>
+                  <span class="text-gray-700 dark:text-gray-300">
+                    {{ formatTime(selectedKnowledgeBase.createdAt) }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">更新时间</span>
+                  <span class="text-gray-700 dark:text-gray-300">
+                    {{ formatTime(selectedKnowledgeBase.updatedAt) }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">ID</span>
+                  <span class="truncate text-gray-700 dark:text-gray-300">{{ selectedKnowledgeBase.kbId }}</span>
+                </div>
+              </div>
+
+              <div class="flex gap-2 pt-2">
+                <NButton size="small" type="primary" @click="handleEdit(selectedKnowledgeBase)">
+                  <template #icon><icon-carbon:edit /></template>
+                  编辑
+                </NButton>
+                <NButton size="small" secondary type="error" @click="handleDeleteClick(selectedKnowledgeBase)">
+                  <template #icon><icon-carbon:trash-can /></template>
+                  删除
+                </NButton>
+              </div>
+            </div>
+          </template>
+          <div v-else class="py-20">
+            <NEmpty description="选择一个知识库查看详情" />
+          </div>
+        </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+        <div class="flex justify-end border-t border-gray-100 px-4 py-3 lg:hidden dark:border-gray-700">
           <NPagination
             v-model:page="currentPage"
             :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
@@ -345,6 +451,18 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
             @update:page-size="handlePageSizeChange"
           />
         </div>
+      </div>
+
+      <div class="hidden justify-end px-4 py-3 lg:flex">
+        <NPagination
+          v-model:page="currentPage"
+          :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
+          :page-size="pageSize"
+          :page-sizes="pageSizeOptions"
+          show-size-picker
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+        />
       </div>
     </div>
 
@@ -369,26 +487,31 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
     >
       <template #default>
         <div class="py-2">
-          <p class="text-gray-700 dark:text-gray-300 mb-3">
+          <p class="mb-3 text-gray-700 dark:text-gray-300">
             确认删除知识库
-            <span class="font-semibold text-gray-900 dark:text-white">「{{ deletingKb?.name }}」</span>
+            <span class="text-gray-900 font-semibold dark:text-white">「{{ deletingKb?.name }}」</span>
             吗？
           </p>
           <template v-if="deletingKb && deletingKb.fileCount > 0">
-            <div class="flex items-start gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 mb-3">
-              <icon-carbon:warning-alt class="text-red-500 text-lg flex-shrink-0 mt-0.5" />
+            <div
+              class="mb-3 flex items-start gap-2 border border-red-200 rounded-lg bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/20"
+            >
+              <icon-carbon:warning-alt class="mt-0.5 flex-shrink-0 text-lg text-red-500" />
               <p class="text-sm text-red-700 dark:text-red-400">
-                该知识库下包含 <span class="font-bold text-red-600 dark:text-red-300">{{ deletingKb.fileCount }}</span> 个文档，删除知识库将同时删除所有文档及其索引数据，<span class="font-semibold">此操作不可撤销！</span>
+                该知识库下包含
+                <span class="text-red-600 font-bold dark:text-red-300">{{ deletingKb.fileCount }}</span>
+                个文档，删除知识库将同时删除所有文档及其索引数据，
+                <span class="font-semibold">此操作不可撤销！</span>
               </p>
             </div>
           </template>
           <template v-else>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">该知识库下暂无文档，此操作不可撤销。</p>
+            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">该知识库下暂无文档，此操作不可撤销。</p>
           </template>
         </div>
       </template>
       <template #action>
-        <div class="flex gap-2 justify-end">
+        <div class="flex justify-end gap-2">
           <NButton @click="handleDeleteCancel">取消</NButton>
           <NButton
             type="error"
@@ -414,11 +537,7 @@ const columns = computed<DataTableColumns<Api.KnowledgeBase.KnowledgeBaseInfo>>(
   }
 }
 
-/* 首列左侧与页面边距对齐，和文档管理保持一致 */
-:deep(.kb-table) {
-  th:first-child,
-  td:first-child {
-    padding-left: 40px !important;
-  }
+.min-h-520px {
+  min-height: 520px;
 }
 </style>
