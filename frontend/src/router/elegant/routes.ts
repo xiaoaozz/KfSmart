@@ -155,9 +155,7 @@ export const generatedRoutes = [
         component: 'view.ai-center_skills',
         meta: {
           title: 'ai-center_skills',
-          i18nKey: 'route.ai-center_skills',
-          icon: 'carbon:skill-level-advanced',
-          order: 2
+          i18nKey: 'route.ai-center_skills'
         }
       },
       {
