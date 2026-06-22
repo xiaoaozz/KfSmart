@@ -1,12 +1,13 @@
 <script setup lang="tsx">
-import { NButton, NDivider, NEmpty, NInput, NModal, NPagination, NScrollbar, NSpin, NTag } from 'naive-ui';
+import { NButton, NDivider, NEmpty, NInput, NModal, NScrollbar, NSpin, NTag } from 'naive-ui';
 import debounce from 'lodash-es/debounce';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import {
   fetchDeleteKnowledgeBase,
   fetchGetKnowledgeBaseStats,
   fetchGetKnowledgeBases
 } from '@/service/api/knowledge-base';
+import ListPagination from '@/components/common/list-pagination.vue';
 import FavoriteButton from '@/components/common/favorite-button.vue';
 import CreateKbDialog from './modules/create-kb-dialog.vue';
 
@@ -83,7 +84,6 @@ function handleCategoryClick(category: string) {
 }
 
 // --------- 分页 ---------
-const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
 const totalCount = ref(0);
@@ -565,17 +565,14 @@ function formatTime(time?: string) {
         </div>
 
         <!-- 分页 -->
-        <div class="flex justify-end border-t border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-[#18181c]">
-          <NPagination
-            v-model:page="currentPage"
-            :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
-            :page-size="pageSize"
-            :page-sizes="pageSizeOptions"
-            show-size-picker
-            @update:page="handlePageChange"
-            @update:page-size="handlePageSizeChange"
-          />
-        </div>
+        <ListPagination
+          v-model:page="currentPage"
+          :page-count="Math.max(1, Math.ceil(totalCount / pageSize))"
+          :page-size="pageSize"
+          class="dark:bg-[#18181c]"
+          @update:page="handlePageChange"
+          @update:page-size="handlePageSizeChange"
+        />
       </div>
     </div>
 

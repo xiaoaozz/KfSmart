@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import { fetchGetOperationRecords } from '@/service/api';
-import { DEFAULT_PAGE_SIZE, PAGINATION_PAGE_SIZE_OPTIONS } from '@/constants/common';
+import ListPagination from '@/components/common/list-pagination.vue';
 
 defineOptions({ name: 'OperationRecord' });
 
-const pageSizeOptions = PAGINATION_PAGE_SIZE_OPTIONS;
 const currentPage = ref(1);
 const pageSize = ref(DEFAULT_PAGE_SIZE);
 const filterType = ref('all');
@@ -181,17 +181,14 @@ onMounted(loadRecords);
       </div>
 
       <!-- 分页 -->
-      <div v-if="filteredRecords.length > 0" class="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-700">
-        <NPagination
-          v-model:page="currentPage"
-          :page-count="pageCount"
-          :page-size="pageSize"
-          :page-sizes="pageSizeOptions"
-          show-size-picker
-          @update:page="handlePageChange"
-          @update:page-size="handlePageSizeChange"
-        />
-      </div>
+      <ListPagination
+        v-if="filteredRecords.length > 0"
+        v-model:page="currentPage"
+        :page-count="pageCount"
+        :page-size="pageSize"
+        @update:page="handlePageChange"
+        @update:page-size="handlePageSizeChange"
+      />
     </div>
     </NSpin>
   </div>

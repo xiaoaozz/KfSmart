@@ -8,7 +8,6 @@ import {
   NForm,
   NFormItem,
   NInput,
-  NPagination,
   NSelect,
   NSpace,
   NSwitch,
@@ -23,6 +22,7 @@ import {
   fetchTestMcpTool
 } from '@/service/api/resource';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
 
 type McpToolForm = Partial<Api.AgentCenter.McpTool> & {
   enabled?: boolean;
@@ -89,7 +89,7 @@ const rules: FormRules = {
   }
 };
 
-const { data, getData, getDataByPage, loading, mobilePagination, updateSearchParams } = useTable({
+const { data, getData, getDataByPage, loading, pagination, mobilePagination, updateSearchParams } = useTable({
   apiFn: fetchMcpTools,
   apiParams: { page: 1, size: 10 },
   columns: () => [],
@@ -164,6 +164,23 @@ async function searchTools() {
   await getDataByPage(1);
 }
 
+async function handlePageChange(page: number) {
+  updateSearchParams({
+    page,
+    size: pagination.pageSize!
+  });
+  await getDataByPage(page);
+}
+
+async function handlePageSizeChange(size: number) {
+  pagination.pageSize = size;
+  updateSearchParams({
+    page: 1,
+    size
+  });
+  await getDataByPage(1);
+}
+
 async function saveTool() {
   await formRef.value?.validate();
   saving.value = true;
@@ -233,32 +250,42 @@ function deleteTool(toolId: string) {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-gray-50 px-6 py-5 dark:bg-gray-900">
-    <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">MCP工具中心</h1>
-      </div>
-      <NButton type="primary" @click="openCreate">
-        <template #icon><icon-carbon:add /></template>
-        新增工具
-      </NButton>
-    </div>
-
-    <div class="rounded-lg border border-gray-100 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div class="flex flex-col gap-3 border-b border-gray-100 p-4 dark:border-gray-700 lg:flex-row lg:items-center lg:justify-between">
-        <NSpace>
-          <NInput v-model:value="keyword" clearable placeholder="搜索名称、类型或工具名" class="w-260px" @keyup.enter="searchTools">
+  <div class="h-full flex flex-col bg-[#f5f7fa] dark:bg-[#101014]">
+    <div class="border-b border-gray-100 bg-white px-5 py-3 dark:border-gray-700 dark:bg-[#18181c]">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <NSpace :size="8">
+          <NInput
+            v-model:value="keyword"
+            clearable
+            placeholder="搜索名称、类型或工具名"
+            class="w-260px"
+            size="small"
+            @keyup.enter="searchTools"
+          >
             <template #prefix><icon-carbon:search /></template>
           </NInput>
-          <NSelect v-model:value="statusFilter" clearable placeholder="全部状态" :options="statusOptions" class="w-130px" />
-          <NButton @click="searchTools">
+          <NSelect
+            v-model:value="statusFilter"
+            clearable
+            placeholder="全部状态"
+            :options="statusOptions"
+            class="w-130px"
+            size="small"
+          />
+          <NButton size="small" @click="searchTools">
             <template #icon><icon-carbon:search /></template>
             查询
           </NButton>
         </NSpace>
+        <NButton size="small" type="primary" @click="openCreate">
+          <template #icon><icon-carbon:add /></template>
+          新增工具
+        </NButton>
       </div>
+    </div>
 
-      <div v-if="loading" class="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2 2xl:grid-cols-3">
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <div v-if="loading" class="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
         <div v-for="item in 6" :key="item" class="h-220px animate-pulse rounded-lg border border-gray-100 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/80">
           <div class="h-full p-4">
             <div class="mb-4 h-5 w-2/5 rounded bg-gray-200 dark:bg-gray-700"></div>
@@ -273,7 +300,7 @@ function deleteTool(toolId: string) {
         </div>
       </div>
 
-      <div v-else-if="filteredData.length" class="grid grid-cols-1 gap-4 p-4 xl:grid-cols-2 2xl:grid-cols-3">
+      <div v-else-if="filteredData.length" class="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
         <article
           v-for="item in filteredData"
           :key="item.toolId"
@@ -366,18 +393,25 @@ function deleteTool(toolId: string) {
         </article>
       </div>
 
-      <div v-else class="flex min-h-260px flex-col items-center justify-center p-8 text-center">
+      <div v-else class="flex min-h-360px flex-col items-center justify-center text-center">
         <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500">
           <icon-carbon:search class="text-xl" />
         </div>
         <div class="text-sm font-medium text-gray-800 dark:text-gray-100">暂无 MCP 工具</div>
         <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">调整筛选条件，或新增一个工具配置</div>
       </div>
-
-      <div class="flex justify-end border-t border-gray-100 px-4 py-3 dark:border-gray-700">
-        <NPagination v-bind="mobilePagination" />
-      </div>
     </div>
+
+    <ListPagination
+      :page="mobilePagination.page"
+      :page-size="mobilePagination.pageSize"
+      :item-count="mobilePagination.itemCount"
+      :disabled="mobilePagination.disabled"
+      :page-slot="mobilePagination.pageSlot"
+      class="dark:bg-[#18181c]"
+      @update:page="handlePageChange"
+      @update:page-size="handlePageSizeChange"
+    />
 
     <NDrawer v-model:show="visible" :width="720" placement="right">
       <NDrawerContent :title="form.toolId ? '编辑 MCP 工具' : '新增 MCP 工具'" closable>

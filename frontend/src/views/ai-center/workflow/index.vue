@@ -28,6 +28,8 @@ import {
 import { fetchSkills } from '@/service/api/skills';
 import { fetchGetKnowledgeBases } from '@/service/api/knowledge-base';
 import FavoriteButton from '@/components/common/favorite-button.vue';
+import ListPagination from '@/components/common/list-pagination.vue';
+import { DEFAULT_PAGE_SIZE } from '@/constants/common';
 import { defaultNodeConfig, defaultNodes, defaultEdges } from './constants/nodeDefinitions';
 import { useDesignerState } from './composables/useDesignerState';
 import { useCanvasViewport } from './composables/useCanvasViewport';
@@ -59,6 +61,8 @@ const testQuery = ref('');
 const createVisible = ref(false);
 const createForm = ref({ name: '', type: '工作流', description: '' });
 const loading = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const versionDrawerVisible = ref(false);
 const executionMonitorVisible = ref(false);
 const currentExecutionId = ref('');
@@ -98,13 +102,22 @@ const filteredWorkflows = computed(() => {
   return list;
 });
 
+const paginatedWorkflows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredWorkflows.value.slice(start, start + pageSize.value);
+});
+
+const workflowPageCount = computed(() => Math.max(1, Math.ceil(filteredWorkflows.value.length / pageSize.value)));
+
 function switchCategoryMode(mode: 'type' | 'status') {
   categoryMode.value = mode;
   activeCategory.value = '全部';
+  currentPage.value = 1;
 }
 
 function handleCategoryClick(cat: string) {
   activeCategory.value = cat;
+  currentPage.value = 1;
 }
 
 // ─── 设计器状态 ───
@@ -148,11 +161,20 @@ async function loadData() {
   }
   if (!wfRes.error && wfRes.data) {
     workflowList.value = getPageRecords(wfRes.data);
+    if (currentPage.value > workflowPageCount.value) {
+      currentPage.value = workflowPageCount.value;
+    }
   }
 }
 
 async function searchWorkflows() {
+  currentPage.value = 1;
   await loadData();
+}
+
+function handlePageSizeChange(size: number) {
+  pageSize.value = size;
+  currentPage.value = 1;
 }
 
 // ─── CRUD ───
@@ -334,11 +356,13 @@ function startNodeDrag(event: MouseEvent, node: WorkflowNode) {
   const point = screenToWorld(event.clientX, event.clientY, rect);
   dragging.value = { nodeId: node.id, offsetX: point.x - node.x, offsetY: point.y - node.y };
   const onMove = (e: MouseEvent) => {
-    const n = designer.nodes.find((item: any) => item.id === dragging.value?.nodeId);
+    const currentDragging = dragging.value;
+    if (!currentDragging) return;
+    const n = designer.nodes.find((item: any) => item.id === currentDragging.nodeId);
     if (!n) return;
     const p = screenToWorld(e.clientX, e.clientY, rect);
-    n.x = snap(Math.min(3064, Math.max(0, p.x - dragging.value.offsetX)));
-    n.y = snap(Math.min(2332, Math.max(0, p.y - dragging.value.offsetY)));
+    n.x = snap(Math.min(3064, Math.max(0, p.x - currentDragging.offsetX)));
+    n.y = snap(Math.min(2332, Math.max(0, p.y - currentDragging.offsetY)));
   };
   const onUp = () => {
     dragging.value = null;
@@ -511,7 +535,7 @@ onMounted(() => { loadData(); });
                 </div>
                 <div v-else class="grid grid-cols-1 xl:grid-cols-2 gap-3">
                   <div
-                    v-for="item in filteredWorkflows"
+                    v-for="item in paginatedWorkflows"
                     :key="item.workflowId"
                     class="cursor-pointer rounded-xl border bg-white p-4 transition-all hover:shadow-md dark:bg-[#1e1e22]"
                     :class="selectedWorkflow?.workflowId === item.workflowId
@@ -569,6 +593,14 @@ onMounted(() => { loadData(); });
               </NSpin>
             </div>
           </NScrollbar>
+          <ListPagination
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :page-count="workflowPageCount"
+            :item-count="filteredWorkflows.length"
+            :disabled="loading"
+            @update:page-size="handlePageSizeChange"
+          />
         </div>
 
         <!-- 右侧详情面板 -->
