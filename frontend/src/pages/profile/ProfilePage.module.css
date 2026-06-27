@@ -1,0 +1,42 @@
+.root {
+  display: flex;
+  gap: 24px;
+  min-height: 100%;
+  align-items: flex-start;
+}
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 12px 0;
+  position: sticky;
+  top: 0;
+}
+
+.sidebarTitle {
+  font-family: var(--kf-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  padding: 4px 16px 12px;
+  border-bottom: 1px solid var(--kf-border);
+  margin-bottom: 4px;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .root {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    position: static;
+  }
+}

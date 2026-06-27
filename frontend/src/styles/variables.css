@@ -1,0 +1,151 @@
+/* ============================================================
+   KfSmart AI Platform — Design Token System
+   CSS Custom Properties: light + dark theme
+   ============================================================ */
+
+:root,
+[data-theme='light'] {
+  /* --- Brand Accent --- */
+  --kf-accent: #0052ff;
+  --kf-accent-secondary: #4d7cff;
+  --kf-accent-hover: #0047e0;
+  --kf-accent-gradient: linear-gradient(135deg, #0052ff, #4d7cff);
+  --kf-accent-gradient-r: linear-gradient(to right, #0052ff, #4d7cff);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface --- */
+  --kf-bg: #fafafa;
+  --kf-card: #ffffff;
+  --kf-muted: #f1f5f9;
+  --kf-muted-hover: #e8edf5;
+
+  /* --- Text --- */
+  --kf-foreground: #0f172a;
+  --kf-muted-foreground: #64748b;
+  --kf-subtle-foreground: #94a3b8;
+
+  /* --- Border --- */
+  --kf-border: #e2e8f0;
+  --kf-border-strong: #cbd5e1;
+  --kf-ring: #0052ff;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #ffffff;
+  --kf-sidebar-border: #e2e8f0;
+  --kf-sidebar-item-hover: #f1f5f9;
+  --kf-sidebar-item-active-bg: rgba(0, 82, 255, 0.08);
+  --kf-sidebar-item-active-text: #0052ff;
+  --kf-sidebar-icon-color: #64748b;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(250, 250, 250, 0.85);
+  --kf-header-border: #e2e8f0;
+
+  /* --- Shadow --- */
+  --kf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --kf-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.05);
+  --kf-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --kf-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --kf-shadow-accent: 0 4px 14px rgba(0, 82, 255, 0.25);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(0, 82, 255, 0.35);
+
+  /* --- Typography --- */
+  --kf-font-display: 'Calistoga', Georgia, serif;
+  --kf-font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius --- */
+  --kf-radius-xs: 4px;
+  --kf-radius-sm: 8px;
+  --kf-radius-md: 12px;
+  --kf-radius-lg: 16px;
+  --kf-radius-xl: 24px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition --- */
+  --kf-transition: all 0.2s ease-out;
+  --kf-transition-slow: all 0.3s ease-out;
+
+  /* --- Accent Tints (for backgrounds) --- */
+  --kf-accent-5: rgba(0, 82, 255, 0.05);
+  --kf-accent-8: rgba(0, 82, 255, 0.08);
+  --kf-accent-10: rgba(0, 82, 255, 0.1);
+  --kf-accent-15: rgba(0, 82, 255, 0.15);
+  --kf-accent-30: rgba(0, 82, 255, 0.3);
+
+  /* --- Status Colors --- */
+  --kf-success: #10b981;
+  --kf-success-bg: rgba(16, 185, 129, 0.08);
+  --kf-warning: #f59e0b;
+  --kf-warning-bg: rgba(245, 158, 11, 0.08);
+  --kf-danger: #ef4444;
+  --kf-danger-bg: rgba(239, 68, 68, 0.08);
+  --kf-info: #3b82f6;
+  --kf-info-bg: rgba(59, 130, 246, 0.08);
+
+  /* --- Inverted section (dark block on light page) --- */
+  --kf-inverted-bg: #0f172a;
+  --kf-inverted-text: #f0f4ff;
+  --kf-inverted-muted: rgba(240, 244, 255, 0.6);
+}
+
+/* ============================================================
+   Dark Theme
+   ============================================================ */
+[data-theme='dark'] {
+  --kf-accent: #4d7cff;
+  --kf-accent-secondary: #6b93ff;
+  --kf-accent-hover: #6b93ff;
+  --kf-accent-gradient: linear-gradient(135deg, #4d7cff, #6b93ff);
+  --kf-accent-gradient-r: linear-gradient(to right, #4d7cff, #6b93ff);
+  --kf-accent-foreground: #ffffff;
+
+  --kf-bg: #0a0a0f;
+  --kf-card: #141420;
+  --kf-muted: #1a1a2e;
+  --kf-muted-hover: #22223a;
+
+  --kf-foreground: #f0f4ff;
+  --kf-muted-foreground: #8892aa;
+  --kf-subtle-foreground: #5a6480;
+
+  --kf-border: #252540;
+  --kf-border-strong: #32325a;
+  --kf-ring: #4d7cff;
+
+  --kf-sidebar-bg: #0f0f1a;
+  --kf-sidebar-border: #1e1e35;
+  --kf-sidebar-item-hover: rgba(77, 124, 255, 0.06);
+  --kf-sidebar-item-active-bg: rgba(77, 124, 255, 0.15);
+  --kf-sidebar-item-active-text: #6b93ff;
+  --kf-sidebar-icon-color: #8892aa;
+
+  --kf-header-bg: rgba(10, 10, 15, 0.85);
+  --kf-header-border: #1e1e35;
+
+  --kf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --kf-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.35);
+  --kf-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --kf-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
+  --kf-shadow-accent: 0 4px 14px rgba(77, 124, 255, 0.3);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(77, 124, 255, 0.4);
+
+  --kf-accent-5: rgba(77, 124, 255, 0.05);
+  --kf-accent-8: rgba(77, 124, 255, 0.08);
+  --kf-accent-10: rgba(77, 124, 255, 0.1);
+  --kf-accent-15: rgba(77, 124, 255, 0.15);
+  --kf-accent-30: rgba(77, 124, 255, 0.3);
+
+  --kf-success: #34d399;
+  --kf-success-bg: rgba(52, 211, 153, 0.1);
+  --kf-warning: #fbbf24;
+  --kf-warning-bg: rgba(251, 191, 36, 0.1);
+  --kf-danger: #f87171;
+  --kf-danger-bg: rgba(248, 113, 113, 0.1);
+  --kf-info: #60a5fa;
+  --kf-info-bg: rgba(96, 165, 250, 0.1);
+
+  --kf-inverted-bg: #f0f4ff;
+  --kf-inverted-text: #0f172a;
+  --kf-inverted-muted: rgba(15, 23, 42, 0.6);
+}

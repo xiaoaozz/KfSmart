@@ -1,0 +1,149 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 100%;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pageTitle {
+  font-family: var(--kf-font-display);
+  font-size: 22px;
+  color: var(--kf-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  transition: box-shadow 0.15s;
+}
+
+.row:hover {
+  box-shadow: var(--kf-shadow-md);
+}
+
+.rowLeft {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  margin-bottom: 4px;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rowDesc {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.rowUsage {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  margin-left: auto;
+}
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.listSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton {
+  height: 64px;
+  background: linear-gradient(90deg, var(--kf-muted) 25%, var(--kf-card) 50%, var(--kf-muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--kf-radius-md);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.versionItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.versionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.versionTime {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+.versionNote {
+  font-size: 13px;
+  color: var(--kf-foreground);
+}
+
+.versionContent {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  background: var(--kf-muted);
+  padding: 10px;
+  border-radius: var(--kf-radius-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  line-height: 1.5;
+}

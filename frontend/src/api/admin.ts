@@ -1,0 +1,181 @@
+import type { AxiosResponse } from 'axios'
+import { http } from './http'
+
+const data = <T>(r: AxiosResponse<T>) => r.data
+
+// ---- shared ----
+interface PageResult<T> {
+  records: T[]
+  total: number
+  current: number
+  size: number
+}
+
+// ---- User management ----
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  avatar?: string
+  role: 'admin' | 'user'
+  status: 'active' | 'disabled'
+  organizationTags: string[]
+  permissions: string[]
+  createTime: string
+  lastLoginTime?: string
+}
+
+// ---- Role / Permission ----
+export interface Permission {
+  key: string
+  label: string
+  group: string
+}
+
+export interface Role {
+  id: number
+  name: string
+  description?: string
+  permissions: string[]
+  userCount: number
+  createTime: string
+}
+
+// ---- Org Tag ----
+export interface OrgTag {
+  id: number
+  name: string
+  code: string
+  description?: string
+  parentId?: number
+  children?: OrgTag[]
+  userCount: number
+  createTime: string
+}
+
+// ---- System Status ----
+export interface SystemMetrics {
+  jvm: { heapUsed: number; heapMax: number; nonHeapUsed: number; uptime: number }
+  cpu: { usage: number; cores: number; loadAvg: number }
+  disk: { used: number; total: number; path: string }
+  db: { activeConnections: number; maxConnections: number; queryCount: number }
+  cache: { hitRate: number; keyCount: number; memoryUsed: number }
+  services: Array<{ name: string; status: 'up' | 'down' | 'degraded'; latencyMs: number }>
+}
+
+// ---- API Key ----
+export interface ApiKey {
+  id: number
+  name: string
+  keyPrefix: string // first 8 chars, e.g. "kf_12345..."
+  scopes: string[]
+  status: 'active' | 'disabled' | 'expired'
+  lastUsedTime?: string
+  expiresAt?: string
+  createTime: string
+}
+
+// ---- Activity Log ----
+export interface AdminActivityLog {
+  id: number
+  userId: number
+  username: string
+  action: string
+  resource: string
+  resourceId?: number
+  detail: string
+  ip: string
+  status: 'success' | 'failed'
+  createTime: string
+}
+
+// ===================== API =====================
+
+export const adminUserApi = {
+  list(params: {
+    current?: number
+    size?: number
+    keyword?: string
+    role?: string
+    status?: string
+  }) {
+    return http.get<PageResult<AdminUser>>('/admin/users', { params }).then(data)
+  },
+  update(id: number, payload: { role?: string; status?: string; organizationTags?: string[] }) {
+    return http.put<AdminUser>(`/admin/users/${id}`, payload).then(data)
+  },
+  resetPassword(id: number) {
+    return http.post<{ tempPassword: string }>(`/admin/users/${id}/reset-password`).then(data)
+  },
+  delete(id: number) {
+    return http.delete<void>(`/admin/users/${id}`).then(data)
+  },
+}
+
+export const adminRoleApi = {
+  list() {
+    return http.get<Role[]>('/admin/roles').then(data)
+  },
+  permissions() {
+    return http.get<Permission[]>('/admin/permissions').then(data)
+  },
+  create(payload: { name: string; description?: string; permissions: string[] }) {
+    return http.post<Role>('/admin/roles', payload).then(data)
+  },
+  update(id: number, payload: { name?: string; description?: string; permissions?: string[] }) {
+    return http.put<Role>(`/admin/roles/${id}`, payload).then(data)
+  },
+  delete(id: number) {
+    return http.delete<void>(`/admin/roles/${id}`).then(data)
+  },
+}
+
+export const adminOrgApi = {
+  tree() {
+    return http.get<OrgTag[]>('/admin/org-tags/tree').then(data)
+  },
+  create(payload: { name: string; code: string; description?: string; parentId?: number }) {
+    return http.post<OrgTag>('/admin/org-tags', payload).then(data)
+  },
+  update(id: number, payload: { name?: string; code?: string; description?: string }) {
+    return http.put<OrgTag>(`/admin/org-tags/${id}`, payload).then(data)
+  },
+  delete(id: number) {
+    return http.delete<void>(`/admin/org-tags/${id}`).then(data)
+  },
+}
+
+export const adminSystemApi = {
+  metrics() {
+    return http.get<SystemMetrics>('/admin/system/metrics').then(data)
+  },
+}
+
+export const adminApiKeyApi = {
+  list() {
+    return http.get<ApiKey[]>('/admin/api-keys').then(data)
+  },
+  create(payload: { name: string; scopes: string[]; expiresAt?: string }) {
+    return http.post<ApiKey & { fullKey: string }>('/admin/api-keys', payload).then(data)
+  },
+  update(id: number, payload: { name?: string; status?: string; scopes?: string[] }) {
+    return http.put<ApiKey>(`/admin/api-keys/${id}`, payload).then(data)
+  },
+  delete(id: number) {
+    return http.delete<void>(`/admin/api-keys/${id}`).then(data)
+  },
+}
+
+export const adminLogApi = {
+  list(params: {
+    current?: number
+    size?: number
+    keyword?: string
+    action?: string
+    status?: string
+    startTime?: string
+    endTime?: string
+  }) {
+    return http.get<PageResult<AdminActivityLog>>('/admin/activity-logs', { params }).then(data)
+  },
+}

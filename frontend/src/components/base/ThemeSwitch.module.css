@@ -1,0 +1,32 @@
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--kf-radius-sm);
+  border: 1px solid var(--kf-border);
+  background: var(--kf-card);
+  cursor: pointer;
+  transition: var(--kf-transition);
+  overflow: hidden;
+}
+
+.btn:hover {
+  border-color: var(--kf-accent);
+  background: var(--kf-accent-5);
+  box-shadow: var(--kf-shadow-accent);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}

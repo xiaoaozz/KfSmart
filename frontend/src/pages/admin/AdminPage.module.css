@@ -1,0 +1,121 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pageTitle {
+  font-family: var(--kf-font-display);
+  font-size: 22px;
+  color: var(--kf-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* System Status cards */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.metricCard {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.metricHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metricLabel {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  font-weight: 500;
+}
+
+.metricValue {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--kf-font-mono);
+  color: var(--kf-foreground);
+  line-height: 1;
+}
+
+.metricUnit {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin-left: 4px;
+}
+
+.metricSub {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+.serviceList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.serviceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-sm);
+}
+
+.serviceName {
+  font-weight: 500;
+  color: var(--kf-foreground);
+}
+
+.serviceLatency {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+/* API Key masking */
+.keyMask {
+  font-family: var(--kf-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+/* Org Tree */
+.orgTree {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 16px;
+}

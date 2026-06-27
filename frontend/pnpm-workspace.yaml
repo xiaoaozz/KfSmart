@@ -1,7 +1,18 @@
-packages:
-  - "packages/*"
 allowBuilds:
-  '@parcel/watcher': true
   esbuild: true
-  simple-git-hooks: true
-  vue-demi: true
+  '@swc/core': true
+  bufferutil: true
+  utf-8-validate: true
+  '@parcel/watcher': true
+  '@prisma/engines': true
+  better-sqlite3: true
+  canvas: true
+  core-js: true
+  edgedriver: true
+  geckodriver: true
+  libpq: true
+  msgpackr-extract: true
+  msw: true
+  prisma: true
+  sqlite3: true
+  unrs-resolver: true

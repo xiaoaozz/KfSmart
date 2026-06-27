@@ -1,0 +1,118 @@
+import axios, {
+  type AxiosInstance,
+  type InternalAxiosRequestConfig,
+  type AxiosResponse,
+} from 'axios'
+
+// ------------------------------------------------------------------ camelCase
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+}
+
+function deepCamel<T>(data: T): T {
+  if (Array.isArray(data)) return data.map(deepCamel) as T
+  if (data !== null && typeof data === 'object') {
+    return Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).map(([k, v]) => [toCamel(k), deepCamel(v)]),
+    ) as T
+  }
+  return data
+}
+
+// ------------------------------------------------------------------ instance
+export const http: AxiosInstance = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+  timeout: 30_000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// ------------------------------------------------------------------ token refresh queue
+let isRefreshing = false
+let refreshQueue: Array<(token: string) => void> = []
+
+function drainQueue(token: string) {
+  refreshQueue.forEach((cb) => cb(token))
+  refreshQueue = []
+}
+
+async function doRefresh(): Promise<string> {
+  const raw = localStorage.getItem('kf-auth')
+  const stored = raw ? JSON.parse(raw) : null
+  const refreshToken: string | undefined = stored?.state?.refreshToken
+  if (!refreshToken) throw new Error('no_refresh_token')
+
+  const res = await axios.post<{ data: { token: string } }>(
+    `${import.meta.env.VITE_API_BASE_URL ?? '/api/v1'}/auth/refreshToken`,
+    { refreshToken },
+  )
+  const newToken = res.data.data.token
+
+  // Persist updated token via the auth store's persist layer
+  if (raw) {
+    const parsed = JSON.parse(raw)
+    parsed.state = { ...parsed.state, token: newToken }
+    localStorage.setItem('kf-auth', JSON.stringify(parsed))
+  }
+  return newToken
+}
+
+// ------------------------------------------------------------------ request interceptor
+http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const raw = localStorage.getItem('kf-auth')
+  const token: string | undefined = raw ? JSON.parse(raw)?.state?.token : undefined
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// ------------------------------------------------------------------ response interceptor
+http.interceptors.response.use(
+  (res: AxiosResponse) => {
+    // Unwrap envelope: { code, message, data } → data
+    const payload = (res.data as Record<string, unknown>)?.data ?? res.data
+    res.data = deepCamel(payload)
+    return res
+  },
+  async (error) => {
+    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const status: number | undefined = error.response?.status
+
+    if (status === 401 && !original._retry) {
+      original._retry = true
+      if (isRefreshing) {
+        return new Promise((resolve) => {
+          refreshQueue.push((token) => {
+            original.headers.Authorization = `Bearer ${token}`
+            resolve(http(original))
+          })
+        })
+      }
+      isRefreshing = true
+      try {
+        const newToken = await doRefresh()
+        isRefreshing = false
+        drainQueue(newToken)
+        original.headers.Authorization = `Bearer ${newToken}`
+        return http(original)
+      } catch {
+        isRefreshing = false
+        refreshQueue = []
+        localStorage.removeItem('kf-auth')
+        window.location.href = '/login'
+      }
+    }
+
+    // Surface error to components via antd message — imported lazily to avoid circular deps
+    const msg: string =
+      ((error.response?.data as Record<string, unknown>)?.message as string) ||
+      error.message ||
+      '请求失败'
+
+    if (status !== 401) {
+      import('antd').then(({ message }) => {
+        message.error(msg)
+      })
+    }
+
+    return Promise.reject(error)
+  },
+)

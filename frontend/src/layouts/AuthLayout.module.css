@@ -1,0 +1,151 @@
+.root {
+  display: flex;
+  min-height: 100vh;
+  background: var(--kf-bg);
+}
+
+/* ---- Brand Panel ---- */
+.brand {
+  position: relative;
+  flex: 0 0 480px;
+  overflow: hidden;
+  background: var(--kf-accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+@media (max-width: 1024px) {
+  .brand {
+    flex: 0 0 380px;
+    padding: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .brand {
+    display: none;
+  }
+}
+
+/* Decorative rings */
+.ring1,
+.ring2 {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+}
+
+.ring1 {
+  width: 500px;
+  height: 500px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-style: dashed;
+}
+
+.ring2 {
+  width: 340px;
+  height: 340px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.brandContent {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+
+.logoIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--kf-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.logoText {
+  font-family: var(--kf-font-display);
+  font-size: 22px;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  font-family: var(--kf-font-display);
+  font-size: 40px;
+  line-height: 1.1;
+  color: #fff;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+.subTagline {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 36px;
+  letter-spacing: 0.02em;
+}
+
+.features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.featureDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+/* ---- Form Panel ---- */
+.form {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  position: relative;
+}
+
+.themeToggle {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+}
+
+.formInner {
+  width: 100%;
+  max-width: 440px;
+}

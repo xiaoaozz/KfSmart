@@ -1,0 +1,102 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pageTitle {
+  font-family: var(--kf-font-display);
+  font-size: 22px;
+  color: var(--kf-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin-top: -8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow 0.15s;
+}
+
+.card:hover {
+  box-shadow: var(--kf-shadow-md);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  flex: 1;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+}
+
+.endpoint {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-foreground);
+}
+
+.cardActions {
+  padding-top: 4px;
+  border-top: 1px solid var(--kf-border);
+}
+
+.listSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton {
+  height: 140px;
+  background: linear-gradient(90deg, var(--kf-muted) 25%, var(--kf-card) 50%, var(--kf-muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--kf-radius-md);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

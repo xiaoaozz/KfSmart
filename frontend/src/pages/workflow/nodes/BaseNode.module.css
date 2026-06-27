@@ -1,0 +1,56 @@
+.node {
+  min-width: 180px;
+  background: var(--kf-card);
+  border: 1.5px solid var(--kf-border);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s;
+  font-size: 13px;
+}
+
+.node:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+
+.selected {
+  border-color: var(--node-color, var(--kf-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color, var(--kf-primary)) 25%, transparent);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--kf-border);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--node-color, var(--kf-primary));
+  flex-shrink: 0;
+}
+
+.label {
+  font-weight: 600;
+  color: var(--kf-foreground);
+  flex: 1;
+}
+
+.body {
+  padding: 10px 12px;
+  color: var(--kf-muted-foreground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.handle {
+  width: 10px !important;
+  height: 10px !important;
+  background: var(--node-color, var(--kf-primary)) !important;
+  border: 2px solid var(--kf-background) !important;
+}

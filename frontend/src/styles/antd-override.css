@@ -1,0 +1,149 @@
+/* ============================================================
+   Ant Design Override Styles
+   调整 antd 默认样式以匹配 KfSmart 设计系统
+   ============================================================ */
+
+/* --- Modal --- */
+.ant-modal-content {
+  border-radius: var(--kf-radius-lg) !important;
+  box-shadow: var(--kf-shadow-xl) !important;
+}
+
+.ant-modal-header {
+  border-radius: var(--kf-radius-lg) var(--kf-radius-lg) 0 0 !important;
+}
+
+/* --- Drawer --- */
+.ant-drawer-content {
+  border-radius: var(--kf-radius-lg) 0 0 var(--kf-radius-lg) !important;
+}
+
+.ant-drawer-right .ant-drawer-content {
+  border-radius: 0 var(--kf-radius-lg) var(--kf-radius-lg) 0 !important;
+}
+
+/* --- Card --- */
+.ant-card {
+  border-radius: var(--kf-radius-md) !important;
+  border-color: var(--kf-border) !important;
+  box-shadow: var(--kf-shadow-sm) !important;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease !important;
+}
+
+.ant-card:hover {
+  box-shadow: var(--kf-shadow-lg) !important;
+}
+
+/* --- Button --- */
+.ant-btn-primary {
+  background: var(--kf-accent-gradient-r) !important;
+  border: none !important;
+  box-shadow: var(--kf-shadow-accent) !important;
+  transition: var(--kf-transition) !important;
+}
+
+.ant-btn-primary:hover {
+  box-shadow: var(--kf-shadow-accent-lg) !important;
+  transform: translateY(-1px) !important;
+  filter: brightness(1.08) !important;
+}
+
+.ant-btn-primary:active {
+  transform: scale(0.98) translateY(0) !important;
+}
+
+/* --- Input --- */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select-selector,
+.ant-picker {
+  border-radius: var(--kf-radius-sm) !important;
+  border-color: var(--kf-border) !important;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: var(--kf-accent) !important;
+  box-shadow: 0 0 0 2px var(--kf-accent-15) !important;
+}
+
+/* --- Table --- */
+.ant-table {
+  border-radius: var(--kf-radius-md) !important;
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background: var(--kf-muted) !important;
+  border-bottom-color: var(--kf-border) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+/* --- Tag (status badge) --- */
+.ant-tag {
+  border-radius: var(--kf-radius-xs) !important;
+  font-family: var(--kf-font-mono) !important;
+  font-size: 11px !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* --- Menu (sidebar) --- */
+.ant-menu-item {
+  border-radius: var(--kf-radius-sm) !important;
+  margin: 2px 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+.ant-menu-item-selected {
+  font-weight: 600 !important;
+}
+
+/* --- Popover / Tooltip --- */
+.ant-popover-inner,
+.ant-tooltip-inner {
+  border-radius: var(--kf-radius-sm) !important;
+  box-shadow: var(--kf-shadow-lg) !important;
+}
+
+/* --- Pagination --- */
+.ant-pagination-item,
+.ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination-next .ant-pagination-item-link {
+  border-radius: var(--kf-radius-sm) !important;
+}
+
+.ant-pagination-item-active {
+  background: var(--kf-accent) !important;
+  border-color: var(--kf-accent) !important;
+}
+
+.ant-pagination-item-active a {
+  color: white !important;
+}
+
+/* --- Tabs --- */
+.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--kf-accent) !important;
+  font-weight: 600 !important;
+}
+
+.ant-tabs-ink-bar {
+  background: var(--kf-accent-gradient-r) !important;
+  height: 2px !important;
+  border-radius: 1px !important;
+}
+
+/* --- Scrollbar in antd components --- */
+.ant-select-dropdown::-webkit-scrollbar,
+.ant-table-body::-webkit-scrollbar {
+  width: 4px;
+}
