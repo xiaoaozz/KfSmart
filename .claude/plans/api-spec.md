@@ -13,7 +13,9 @@
 | 响应信封 | `{ code: number, message: string, data: T }` — 前端 interceptor 自动解包为 `.data` |
 | 蛇形转驼峰 | response interceptor 对所有响应执行 `deepCamel`，后端无需处理命名风格 |
 | Token 注入 | request interceptor 读 `localStorage['kf-auth'].state.token`，注入 `Authorization: Bearer` |
-| Token 刷新 | 401 时自动调 `POST /auth/refreshToken`，原请求进入队列等待重放 |
+| Token 刷新 | 401 时自动调 `POST /auth/refreshToken`，原请求进入队列等待重放（**认证端点除外，见下**）|
+| 认证端点 401 | `/users/login`、`/users/register`、`/users/send-email-code` 的 401 **跳过 token 刷新流程**，直接弹出错误提示 |
+| 密码传输 | 登录/注册密码均须先用 RSA 公钥（`GET /users/public-key`）加密后再发送，后端接收后解密再做 BCrypt 比对 |
 | 权限码 | 来自 `GET /users/me` 的 `permissions[]`，由 `usePermission` hook 读取 |
 
 ---
@@ -94,7 +96,8 @@ GET  /resources/{id}/histories   — 获取子资源列表
 
 | 模块 | 前端 | 后端 | 状态 |
 |---|---|---|---|
-| Auth（登录 / 注册 / 刷新 / 登出）| ✅ | ✅ | 已对齐 |
+| Auth（登录 / 注册 / 刷新 / 登出）| ✅ | ✅ | 已对齐（密码 RSA 加密）|
+| Auth（公钥获取 `GET /users/public-key`）| ✅ | ✅ | 已对齐 |
 | Auth（邮箱登录 + 注册验证码）| ✅ | ✅ | 已对齐 |
 | Conversation（会话 + 消息）| ✅ | ✅ | 已对齐 |
 | Document（列表 / 删除 / 解析 / 下载）| ✅ | ✅ | 已对齐 |
@@ -111,6 +114,17 @@ GET  /resources/{id}/histories   — 获取子资源列表
 ## 五、Breaking Change 记录
 
 > 所有影响多个调用方的接口变更必须记录在此，并标注影响范围和迁移方式。
+
+### 2026-06-27 登录接口密码字段改为 RSA 加密
+
+| 字段 | 旧值 | 新值 |
+|---|---|---|
+| `POST /users/login` → `password` | 明文字符串 | RSA-2048 + PKCS1Padding 加密后的 Base64 字符串 |
+
+**迁移要求**：  
+前端必须先调 `GET /users/public-key` 获取 PEM 公钥，使用 `jsencrypt.encrypt(password)` 加密后再发送。  
+后端在 `UserController.login()` 中使用 `RsaService.decrypt()` 解密，解密失败返回 `400 密码格式错误，请刷新页面后重试`。  
+**影响范围**：仅 `LoginPage.tsx` → `POST /users/login`（注册密码暂不加密）。
 
 ### 2026-06-27 Document 标识符迁移
 
@@ -131,8 +145,10 @@ GET  /resources/{id}/histories   — 获取子资源列表
 
 ### Auth
 - [ ] 用户名 / 邮箱均可登录
+- [ ] 密码错误时前端正确弹出 `message.error("用户名或密码错误")`（不再跳转或无提示）
+- [ ] 登录请求中 `password` 字段为 RSA 加密后的 Base64 字符串
 - [ ] Token 存入 Zustand store，页面跳转正常
-- [ ] 401 时自动刷新 Token 并重放请求
+- [ ] 非认证接口 401 时自动刷新 Token 并重放请求
 - [ ] 登出后 Token 失效，跳转登录页
 - [ ] 注册：邮箱验证码正确才能建账号，邮箱重复返回 409
 
@@ -200,6 +216,18 @@ Controller  →  Service  →  Repository (Entity)
 后端查找顺序：先精确匹配用户名，再匹配邮箱（均 case-insensitive）。
 无论哪个字段不匹配，统一返回 `"用户名或密码错误"`，不区分原因。
 
+### 9.1.1 获取 RSA 公钥
+
+```
+GET /users/public-key   （公开，无需认证）
+
+响应：{ "code": 200, "data": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n" }
+```
+
+公钥为 PKCS#8 PEM 格式（Java `KeyPairGenerator` 生成，兼容 `jsencrypt`）。  
+每次后端重启会重新生成密钥对，前端**不应缓存超过一个会话**的公钥。  
+前端在 `LoginPage` 挂载时预取，存入组件内 `ref`，提交前若预取失败则重试一次。
+
 ### 9.2 发送注册验证码
 
 ```
@@ -260,4 +288,4 @@ spring:
 
 ---
 
-*文档创建：2026-06-27 | 最后更新：2026-06-27*
+*文档创建：2026-06-27 | 最后更新：2026-06-27（密码 RSA 加密、公钥接口、认证端点 401 修复）*

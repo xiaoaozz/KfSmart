@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -36,14 +37,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         try {
-            http.csrf(AbstractHttpConfigurer::disable)
+            http.cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorize -> authorize
                     // ===== 公开路径（无需认证）=====
                     .requestMatchers("/error").permitAll()
                     .requestMatchers("/", "/test.html", "/static/test.html", "/static/**",
                                      "/avatars/**", "/*.js", "/*.css", "/*.ico").permitAll()
                     .requestMatchers("/chat/**", "/ws/**").permitAll()
-                    .requestMatchers("/api/v1/users/register", "/api/v1/users/login").permitAll()
+                    .requestMatchers(
+                        "/api/v1/users/register",
+                        "/api/v1/users/login",
+                        "/api/v1/users/send-email-code",
+                        "/api/v1/users/public-key"
+                    ).permitAll()
                     .requestMatchers("/api/v1/test/**").permitAll()
                     .requestMatchers("/api/v1/chat/websocket-token").permitAll()
 

@@ -44,6 +44,7 @@
 | 测试 | Vitest + React Testing Library + Playwright | 单测 + 集成 + E2E |
 | 工程规范 | ESLint + Prettier + Husky + lint-staged | 提交前自动检查 |
 | 包管理 | pnpm 8 | |
+| 密码加密 | jsencrypt 3.x | RSA-2048 前端加密密码，防止明文传输 |
 
 ---
 
@@ -293,20 +294,16 @@ usePermission()      // Hook：hasPermission('kb:write')
 - Response interceptor：
   - 统一解包 `data.data`（后端 `ApiResponse<T>` 外层）
   - snake_case → camelCase 转换
-  - 4xx/5xx：统一 `message.error`
-- 401 处理：Token 刷新队列（并发 401 只发一次刷新请求）
+  - 所有失败请求：统一 `message.error`（含 401）
+- 401 处理：认证端点（`/login`、`/register`、`/send-email-code`）直接弹错误提示；其他接口走 Token 刷新队列（并发 401 只发一次刷新请求）
 
 ```typescript
-let refreshPromise: Promise<string> | null = null
+const isAuthEndpoint = /\/users\/(login|register|send-email-code)$/.test(url)
 
-// response interceptor 中：
-if (error.response?.status === 401) {
-  if (!refreshPromise) {
-    refreshPromise = refreshToken().finally(() => { refreshPromise = null })
-  }
-  const newToken = await refreshPromise
-  // 重放原请求
+if (status === 401 && !isAuthEndpoint) {
+  // 刷新 token 并重放请求
 }
+// 所有错误（包括认证端点的 401）都走 message.error
 ```
 
 ### API 文件规范
@@ -379,6 +376,7 @@ export const FEATURE = {
 | 场景 | 处理方式 |
 |---|---|
 | JS 渲染错误 | `ErrorBoundary` 组件包裹页面，显示 fallback UI |
+| 登录密码错误 | catch 块主动调用 `message.error()`，显示后端返回的具体错误信息 |
 | 403 无权限 | 路由守卫跳 `/403` 页 |
 | 404 路由不存在 | `*` 路由匹配跳 `/404` 页 |
 | 500 服务器错误 | axios interceptor 统一 toast + 上报 |
@@ -478,9 +476,11 @@ export const FEATURE = {
 
 | 功能 | 文件 | 备注 |
 |------|------|------|
-| 登录（用户名/邮箱 + 密码） | `pages/auth/LoginPage.tsx` | 支持用户名或邮箱登录 |
+| 登录（用户名/邮箱 + 密码） | `pages/auth/LoginPage.tsx` | 支持用户名或邮箱登录；密码 RSA 加密后传输 |
+| 登录错误提示 | `pages/auth/LoginPage.tsx` | catch 块主动 `message.error()`，展示"用户名或密码错误"等具体提示 |
+| 密码 RSA 加密 | `pages/auth/LoginPage.tsx` + `api/auth.ts` | 挂载时预取公钥（`GET /users/public-key`），提交时 JSEncrypt 加密 |
 | 注册（含邮箱 OTP 验证） | `pages/auth/RegisterPage.tsx` | 60s 倒计时，`Form.useForm()` 控制 |
-| Token 刷新 | `api/http.ts` | 并发安全，刷新队列 |
+| Token 刷新 | `api/http.ts` | 并发安全，刷新队列；认证端点 401 跳过刷新直接报错 |
 | 登录态持久化 | `stores/auth.ts` | localStorage `kf-auth` |
 
 ### 核心功能
@@ -583,4 +583,4 @@ ADR 文件位于 `docs/architecture/adr/`，格式：
 
 ---
 
-*最后更新：2026-06-27*
+*最后更新：2026-06-27（密码 RSA 加密 + 登录错误提示优化）*

@@ -11,11 +11,13 @@ import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.LoginRecordRepository;
 import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
+import com.smart.kf.service.EmailService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.PasswordUtil;
+import com.smart.kf.utils.RsaService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -74,23 +76,59 @@ public class UserController {
     @Autowired
     private LoginRecordRepository loginRecordRepository;
 
+    @Autowired
+    private EmailService emailService;
+
+    @Autowired
+    private RsaService rsaService;
+
+    // 返回 RSA 公钥（PEM 格式），供前端加密密码使用
+    @GetMapping("/public-key")
+    public ResponseEntity<?> getPublicKey() {
+        return ResponseEntity.ok(Map.of("code", 200, "data", rsaService.getPublicKeyPem()));
+    }
+
+    // 发送注册邮箱验证码
+    @PostMapping("/send-email-code")
+    public ResponseEntity<?> sendEmailCode(@RequestBody java.util.Map<String, String> body) {
+        String email = body.get("email");
+        try {
+            emailService.sendRegistrationCode(email);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "验证码已发送，请查收邮件"));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("SEND_EMAIL_CODE", email, "发送验证码异常: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "发送验证码失败"));
+        }
+    }
+
     // 用户注册接口
     // 接收用户请求体中的用户名和密码，并调用用户服务进行注册
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody UserRequest request) {
+    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("USER_REGISTER");
         try {
-            if (request.username() == null || request.username().isEmpty() ||
-                    request.password() == null || request.password().isEmpty()) {
+            if (request.username() == null || request.username().isBlank() ||
+                    request.password() == null || request.password().isBlank()) {
                 LogUtils.logUserOperation("anonymous", "REGISTER", "validation", "FAILED_EMPTY_PARAMS");
                 monitor.end("注册失败：参数为空");
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
-            
-            userService.registerUser(request.username(), request.password());
+            if (request.email() == null || request.email().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "邮箱不能为空"));
+            }
+            if (request.emailCode() == null || request.emailCode().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "邮箱验证码不能为空"));
+            }
+
+            // 先验证 OTP，通过后再创建账号
+            emailService.verifyRegistrationCode(request.email(), request.emailCode());
+
+            userService.registerUser(request.username(), request.password(), request.email());
             LogUtils.logUserOperation(request.username(), "REGISTER", "user_creation", "SUCCESS");
             monitor.end("注册成功");
-            
+
             return ResponseEntity.ok(Map.of("code", 200, "message", "User registered successfully"));
         } catch (CustomException e) {
             LogUtils.logBusinessError("USER_REGISTER", request.username(), "用户注册失败: %s", e, e.getMessage());
@@ -121,7 +159,14 @@ public class UserController {
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
             
-            String username = userService.authenticateUser(request.username(), request.password());
+            // RSA 解密前端加密的密码
+            String rawPassword;
+            try {
+                rawPassword = rsaService.decrypt(request.password());
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "密码格式错误，请刷新页面后重试"));
+            }
+            String username = userService.authenticateUser(request.username(), rawPassword);
             if (username == null) {
                 LogUtils.logUserOperation(request.username(), "LOGIN", "authentication", "FAILED_INVALID_CREDENTIALS");
                 // 记录登录失败
@@ -785,6 +830,7 @@ public class UserController {
     
     // 用户请求记录类
     public record UserRequest(String username, String password) {}
+    public record RegisterRequest(String username, String password, String email, String emailCode) {}
 
     public record UpdateProfileRequest(String email, String phone, String bio) {}
 

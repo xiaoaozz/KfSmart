@@ -20,6 +20,7 @@ import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.MinioMigrationUtil;
+import com.smart.kf.utils.PasswordUtil;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.pagination.PageResult;
 import io.minio.MinioClient;
@@ -147,6 +148,90 @@ public class AdminController {
             monitor.end("获取用户列表失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("code", 500, "message", "Failed to get users: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 更新用户信息（用户名、邮箱、角色）
+     */
+    @PutMapping("/users/{userId}")
+    public ResponseEntity<?> updateUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId,
+            @RequestBody Map<String, Object> request) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            if (request.containsKey("username")) user.setUsername((String) request.get("username"));
+            if (request.containsKey("email")) user.setEmail((String) request.get("email"));
+            if (request.containsKey("role")) {
+                user.setRole(User.Role.valueOf(((String) request.get("role")).toUpperCase()));
+            }
+            userRepository.save(user);
+            user.setPassword(null);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_UPDATE_USER", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "用户信息更新成功", "data", user));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_UPDATE_USER", adminUsername, "更新用户失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "更新用户失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 删除用户（不允许删除管理员账号）
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<?> deleteUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            if (user.getRole() == User.Role.ADMIN) {
+                throw new CustomException("不能删除管理员账号", HttpStatus.FORBIDDEN);
+            }
+            userRepository.delete(user);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_DELETE_USER", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "用户删除成功"));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_DELETE_USER", adminUsername, "删除用户失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "删除用户失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 重置用户密码（生成随机12位密码并返回，管理员转告用户）
+     */
+    @PostMapping("/users/{userId}/reset-password")
+    public ResponseEntity<?> resetUserPassword(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            String newPassword = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            user.setPassword(PasswordUtil.encode(newPassword));
+            userRepository.save(user);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_RESET_PASSWORD", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "密码重置成功", "data", Map.of("newPassword", newPassword)));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_RESET_PASSWORD", adminUsername, "重置密码失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "重置密码失败: " + e.getMessage()));
         }
     }
 

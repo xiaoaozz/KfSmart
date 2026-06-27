@@ -76,7 +76,10 @@ http.interceptors.response.use(
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
     const status: number | undefined = error.response?.status
 
-    if (status === 401 && !original._retry) {
+    // Auth endpoints (login/register) should never trigger token refresh — surface error directly
+    const isAuthEndpoint = /\/users\/(login|register|send-email-code)$/.test(original.url ?? '')
+
+    if (status === 401 && !original._retry && !isAuthEndpoint) {
       original._retry = true
       if (isRefreshing) {
         return new Promise((resolve) => {
@@ -98,6 +101,7 @@ http.interceptors.response.use(
         refreshQueue = []
         localStorage.removeItem('kf-auth')
         window.location.href = '/login'
+        return Promise.reject(error)
       }
     }
 
@@ -107,11 +111,9 @@ http.interceptors.response.use(
       error.message ||
       '请求失败'
 
-    if (status !== 401) {
-      import('antd').then(({ message }) => {
-        message.error(msg)
-      })
-    }
+    import('antd').then(({ message }) => {
+      message.error(msg)
+    })
 
     return Promise.reject(error)
   },

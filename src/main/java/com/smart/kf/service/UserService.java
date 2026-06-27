@@ -71,23 +71,39 @@ public class UserService {
      * @param password 要注册的用户密码
      * @throws CustomException 如果用户名已存在，则抛出异常
      */
+    /** Backward-compatible overload used by tests and internal callers. */
     @Transactional
     public void registerUser(String username, String password) {
+        registerUser(username, password, null);
+    }
+
+    @Transactional
+    public void registerUser(String username, String password, String email) {
         // 检查数据库中是否已存在该用户名
         if (userRepository.findByUsername(username).isPresent()) {
             // 若用户名已存在，抛出自定义异常，状态码为 400 Bad Request
             throw new CustomException("Username already exists", HttpStatus.BAD_REQUEST);
         }
-        
+
+        // 邮箱唯一性校验（application 层强制）
+        if (email != null && !email.isBlank()) {
+            if (userRepository.findByEmail(email.trim().toLowerCase()).isPresent()) {
+                throw new CustomException("该邮箱已被注册", HttpStatus.BAD_REQUEST);
+            }
+        }
+
         // 确保默认组织标签存在（系统内部使用）
         ensureDefaultOrgTagExists();
-        
+
         User user = new User();
         user.setUsername(username);
         // 对密码进行加密处理并设置到 User 对象中
         user.setPassword(PasswordUtil.encode(password));
         // 设置用户角色为普通用户
         user.setRole(User.Role.USER);
+        if (email != null && !email.isBlank()) {
+            user.setEmail(email.trim().toLowerCase());
+        }
         
         // 保存用户以生成ID
         userRepository.save(user);
@@ -272,15 +288,15 @@ public class UserService {
      * @return 认证成功后返回用户的用户名
      * @throws CustomException 如果用户名或密码无效，则抛出异常
      */
-    public String authenticateUser(String username, String password) {
-        User user = userRepository.findByUsername(username)
+    public String authenticateUser(String identifier, String password) {
+        // 先按用户名查找，再按邮箱回退，统一错误信息避免信息泄露
+        String normalizedId = identifier == null ? "" : identifier.trim();
+        User user = userRepository.findByUsername(normalizedId)
+                .or(() -> userRepository.findByEmail(normalizedId.toLowerCase()))
                 .orElseThrow(() -> new CustomException("用户名或密码错误", HttpStatus.UNAUTHORIZED));
-        // 比较输入的密码和数据库中存储的加密密码是否匹配
         if (!PasswordUtil.matches(password, user.getPassword())) {
-            // 若不匹配，抛出自定义异常，状态码为 401 Unauthorized
             throw new CustomException("用户名或密码错误", HttpStatus.UNAUTHORIZED);
         }
-        // 认证成功，返回用户的用户名
         return user.getUsername();
     }
     

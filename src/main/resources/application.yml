@@ -56,6 +56,18 @@ spring:
       max-in-memory-size: 16MB  # 增加响应大小限制
   codec:
     max-in-memory-size: 16MB    # 增加编解码大小限制
+  mail:
+    host: smtp.qq.com
+    port: 465
+    username: your_qq@qq.com        # 替换为真实 QQ 邮箱地址
+    password: your_smtp_authcode    # QQ 邮箱「授权码」，不是 QQ 登录密码
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true
+      mail.smtp.socketFactory.port: 465
+      mail.smtp.socketFactory.class: javax.net.ssl.SSLSocketFactory
+      mail.smtp.socketFactory.fallback: false
 
 
 minio:
@@ -116,7 +128,7 @@ ai:
     key:                              # 兜底 API Key，留空表示纯走数据库配置
   prompt:
     rules: |
-      你是KnowFlow知识助手，须遵守：
+      你是KfSmart AI Platform 知识助手，须遵守：
       1. 仅用简体中文作答。
       2. 回答需先给结论，逻辑清晰。
       3. 正文中如需引用参考信息，每个来源只在正文中标注一次 (来源#编号: 文件名)，同一文件被多次引用时只保留第一次出现的标注，不要重复标注相同来源。

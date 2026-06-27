@@ -19,6 +19,8 @@ export interface AuthResult {
 }
 
 export const authApi = {
+  getPublicKey: () => http.get<string>('/users/public-key').then((r) => r.data),
+
   login: (params: LoginParams) => http.post<AuthResult>('/users/login', params).then((r) => r.data),
 
   register: (params: RegisterParams) =>
