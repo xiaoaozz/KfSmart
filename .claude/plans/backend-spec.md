@@ -228,6 +228,27 @@ primaryOrg - 主组织标签
 permissions - 逗号分隔权限码（如 "kb:read,kb:write,chat:use"）
 ```
 
+### 邮箱注册 OTP 流程
+
+```
+POST /users/send-email-code  →  EmailService.sendRegistrationCode(email)
+                                  └─ 生成 6 位 OTP，写入 Redis（key: email:code:{email}，TTL 5 分钟）
+                                  └─ 写入限流 key（email:code:limit:{email}，TTL 60 秒）
+                                  └─ 发送 HTML 邮件
+
+POST /users/register         →  ① 参数校验（username/password/email/emailCode 不为空）
+                                ② 用户名唯一性预检（userRepository.findByUsername）
+                                ③ 邮箱唯一性预检（userRepository.findByEmail）
+                                ④ verifyRegistrationCode(email, code)  →  验证通过后删除 OTP key
+                                ⑤ UserService.registerUser(username, password, email)
+```
+
+**关键设计约束：**
+
+- `verifyRegistrationCode` 是**一次性消费**：验证通过即 `redisTemplate.delete(otpKey)`，不可重放。
+- 因此步骤 ②③（用户名/邮箱唯一性预检）**必须在步骤 ④ 之前执行**。若预检失败直接返回 400，不消费 OTP，用户可修正字段后持原验证码重试。
+- 若颠倒顺序（先消费 OTP 再检查用户名），一旦用户名已存在，OTP 已销毁，用户须重新获取验证码，体验差且不合理。
+
 ### 路由安全三层
 
 | 层级 | 机制 | 说明 |
@@ -253,6 +274,18 @@ permissions - 逗号分隔权限码（如 "kb:read,kb:write,chat:use"）
 ```
 /api/v1/admin/**  →  hasAuthority('system:admin')
 ```
+
+### HTTP 错误码语义（`SecurityConfig.exceptionHandling`）
+
+Spring Security 6 默认对匿名用户的受保护请求也返回 403，导致前端 token 刷新逻辑失效。`SecurityConfig` 已配置自定义异常处理器：
+
+| 情况 | 返回码 | 触发逻辑 |
+|---|---|---|
+| JWT 缺失/过期/无效（匿名用户） | **401** | `AccessDeniedHandler` 检测到 `AnonymousAuthenticationToken` → 降级为 401 |
+| 已认证但权限不足 | **403** | `AccessDeniedHandler` 检测到真实认证 → 返回 403 |
+| 其他触发 `AuthenticationEntryPoint` 的场景 | **401** | 直接返回 401 |
+
+**规范约束**：前端 http 层的 token 刷新逻辑监听 401。只要遵守上述语义，过期 token 会触发自动刷新而非卡在 403 错误页。
 
 ---
 
@@ -449,9 +482,24 @@ try {
 
 ### LLM（ModelClient）
 
-- 调用 DeepSeek API（SSE 流式），通过 Spring WebFlux `WebClient`
-- 配置：`application.yml` → `ai.*`（endpoint、api-key、model-name）
-- 支持运行时通过 `ApiKeyConfig` 覆盖默认配置
+- 调用兼容 OpenAI 协议的 LLM 服务（SSE 流式），通过 Spring WebFlux `WebClient`
+- **配置优先级**：数据库 `api_key_configs` 表（激活项） > `application.yml` `ai.default.*` 兜底
+- `application.yml` 兜底配置：
+
+  ```yaml
+  ai:
+    default:
+      url: https://api.deepseek.com/v1   # 任意 OpenAI 兼容地址
+      model: deepseek-chat
+      key:                               # 留空时纯走数据库配置
+  ```
+
+- 运行时切换模型：在管理后台 `POST /api/v1/admin/api-keys/{id}/activate` 激活对应配置项即可
+- **错误响应解析规则**（`ModelClient.java`）：API 返回错误体时，按以下顺序提取 message：
+  1. 顶层 `msg` 字段
+  2. 顶层 `message` 字段
+  3. `error` 为字符串时取其值
+  4. `error` 为对象时取 `error.message` 或 `error.msg`（修复 GLM-5 429 场景中 `{"error":{"code":"1113","message":"..."}}` 被解析为空串的 bug）
 
 ### Embedding（EmbeddingClient）
 
@@ -539,38 +587,80 @@ FileProcessingConsumer（@KafkaListener）
 
 ### 聊天 WebSocket（`ChatWebSocketHandler`）
 
-**连接路径**：`/chat/{token}`（无需额外认证头，token 在路径中）
+**连接路径**：`/chat/{jwtToken}`（JWT 嵌入 URL 路径，无需额外认证头）
 
-**获取 WebSocket 停止令牌**：
+**获取 WebSocket 内部停止令牌**：
 ```
-GET /api/v1/chat/websocket-token
+GET /api/v1/chat/websocket-token  →  { "cmdToken": "..." }
 ```
 
 **客户端 → 服务端消息：**
 
 ```json
 // 聊天消息
-{ "type": "chat", "conversationId": "...", "message": "用户输入", "apiKeyConfigId": null }
+{ "type": "chat", "message": "用户输入", "conversationId": "uuid" }
 
-// 停止响应（需 websocket-token）
+// 停止流式输出（需先获取 websocket-token）
 { "type": "stop", "_internal_cmd_token": "<cmdToken>" }
 ```
 
-**服务端 → 客户端消息：**
+**服务端 → 客户端消息（按时序）：**
 
 ```json
-// 连接建立
-{ "type": "connection", "sessionId": "...", "message": "WebSocket连接已建立" }
+// 1. 连接建立确认
+{ "type": "connection", "sessionId": "..." }
 
-// 流式内容块
-{ "type": "chunk", "content": "..." }
+// 2. 知识库检索中（RAG 场景）
+{ "type": "search_results", "results": [...] }
 
-// 完成
-{ "type": "done", "conversationId": "..." }
+// 3. 流式 token（逐字推送，无 type 字段）
+{ "chunk": "文字片段" }
 
-// 错误
-{ "type": "error", "message": "..." }
+// 4a. 正常完成
+{ "type": "completion", "status": "finished" }
+
+// 4b. 用户主动停止
+{ "type": "completion", "status": "stopped" }
+
+// 4c. AI 服务出错（先推送 error 帧，500ms 后推送 completion）
+{ "error": "true", "message": "余额不足或无可用资源包,请充值。" }
+{ "type": "completion", "status": "failed", "message": "余额不足或无可用资源包,请充值。" }
+
+// stop 命令确认帧
+{ "type": "stop", "status": "stopped", "partialContent": "..." }
 ```
+
+> **注意**：流式 token 帧只有 `chunk` 字段，没有 `type` 字段；前端通过 `'chunk' in frame` 区分。
+> `error` 帧和 `completion:failed` 帧均会发送，前端应以 `error` 帧展示具体原因，`completion:failed` 仅用于重置 UI 状态。
+
+### 会话管理（Redis）
+
+会话数据全量存于 Redis，TTL 7 天：
+
+| Key 模板 | 内容 |
+|---|---|
+| `user:{userId}:current_conversation` | 当前活跃会话 ID |
+| `user:{userId}:conversation_ids` | 会话 ID 有序集合（JSON） |
+| `conversation:{id}:meta` | 会话元数据（标题、置顶、时间等） |
+| `conversation:{id}:history` | 完整消息历史（JSON 数组） |
+
+**重启注意**：若 Redis 重启，所有会话数据丢失，用户需重新创建会话。MySQL 中的 `conversations` 表仅存储轻量元数据，不含消息历史。
+
+**后端守卫**：`createConversationSession` 会校验当前会话是否为空（`current_conversation` 存在且消息为 0），若为空则阻止再次创建，返回 400 `当前新会话暂无消息，请先发送消息后再创建新会话`。
+
+### 会话 API（`ConversationController`）
+
+> 路由前缀：`/api/v1/users/conversation`
+
+| 方法 | 路径 | 返回类型 | 说明 |
+|---|---|---|---|
+| GET | `/` | `Message[]` | 查询指定会话消息历史 |
+| GET | `/sessions` | `List<SessionMeta>` | 会话列表（**直接数组，非 PageResult**） |
+| POST | `/sessions` | `SessionMeta` | 创建新会话 |
+| DELETE | `/sessions?conversation_id=` | — | 删除会话 |
+| PUT | `/sessions/pin` | `SessionMeta` | 更新置顶状态 |
+
+> `/sessions` 返回的是**平铺数组**（非 `PageResult` 包装），前端直接使用 `r.data`，不需要 `.records`。
 
 ### 工作流 WebSocket（`WorkflowWebSocketHandler`）
 
@@ -678,15 +768,15 @@ spring.servlet.multipart.max-request-size: 100MB
 | POST | `/users/login` | 公开 | 登录（用户名/邮箱 + 密码） |
 | POST | `/users/send-email-code` | 公开 | 发送邮箱验证码 |
 | GET | `/users/me` | 已登录 | 获取当前用户信息 + 权限列表 |
-| PUT | `/users/me` | 已登录 | 更新个人资料（昵称/邮箱/手机/简介） |
+| PUT | `/users/me` | 已登录 | 更新个人资料（邮箱/手机/简介） |
 | PUT | `/users/me/password` | 已登录 | 修改密码 |
 | POST | `/users/me/avatar` | 已登录 | 上传头像（2MB 限制） |
-| GET | `/users/me/login-records` | 已登录 | 登录记录 |
-| GET | `/users/me/favorites` | 已登录 | 收藏列表 |
-| POST | `/users/me/favorites` | 已登录 | 添加收藏 |
-| DELETE | `/users/me/favorites/{id}` | 已登录 | 取消收藏 |
-| GET | `/users/me/notification-preferences` | 已登录 | 通知偏好设置 |
-| PUT | `/users/me/notification-preferences` | 已登录 | 更新通知偏好 |
+| GET | `/users/login-records` | 已登录 | 登录记录（分页） |
+| GET | `/users/favorites` | 已登录 | 收藏列表 |
+| POST | `/users/favorites` | 已登录 | 添加收藏 |
+| DELETE | `/users/favorites/{id}` | 已登录 | 取消收藏 |
+| GET | `/users/notification-preferences` | 已登录 | 通知偏好设置 |
+| PUT | `/users/notification-preferences` | 已登录 | 更新通知偏好 |
 
 ### 知识库（`/api/v1/knowledge-bases`）
 
@@ -721,16 +811,17 @@ spring.servlet.multipart.max-request-size: 100MB
 | POST | `/upload` | 上传文件（multipart，含 MD5 秒传） |
 | POST | `/upload/chunk` | 分片上传 |
 
-### 对话（`/api/v1/conversations` + WebSocket）
+### 对话（`/api/v1/users/conversation` + WebSocket）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/conversations` | 对话列表 |
-| POST | `/conversations` | 创建对话 |
-| GET | `/conversations/{id}` | 对话详情 + 消息历史 |
-| DELETE | `/conversations/{id}` | 删除对话 |
-| GET | `/chat/websocket-token` | 获取 WebSocket 停止令牌 |
-| WS | `/chat/{token}` | 聊天 WebSocket 连接 |
+| GET | `/users/conversation?conversation_id=` | 查询指定会话消息历史 |
+| GET | `/users/conversation/sessions` | 会话列表（返回 **数组**，非 PageResult） |
+| POST | `/users/conversation/sessions` | 创建新会话 |
+| DELETE | `/users/conversation/sessions?conversation_id=` | 删除会话 |
+| PUT | `/users/conversation/sessions/pin` | 更新置顶状态 |
+| GET | `/chat/websocket-token` | 获取 WebSocket 内部停止令牌 |
+| WS | `/chat/{jwtToken}` | 聊天 WebSocket 连接（JWT 在路径中） |
 
 ### Agent（`/api/v1/agents`）
 
@@ -839,4 +930,4 @@ spring.servlet.multipart.max-request-size: 100MB
 
 ---
 
-*最后更新：2026-06-27*
+*最后更新：2026-06-27（同步本次对话修复：WebSocket 协议、ModelClient 错误解析、SecurityConfig 401/403 语义）*

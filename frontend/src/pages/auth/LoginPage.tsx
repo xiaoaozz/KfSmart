@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Form, Input, Checkbox, Divider, App } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import JSEncrypt from 'jsencrypt'
 import { authApi, type LoginParams } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { GradientButton } from '@/components/base'
@@ -11,43 +10,21 @@ import styles from './LoginPage.module.css'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
-  const publicKeyRef = useRef<string | null>(null)
   const setTokens = useAuthStore((s) => s.setTokens)
   const navigate = useNavigate()
   const location = useLocation()
   const { message } = App.useApp()
   const from = (location.state as { from?: Location })?.from?.pathname ?? '/dashboard'
 
-  // 预取公钥，避免登录时再等一个 RTT
+  // 预取并缓存 RSA 公钥，避免登录提交时再等一个 RTT（加密在 authApi.login 内部完成）
   useEffect(() => {
-    authApi
-      .getPublicKey()
-      .then((key) => {
-        publicKeyRef.current = key
-      })
-      .catch(() => {
-        // 预取失败不阻塞，提交时会重试
-      })
+    authApi.prefetchPublicKey()
   }, [])
-
-  const encryptPassword = async (password: string): Promise<string> => {
-    let pubKey = publicKeyRef.current
-    if (!pubKey) {
-      pubKey = await authApi.getPublicKey()
-      publicKeyRef.current = pubKey
-    }
-    const encryptor = new JSEncrypt()
-    encryptor.setPublicKey(pubKey)
-    const result = encryptor.encrypt(password)
-    if (!result) throw new Error('密码加密失败，请刷新页面重试')
-    return result
-  }
 
   const onFinish = async (values: LoginParams) => {
     setLoading(true)
     try {
-      const encryptedPassword = await encryptPassword(values.password)
-      const result = await authApi.login({ ...values, password: encryptedPassword })
+      const result = await authApi.login(values)
       setTokens(result.token, result.refreshToken)
       message.success('登录成功')
       navigate(from, { replace: true })

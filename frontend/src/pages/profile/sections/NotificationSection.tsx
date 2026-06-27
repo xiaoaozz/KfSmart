@@ -11,26 +11,14 @@ const NOTIFICATION_ITEMS: Array<{
   desc: string
   group: string
 }> = [
-  {
-    key: 'emailOnNewDoc',
-    label: '新文档上传',
-    desc: '知识库有新文档上传时发送邮件',
-    group: '邮件通知',
-  },
-  {
-    key: 'emailOnKbUpdate',
-    label: '知识库更新',
-    desc: '知识库索引重建完成时发送邮件',
-    group: '邮件通知',
-  },
-  {
-    key: 'emailOnAgentFinish',
-    label: 'Agent 任务完成',
-    desc: 'Agent 任务执行完成后发送邮件',
-    group: '邮件通知',
-  },
-  { key: 'browserPush', label: '浏览器推送', desc: '允许浏览器实时消息推送', group: '推送通知' },
+  { key: 'systemAlert', label: '系统告警', desc: '系统级公告与异常告警', group: '站内通知' },
+  { key: 'newMessage', label: '新消息', desc: '收到新消息时通知', group: '站内通知' },
+  { key: 'mentionMe', label: '提及我', desc: '被他人提及时通知', group: '站内通知' },
+  { key: 'knowledgeUpdate', label: '知识库更新', desc: '知识库内容变更时通知', group: '内容更新' },
+  { key: 'uploadComplete', label: '上传完成', desc: '文档上传处理完成时通知', group: '内容更新' },
   { key: 'weeklyReport', label: '每周报告', desc: '每周一发送使用统计摘要', group: '报告' },
+  { key: 'emailDigest', label: '邮件摘要', desc: '定期发送邮件摘要汇总', group: '报告' },
+  { key: 'browserPush', label: '浏览器推送', desc: '允许浏览器实时消息推送', group: '推送' },
 ]
 
 export default function NotificationSection() {

@@ -25,6 +25,7 @@ import NotificationBell from '@/components/layout/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
 import { useLayoutStore } from '@/stores/layout'
 import { useCurrentUser } from '@/hooks/usePermission'
+import { authApi } from '@/api/auth'
 import { features } from '@/config/features'
 import styles from './BasicLayout.module.css'
 
@@ -85,7 +86,9 @@ function SideMenu({ collapsed }: { collapsed: boolean }) {
 
   const items = [
     ...NAV_ITEMS,
-    ...(user?.role === 'admin' ? [{ type: 'divider' as const }, ...ADMIN_ITEMS] : []),
+    ...(user?.role?.toUpperCase() === 'ADMIN'
+      ? [{ type: 'divider' as const }, ...ADMIN_ITEMS]
+      : []),
   ]
 
   return (
@@ -132,12 +135,17 @@ export default function BasicLayout() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDrawerOpen(false)
   }, [location.pathname])
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await authApi.logout()
+    } catch {
+      // 即使后端调用失败也清除本地登录态
+    }
     clearTokens()
     navigate('/login', { replace: true })
   }
@@ -177,7 +185,9 @@ export default function BasicLayout() {
           {!collapsed && (
             <div className={styles.userInfo}>
               <span className={styles.userName}>{user?.username}</span>
-              <span className={styles.userRole}>{user?.role === 'admin' ? '管理员' : '用户'}</span>
+              <span className={styles.userRole}>
+                {user?.role?.toUpperCase() === 'ADMIN' ? '管理员' : '用户'}
+              </span>
             </div>
           )}
         </div>

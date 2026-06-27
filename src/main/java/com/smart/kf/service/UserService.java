@@ -64,7 +64,8 @@ public class UserService {
     @Autowired
     private LoginRecordRepository loginRecordRepository;
 
-    /**
+    /*
+     *
      * 注册新用户。
      *
      * @param username 要注册的用户名
@@ -82,7 +83,7 @@ public class UserService {
         // 检查数据库中是否已存在该用户名
         if (userRepository.findByUsername(username).isPresent()) {
             // 若用户名已存在，抛出自定义异常，状态码为 400 Bad Request
-            throw new CustomException("Username already exists", HttpStatus.BAD_REQUEST);
+            throw new CustomException("用户名已存在，请跳转登录", HttpStatus.BAD_REQUEST);
         }
 
         // 邮箱唯一性校验（application 层强制）
@@ -283,7 +284,7 @@ public class UserService {
     /**
      * 对用户进行认证。
      *
-     * @param username 要认证的用户名
+     * @param identifier 要认证的用户名
      * @param password 要认证的用户密码
      * @return 认证成功后返回用户的用户名
      * @throws CustomException 如果用户名或密码无效，则抛出异常

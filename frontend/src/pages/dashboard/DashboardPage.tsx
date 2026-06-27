@@ -3,7 +3,7 @@ import {
   DatabaseOutlined,
   FileTextOutlined,
   MessageOutlined,
-  RobotOutlined,
+  StarOutlined,
   PlusOutlined,
   ArrowRightOutlined,
 } from '@ant-design/icons'
@@ -11,16 +11,10 @@ import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { http } from '@/api/http'
+import { profileApi, type UsageStats, type ActivityLog } from '@/api/profile'
 import { GradientText, GradientCard } from '@/components/base'
 import { useCurrentUser } from '@/hooks/usePermission'
 import styles from './DashboardPage.module.css'
-
-interface UsageStats {
-  kbCount: number
-  docCount: number
-  chatCount: number
-  agentCount: number
-}
 
 interface RecentChat {
   id: string
@@ -28,11 +22,20 @@ interface RecentChat {
   updatedAt: string
 }
 
-interface Activity {
-  id: string
-  content: string
-  createdAt: string
-  color?: string
+// 后端 operation-records 字段 → 时间轴展示
+function toTimelineItem(a: ActivityLog) {
+  const colorByType: Record<string, string> = {
+    login: 'green',
+    upload: 'blue',
+    chat: 'purple',
+    knowledge: 'cyan',
+  }
+  return {
+    key: a.id,
+    color: colorByType[a.type] ?? 'blue',
+    content: a.detail || a.action,
+    time: a.time,
+  }
 }
 
 function StatCard({
@@ -69,32 +72,48 @@ export default function DashboardPage() {
 
   const { data: stats } = useQuery<UsageStats>({
     queryKey: ['users', 'usage-stats'],
-    queryFn: () => http.get<UsageStats>('/users/usage-stats').then((r) => r.data),
+    queryFn: () => profileApi.getUsageStats(7),
     retry: false,
   })
 
   const { data: recentChats } = useQuery<RecentChat[]>({
-    queryKey: ['conversations', 'recent'],
-    queryFn: () => http.get<RecentChat[]>('/conversations?size=5&current=1').then((r) => r.data),
+    queryKey: ['conversations', 'sessions', 'recent'],
+    queryFn: () => http.get<RecentChat[]>('/conversations/sessions').then((r) => r.data),
     retry: false,
   })
 
-  const { data: activities } = useQuery<Activity[]>({
-    queryKey: ['users', 'activities'],
-    queryFn: () => http.get<Activity[]>('/users/activities?size=6').then((r) => r.data),
+  const { data: activities } = useQuery<ActivityLog[]>({
+    queryKey: ['users', 'operation-records'],
+    queryFn: () => profileApi.getActivityLogs(),
     retry: false,
   })
 
+  // 后端 usage-stats 返回：knowledgeBaseCount / totalDocuments / totalConversations / favoriteCount
   const STATS = [
     {
       icon: <DatabaseOutlined />,
       label: '知识库',
-      key: 'kbCount' as keyof UsageStats,
+      key: 'knowledgeBaseCount' as keyof UsageStats,
       delay: 0.05,
     },
-    { icon: <FileTextOutlined />, label: '文档', key: 'docCount' as keyof UsageStats, delay: 0.1 },
-    { icon: <MessageOutlined />, label: '对话', key: 'chatCount' as keyof UsageStats, delay: 0.15 },
-    { icon: <RobotOutlined />, label: 'Agent', key: 'agentCount' as keyof UsageStats, delay: 0.2 },
+    {
+      icon: <FileTextOutlined />,
+      label: '文档',
+      key: 'totalDocuments' as keyof UsageStats,
+      delay: 0.1,
+    },
+    {
+      icon: <MessageOutlined />,
+      label: '对话',
+      key: 'totalConversations' as keyof UsageStats,
+      delay: 0.15,
+    },
+    {
+      icon: <StarOutlined />,
+      label: '收藏',
+      key: 'favoriteCount' as keyof UsageStats,
+      delay: 0.2,
+    },
   ]
 
   const QUICK_ACTIONS = [
@@ -140,7 +159,12 @@ export default function DashboardPage() {
       <Row gutter={[16, 16]} className={styles.statsRow}>
         {STATS.map((s) => (
           <Col key={s.key} xs={12} sm={12} md={6}>
-            <StatCard icon={s.icon} label={s.label} value={stats?.[s.key]} delay={s.delay} />
+            <StatCard
+              icon={s.icon}
+              label={s.label}
+              value={stats?.[s.key] as number | undefined}
+              delay={s.delay}
+            />
           </Col>
         ))}
       </Row>
@@ -166,7 +190,7 @@ export default function DashboardPage() {
                 <div className={styles.empty}>暂无对话，点击上方"开始对话"试试</div>
               ) : (
                 <ul className={styles.chatList}>
-                  {recentChats.map((c) => (
+                  {recentChats.slice(0, 5).map((c) => (
                     <li
                       key={c.id}
                       className={styles.chatItem}
@@ -175,7 +199,7 @@ export default function DashboardPage() {
                       <MessageOutlined className={styles.chatIcon} />
                       <span className={styles.chatTitle}>{c.title}</span>
                       <span className={styles.chatTime}>
-                        {new Date(c.updatedAt).toLocaleDateString()}
+                        {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : ''}
                       </span>
                     </li>
                   ))}
@@ -198,22 +222,27 @@ export default function DashboardPage() {
               </div>
               {!activities ? (
                 <Skeleton active paragraph={{ rows: 5 }} />
+              ) : activities.length === 0 ? (
+                <div className={styles.empty}>暂无近期操作</div>
               ) : (
                 <Timeline
-                  items={activities.map((a) => ({
-                    key: a.id,
-                    color: a.color ?? 'blue',
-                    children: (
-                      <div>
-                        <div style={{ fontSize: 13, color: 'var(--kf-foreground)' }}>
-                          {a.content}
+                  items={activities.slice(0, 6).map((a) => {
+                    const item = toTimelineItem(a)
+                    return {
+                      key: item.key,
+                      color: item.color,
+                      children: (
+                        <div>
+                          <div style={{ fontSize: 13, color: 'var(--kf-foreground)' }}>
+                            {item.content}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--kf-muted-foreground)' }}>
+                            {item.time ? new Date(item.time).toLocaleString() : ''}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--kf-muted-foreground)' }}>
-                          {new Date(a.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-                    ),
-                  }))}
+                      ),
+                    }
+                  })}
                 />
               )}
             </GradientCard>

@@ -17,7 +17,7 @@ export default function LoginRecordSection() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['login-records', current, pageSize],
-    queryFn: () => profileApi.getLoginRecords({ current, size: pageSize }),
+    queryFn: () => profileApi.getLoginRecords({ page: current, size: pageSize }),
   })
 
   const columns: TableColumnType<LoginRecord>[] = [
@@ -25,40 +25,48 @@ export default function LoginRecordSection() {
       title: '状态',
       dataIndex: 'status',
       width: 80,
-      render: (s: LoginRecord['status']) =>
-        s === 'success' ? (
+      render: (s: LoginRecord['status'], record: LoginRecord) =>
+        s === 'SUCCESS' ? (
           <Tag color="success" icon={<CheckCircleOutlined />}>
             成功
           </Tag>
         ) : (
-          <Tag color="error" icon={<CloseCircleOutlined />}>
-            失败
-          </Tag>
+          <Tooltip title={record.failReason || '登录失败'}>
+            <Tag color="error" icon={<CloseCircleOutlined />}>
+              失败
+            </Tag>
+          </Tooltip>
         ),
     },
     {
       title: 'IP 地址',
-      dataIndex: 'ip',
+      dataIndex: 'ipAddress',
       width: 140,
-      render: (ip: string) => (
-        <span style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}>
-          <GlobalOutlined style={{ marginRight: 4 }} />
-          {ip}
-        </span>
-      ),
+      render: (ip?: string) =>
+        ip ? (
+          <span style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}>
+            <GlobalOutlined style={{ marginRight: 4 }} />
+            {ip}
+          </span>
+        ) : (
+          <span style={{ color: 'var(--kf-muted-foreground)' }}>—</span>
+        ),
     },
     {
       title: '设备 / 浏览器',
-      dataIndex: 'device',
-      render: (d: string) => (
-        <Tooltip title={d}>
-          <span>
-            <LaptopOutlined style={{ marginRight: 4 }} />
-            {d.slice(0, 40)}
-            {d.length > 40 ? '…' : ''}
-          </span>
-        </Tooltip>
-      ),
+      dataIndex: 'deviceInfo',
+      render: (d?: string) =>
+        d ? (
+          <Tooltip title={d}>
+            <span>
+              <LaptopOutlined style={{ marginRight: 4 }} />
+              {d.slice(0, 40)}
+              {d.length > 40 ? '…' : ''}
+            </span>
+          </Tooltip>
+        ) : (
+          <span style={{ color: 'var(--kf-muted-foreground)' }}>—</span>
+        ),
     },
     {
       title: '位置',
@@ -69,9 +77,9 @@ export default function LoginRecordSection() {
     },
     {
       title: '时间',
-      dataIndex: 'createTime',
+      dataIndex: 'loginTime',
       width: 160,
-      render: (t: string) => new Date(t).toLocaleString(),
+      render: (t?: string) => (t ? new Date(t).toLocaleString() : '—'),
     },
   ]
 
@@ -81,9 +89,9 @@ export default function LoginRecordSection() {
       <PageTable<LoginRecord>
         rowKey="id"
         columns={columns}
-        dataSource={data?.records}
+        dataSource={data?.content}
         loading={isLoading}
-        total={data?.total}
+        total={data?.totalElements}
         current={current}
         pageSize={pageSize}
         onPageChange={(p, s) => {

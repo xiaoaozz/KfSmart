@@ -6,7 +6,10 @@ import { profileApi, type ActivityLog } from '@/api/profile'
 import styles from './Section.module.css'
 
 function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
+  if (!dateStr) return ''
+  const ts = new Date(dateStr).getTime()
+  if (Number.isNaN(ts)) return dateStr
+  const diff = Date.now() - ts
   const minutes = Math.floor(diff / 60000)
   if (minutes < 1) return '刚刚'
   if (minutes < 60) return `${minutes} 分钟前`
@@ -17,37 +20,37 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString()
 }
 
-const ACTION_COLOR: Record<string, string> = {
+// 后端按 type 着色：login / upload / chat / knowledge
+const TYPE_COLOR: Record<string, string> = {
   login: 'green',
-  logout: 'gray',
   upload: 'blue',
-  delete: 'red',
-  update: 'orange',
-  create: 'cyan',
-  publish: 'purple',
+  chat: 'purple',
+  knowledge: 'cyan',
 }
+
+const PAGE_SIZE = 20
 
 export default function ActivitySection() {
   const [page, setPage] = useState(1)
-  const PAGE_SIZE = 20
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['activity-logs', page],
-    queryFn: () => profileApi.getActivityLogs({ current: page, size: PAGE_SIZE }),
+    queryKey: ['activity-logs'],
+    queryFn: () => profileApi.getActivityLogs(),
   })
 
-  const records = data?.records ?? []
-  const hasMore = data ? data.total > page * PAGE_SIZE : false
+  const all = data ?? []
+  const records = all.slice(0, page * PAGE_SIZE)
+  const hasMore = all.length > page * PAGE_SIZE
 
   const items = records.map((log: ActivityLog) => ({
-    color: ACTION_COLOR[log.action.toLowerCase()] ?? 'blue',
+    color: TYPE_COLOR[log.type] ?? 'blue',
     children: (
       <div className={styles.activityItem}>
         <div className={styles.activityAction}>{log.action}</div>
         <div className={styles.activityDetail}>{log.detail}</div>
         <div className={styles.activityMeta}>
-          <span>{log.ip}</span>
-          <span>{timeAgo(log.createTime)}</span>
+          <span>{log.ip || '—'}</span>
+          <span>{timeAgo(log.time)}</span>
         </div>
       </div>
     ),

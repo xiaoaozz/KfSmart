@@ -36,6 +36,10 @@ export default defineConfig({
         target: 'ws://localhost:8081',
         ws: true,
         changeOrigin: true,
+        bypass(req) {
+          // Only proxy WebSocket upgrades; regular HTTP navigation stays in the SPA
+          if (req.headers.upgrade?.toLowerCase() !== 'websocket') return req.url
+        },
       },
     },
   },

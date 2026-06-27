@@ -1092,7 +1092,8 @@ public class ChatHandler {
         streamTerminalStates.put(sessionId, StreamTerminalState.FAILED);
         handleError(session, error);
         // 持久化错误消息，以便刷新后仍可展示
-        String failedMessage = error.getMessage() != null ? error.getMessage() : "响应处理失败";
+        String failedMessage = (error.getMessage() != null && !error.getMessage().isEmpty())
+                ? error.getMessage() : "响应处理失败";
         if (conversationId != null && userId != null && userMessage != null) {
             saveErrorMessage(conversationId, userId, userMessage, failedMessage);
         }

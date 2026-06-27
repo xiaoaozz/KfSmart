@@ -8,6 +8,7 @@ import {
   RobotOutlined,
   ApartmentOutlined,
   FileOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -15,31 +16,52 @@ import { motion } from 'framer-motion'
 import { profileApi, type Favorite } from '@/api/profile'
 import styles from './Section.module.css'
 
-type FavType = Favorite['resourceType'] | ''
+type FavType = '' | Favorite['type']
 
 const TYPE_TABS: Array<{ key: FavType; label: string; icon: React.ReactNode }> = [
   { key: '', label: '全部', icon: <StarOutlined /> },
-  { key: 'knowledge_base', label: '知识库', icon: <DatabaseOutlined /> },
+  { key: 'knowledge', label: '知识库', icon: <DatabaseOutlined /> },
   { key: 'document', label: '文档', icon: <FileTextOutlined /> },
   { key: 'agent', label: 'Agent', icon: <RobotOutlined /> },
   { key: 'workflow', label: '工作流', icon: <ApartmentOutlined /> },
+  { key: 'chat', label: '对话', icon: <MessageOutlined /> },
   { key: 'prompt', label: 'Prompt', icon: <FileOutlined /> },
 ]
 
 const TYPE_ROUTES: Record<string, string> = {
-  knowledge_base: '/knowledge-bases',
+  knowledge: '/knowledge-bases',
   document: '/documents',
   agent: '/agents',
   workflow: '/workflows',
-  prompt: '/prompts',
+  chat: '/chat',
+  prompt: '/skills',
+  skill: '/skills',
+  mcp_tool: '/skills',
+  model: '/skills',
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  knowledge: '知识库',
+  document: '文档',
+  agent: 'Agent',
+  workflow: '工作流',
+  chat: '对话',
+  prompt: 'Prompt',
+  skill: '技能',
+  mcp_tool: 'MCP 工具',
+  model: '模型',
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  knowledge_base: 'blue',
+  knowledge: 'blue',
   document: 'green',
   agent: 'purple',
   workflow: 'orange',
+  chat: 'geekblue',
   prompt: 'cyan',
+  skill: 'magenta',
+  mcp_tool: 'gold',
+  model: 'volcano',
 }
 
 export default function FavoritesSection() {
@@ -50,7 +72,7 @@ export default function FavoritesSection() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['favorites', activeType],
-    queryFn: () => profileApi.getFavorites({ resourceType: activeType || undefined, size: 50 }),
+    queryFn: () => profileApi.getFavorites(),
   })
 
   const removeMutation = useMutation({
@@ -61,7 +83,8 @@ export default function FavoritesSection() {
     },
   })
 
-  const records = data?.records ?? []
+  const all = data ?? []
+  const records = activeType ? all.filter((f) => f.type === activeType) : all
 
   return (
     <div className={styles.section}>
@@ -100,20 +123,22 @@ export default function FavoritesSection() {
               className={styles.favRow}
             >
               <div className={styles.favLeft}>
-                <Tag color={TYPE_COLORS[fav.resourceType]}>
-                  {fav.resourceType.replace('_', ' ')}
+                <Tag color={TYPE_COLORS[fav.type] ?? 'default'}>
+                  {TYPE_LABELS[fav.type] ?? fav.type}
                 </Tag>
                 <span
                   className={styles.favName}
-                  onClick={() => navigate(`${TYPE_ROUTES[fav.resourceType]}/${fav.resourceId}`)}
+                  onClick={() =>
+                    TYPE_ROUTES[fav.type] && navigate(`${TYPE_ROUTES[fav.type]}/${fav.targetId}`)
+                  }
                 >
-                  {fav.resourceName}
+                  {fav.title}
                 </span>
-                {fav.resourceDesc && <span className={styles.favDesc}>{fav.resourceDesc}</span>}
+                {fav.desc && <span className={styles.favDesc}>{fav.desc}</span>}
               </div>
               <div className={styles.favRight}>
                 <span className={styles.favTime}>
-                  {new Date(fav.createTime).toLocaleDateString()}
+                  {fav.createdAt ? new Date(fav.createdAt).toLocaleDateString() : ''}
                 </span>
                 <Tooltip title="取消收藏">
                   <Button

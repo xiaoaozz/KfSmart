@@ -14,13 +14,15 @@ export function useCurrentUser() {
 export function usePermission() {
   const { data: user } = useCurrentUser()
 
+  // 后端 role 为枚举名（ADMIN/USER），统一大小写无关判断
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN'
+
   const hasPermission = (permission: string): boolean => {
     if (!user) return false
-    if (user.role === 'admin') return true
+    if (isAdmin) return true
     return user.permissions.includes(permission)
   }
 
-  const isAdmin = user?.role === 'admin'
   const isAuthenticated = !!user
 
   return { hasPermission, isAdmin, isAuthenticated, user }

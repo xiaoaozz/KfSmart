@@ -122,6 +122,14 @@ public class UserController {
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "邮箱验证码不能为空"));
             }
 
+            // 在消费 OTP 之前预检：用户名或邮箱若已注册，直接返回错误，保留验证码供用户重试
+            if (userRepository.findByUsername(request.username()).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名已存在，请跳转登录"));
+            }
+            if (userRepository.findByEmail(request.email().trim().toLowerCase()).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "该邮箱已被注册"));
+            }
+
             // 先验证 OTP，通过后再创建账号
             emailService.verifyRegistrationCode(request.email(), request.emailCode());
 

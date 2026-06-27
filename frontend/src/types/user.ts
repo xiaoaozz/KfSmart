@@ -1,10 +1,15 @@
 export interface UserInfo {
   id: number
   username: string
-  email: string
+  email?: string
+  phone?: string
+  bio?: string
   avatar?: string
-  role: 'admin' | 'user'
+  role: string
+  orgTags: string[]
+  primaryOrg?: string
   permissions: string[]
-  organizationTags: string[]
-  createTime: string
+  notificationPreferences?: Record<string, boolean>
+  createdAt: string
+  updatedAt?: string
 }

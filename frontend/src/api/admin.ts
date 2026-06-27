@@ -12,16 +12,24 @@ interface PageResult<T> {
 }
 
 // ---- User management ----
+export interface OrgTagRef {
+  tagId: string
+  name: string
+}
+
 export interface AdminUser {
   id: number
   username: string
-  email: string
+  email?: string
   avatar?: string
-  role: 'admin' | 'user'
-  status: 'active' | 'disabled'
-  organizationTags: string[]
-  permissions: string[]
-  createTime: string
+  role?: string
+  /** 0=普通用户, 1=管理员（来自列表接口） */
+  status?: number
+  orgTags: OrgTagRef[]
+  primaryOrg?: string
+  permissions?: string[]
+  createTime?: string
+  createdAt?: string
   lastLoginTime?: string
 }
 
@@ -92,20 +100,20 @@ export interface AdminActivityLog {
 // ===================== API =====================
 
 export const adminUserApi = {
-  list(params: {
-    current?: number
-    size?: number
-    keyword?: string
-    role?: string
-    status?: string
-  }) {
-    return http.get<PageResult<AdminUser>>('/admin/users', { params }).then(data)
+  /** 列表：后端 /admin/users/list 支持 keyword/orgTag/status(Integer)/page/size 筛选 */
+  list(params: { page?: number; size?: number; keyword?: string; status?: number }) {
+    return http.get<PageResult<AdminUser>>('/admin/users/list', { params }).then(data)
   },
-  update(id: number, payload: { role?: string; status?: string; organizationTags?: string[] }) {
-    return http.put<AdminUser>(`/admin/users/${id}`, payload).then(data)
+  /** 更新：后端 PUT /admin/users/{id} 仅接受 username/email/role */
+  update(id: number, payload: { username?: string; email?: string; role?: string }) {
+    return http.put(`/admin/users/${id}`, payload).then(data)
+  },
+  /** 分配组织标签：独立端点 PUT /admin/users/{id}/org-tags */
+  assignOrgTags(id: number, orgTags: string[]) {
+    return http.put(`/admin/users/${id}/org-tags`, { orgTags }).then(data)
   },
   resetPassword(id: number) {
-    return http.post<{ tempPassword: string }>(`/admin/users/${id}/reset-password`).then(data)
+    return http.post<{ newPassword: string }>(`/admin/users/${id}/reset-password`).then(data)
   },
   delete(id: number) {
     return http.delete<void>(`/admin/users/${id}`).then(data)

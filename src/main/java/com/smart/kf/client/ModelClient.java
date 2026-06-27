@@ -154,7 +154,17 @@ public class ModelClient {
                                         } else if (errNode.has("message")) {
                                             msg = errNode.get("message").asText(msg);
                                         } else if (errNode.has("error")) {
-                                            msg = errNode.get("error").asText(msg);
+                                            JsonNode errorField = errNode.get("error");
+                                            if (errorField.isObject()) {
+                                                // Nested error object e.g. {"error":{"code":"1113","message":"..."}}
+                                                if (errorField.has("message")) {
+                                                    msg = errorField.get("message").asText(msg);
+                                                } else if (errorField.has("msg")) {
+                                                    msg = errorField.get("msg").asText(msg);
+                                                }
+                                            } else {
+                                                msg = errorField.asText(msg);
+                                            }
                                         }
                                     } catch (Exception e) {
                                         logger.warn("无法解析模型服务错误响应体: {}", errorBody);

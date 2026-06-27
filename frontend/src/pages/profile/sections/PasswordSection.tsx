@@ -32,7 +32,7 @@ export default function PasswordSection() {
       message.success('密码已更新，请重新登录')
       form.resetFields()
     },
-    onError: () => message.error('旧密码错误或修改失败'),
+    // 错误提示交由 http 拦截器统一处理（保留后端的校验文案，如"当前密码不正确"）
   })
 
   return (

@@ -1,12 +1,9 @@
 import { http } from './http'
 import type { Conversation, Message } from '@/types/chat'
-import type { PageResult } from '@/types/api'
 
 export const chatApi = {
   listConversations: (params?: { keyword?: string; current?: number; size?: number }) =>
-    http
-      .get<PageResult<Conversation>>('/users/conversation/sessions', { params })
-      .then((r) => r.data),
+    http.get<Conversation[]>('/users/conversation/sessions', { params }).then((r) => r.data),
 
   createConversation: (title?: string) =>
     http
@@ -24,7 +21,7 @@ export const chatApi = {
       .get<Message[]>('/users/conversation', { params: { conversation_id: conversationId } })
       .then((r) => r.data),
 
-  /** Get a short-lived WS token */
-  getWsToken: () =>
+  /** Get the internal stop-command token for this server instance */
+  getCmdToken: () =>
     http.get<{ cmdToken: string }>('/chat/websocket-token').then((r) => r.data.cmdToken),
 }
