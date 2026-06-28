@@ -35,7 +35,7 @@ public class Agent {
     private String description;
 
     @Column(nullable = false)
-    private String status = "草稿";
+    private String status = "draft";
 
     @Column(name = "owner_name")
     private String ownerName;

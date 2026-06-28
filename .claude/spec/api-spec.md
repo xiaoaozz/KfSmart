@@ -103,6 +103,7 @@ GET  /resources/{id}/histories   — 获取子资源列表
 | Document（列表 / 删除 / 解析 / 下载）| ✅ | ✅ | 已对齐 |
 | Upload（分片上传 / 合并 / 状态查询）| ✅ | ✅ | 已对齐 |
 | Profile（个人信息 / 收藏 / 操作记录）| ✅ | ✅ | 已对齐 |
+| Profile（头像上传 `POST /users/me/avatar`）| ✅ | ✅ | 已对齐；响应格式见下方第十一节 |
 | Skill / Prompt / MCP / Model | ✅ | ✅ | 已对齐 |
 | Admin（用户 CRUD + 重置密码）| ✅ | ✅ | 已对齐 |
 | Knowledge Base | ✅ | ✅ | 已对齐 |
@@ -278,6 +279,58 @@ spring:
 
 ---
 
+## 十一、头像接口规范
+
+### 11.1 上传头像
+
+```
+POST /users/me/avatar   （已登录）
+
+Content-Type: multipart/form-data
+参数：file（二进制图片文件）
+
+限制：
+  - 最大 2MB
+  - 支持格式：image/jpeg、image/png、image/webp、image/gif
+
+响应（成功）：
+  { "code": 200, "message": "Avatar updated successfully", "data": { "avatar": "/avatars/user-{id}.{ext}" } }
+
+错误响应：
+  400 — 文件为空 / 超过 2MB / 格式不支持
+  401 — Token 无效
+  404 — 用户不存在
+```
+
+文件保存路径：后端本地文件系统 `data/avatars/user-{userId}.{ext}`，通过 `/avatars/**` 静态资源路由公开提供访问（无需认证）。
+
+### 11.2 前端头像展示规则（`UserAvatar` 组件）
+
+| 条件 | 展示方式 |
+|---|---|
+| `user.avatar` 有值（非空字符串） | 渲染 `<img src={avatar}>` |
+| `user.avatar` 为空/null/undefined | 渲染 `username[0].toUpperCase()`，背景色 `var(--kf-accent)` |
+
+前端所有头像显示位置均使用统一的 `UserAvatar` 组件（`components/UserAvatar.tsx`），禁止直接使用 Ant Design `<Avatar icon={...}>` 展示用户头像。
+
+### 11.3 GET /users/me 中的 avatar 字段
+
+```json
+{
+  "code": 200,
+  "data": {
+    "username": "zhangsan",
+    "avatar": "/avatars/user-42.jpg",   // 未上传时为 null
+    "email": "...",
+    ...
+  }
+}
+```
+
+后端 `User.avatarUrl` 字段（数据库列 `avatar_url`）通过 `GET /users/me` 以键名 `"avatar"` 对外暴露。
+
+---
+
 ## 十、联调原则
 
 1. **前端优先对齐**：路径、参数名不一致时，优先改前端，保持后端稳定性
@@ -288,4 +341,4 @@ spring:
 
 ---
 
-*文档创建：2026-06-27 | 最后更新：2026-06-27（密码 RSA 加密、公钥接口、认证端点 401 修复）*
+*文档创建：2026-06-27 | 最后更新：2026-06-28（新增第十一节：头像接口规范，含上传限制、响应格式、前端展示规则）*

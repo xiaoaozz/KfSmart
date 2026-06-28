@@ -45,6 +45,7 @@
 | 工程规范 | ESLint + Prettier + Husky + lint-staged | 提交前自动检查 |
 | 包管理 | pnpm 8 | |
 | 密码加密 | jsencrypt 3.x | RSA-2048 前端加密密码，防止明文传输 |
+| 多语言（i18n） | react-i18next 15.x + i18next 24.x | 支持 zh-CN / en-US / ja-JP 三语言，localStorage 持久化，Ant Design ConfigProvider locale 同步 |
 
 ---
 
@@ -59,8 +60,13 @@ frontend/
 ├── .prettierrc
 ├── .husky/pre-commit
 └── src/
-    ├── main.tsx                    # initErrorMonitor() → render → initVitals()
-    ├── App.tsx                     # ConfigProvider + QueryClient + RouterProvider
+    ├── main.tsx                    # i18n init → render → initVitals()
+    ├── App.tsx                     # ConfigProvider(locale) + LocaleSync + QueryClient + RouterProvider
+    ├── i18n.ts                     # i18next 初始化（同步读 localStorage，防首屏语言闪烁）
+    ├── locales/
+    │   ├── zh-CN.json              # 中文翻译（所有 key 的 source of truth）
+    │   ├── en-US.json              # 英文翻译
+    │   └── ja-JP.json             # 日文翻译
     ├── config/
     │   └── features.ts             # Feature Flag 统一管理
     ├── api/
@@ -79,12 +85,14 @@ frontend/
     │   └── admin.ts
     ├── assets/
     ├── components/
+    │   ├── UserAvatar.tsx          # 统一头像组件：有 avatar URL 显示图片，否则显示用户名首字母
     │   ├── base/                   # 原子级：无业务依赖
     │   │   ├── GradientText.tsx
     │   │   ├── SectionBadge.tsx
     │   │   ├── GradientButton.tsx
     │   │   ├── GradientCard.tsx
     │   │   ├── ThemeSwitch.tsx
+    │   │   ├── LanguageSwitch.tsx  # 语言切换下拉组件（GlobalOutlined + Dropdown）
     │   │   └── AppLogo.tsx
     │   ├── layout/                 # 布局相关
     │   │   ├── PageHeader.tsx
@@ -121,6 +129,8 @@ frontend/
     │   ├── theme.ts                # isDark（持久化）
     │   ├── layout.ts               # siderCollapsed
     │   └── ui.ts                   # 全局 modal/overlay 状态
+    ├── utils/
+    │   └── citationHelpers.ts      # injectCitationLinks：#N → [#N](#cite-N) Markdown 转换
     ├── styles/
     │   ├── variables.css           # 完整 CSS 变量（light + dark）
     │   ├── global.css
@@ -238,6 +248,7 @@ export const getAntdTheme = (isDark: boolean): ThemeConfig => ({
 |---|---|---|
 | `auth` | token, refreshToken | ✅ localStorage（key: `kf-auth`） |
 | `theme` | isDark | ✅ localStorage |
+| `locale` | locale（`'zh-CN' \| 'en-US' \| 'ja-JP'`） | ✅ localStorage（key: `kf-locale`） |
 | `layout` | siderCollapsed | ❌ 内存 |
 | `ui` | 全局 Modal 开关、loading overlay | ❌ 内存 |
 
@@ -342,6 +353,33 @@ EmptyState      // 空状态（带图标 + 文案 + 可选操作按钮）
 ErrorRetry      // 错误 + 重试按钮
 ErrorBoundary   // 捕获渲染错误，显示 fallback UI
 ```
+
+### UserAvatar 组件（`components/UserAvatar.tsx`）
+
+所有用到用户头像的地方**必须**使用此组件，禁止直接使用 `<Avatar>` 渲染用户头像。
+
+**头像显示规则：**
+- `avatar` URL 存在 → 显示图片（`<Avatar src={url}>`）
+- `avatar` 为空/null/undefined → 显示 `username` 的第一个字母（大写），背景色为 `var(--kf-accent)`
+
+```tsx
+<UserAvatar avatar={user?.avatar} username={user?.username} size={32} />
+```
+
+**Props：**
+
+| Prop | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `avatar` | `string \| null \| undefined` | — | 头像 URL，来自 `GET /users/me` 的 `avatar` 字段 |
+| `username` | `string \| null \| undefined` | — | 用户名，无头像时显示首字母 |
+| `size` | `number` | `32` | 像素尺寸，直接透传给 Ant Design Avatar |
+| `style` | `CSSProperties` | — | 额外样式，会合并到 `background: var(--kf-accent)` 之上 |
+
+**当前使用位置：**
+- `layouts/BasicLayout.tsx`：侧栏底部、Header 右上角下拉菜单
+- `pages/chat/ChatPage.tsx`：消息气泡用户侧头像
+- `pages/profile/sections/BasicInfoSection.tsx`：个人资料头像上传预览
+- `pages/admin/UserManagePage.tsx`：用户管理表格头像列
 
 ### 样式规范
 
@@ -490,24 +528,29 @@ export const FEATURE = {
 | 仪表盘 | `pages/dashboard/DashboardPage.tsx` | 统计卡片 + 时间线 + 快捷入口 |
 | 知识库管理 | `KbListPage` / `KbDetailPage` | 完整 CRUD，网格卡片 |
 | AI 对话 | `ChatPage` + `MessageBubble` | WebSocket 流式输出，Markdown 渲染 |
+| 引用悬停预览 | `ChatPage` `CitationTag` | AI 回复中 `#N` 标记（`injectCitationLinks` 转换）渲染为 Ant Design Popover，悬停展示知识库片段（fileName + snippet）；无权限时显示锁定提示 |
+| 消息复制 | `ChatPage` `MessageBubble` | 用户消息和 AI 回复均可一键复制；hover 时显示，点击后图标临时切换为 ✓（1.5s 自动复原） |
+| 提问编辑重发 | `ChatPage` `MessageBubble` | 用户消息可内联编辑；提交时先调 `DELETE /users/conversation/messages` 截断 Redis 历史，再重新发送，保证 LLM 上下文干净 |
 | 文档管理 | `DocumentListPage.tsx` | 分片上传（Web Worker + 断点续传） |
 | Agent 管理 | `AgentListPage` / `AgentEditorPage` / `AgentExecutionPage` | 实时预览聊天 |
 | 工作流编辑器 | `WorkflowListPage` / `WorkflowEditorPage` | React Flow 可视化，节点拖拽 |
 | 技能库 | `SkillListPage` / `SkillEditorPage` | 分类 Tab，测试 Modal |
 | 共享资源 | `PromptListPage` / `McpToolPage` / `ModelConfigPage` | |
-| 个人中心 | `ProfilePage.tsx` | 资料/密码/通知/收藏/操作记录/登录记录 |
+| 个人中心 | `ProfilePage.tsx` | 资料/密码/通知/收藏/操作记录/登录记录；头像统一使用 `UserAvatar` 组件 |
 | 管理后台 | `admin/` 目录 6 个页面 | 需 `system:admin` 权限 |
+| 删除用户倒计时确认 | `pages/admin/UserManagePage.tsx` | 删除按钮触发 `modal.confirm()` + `instance.update()` 实现 5 秒倒计时；确认按钮在倒计时期间 `disabled`，倒计时结束后变为可点击危险按钮 |
 
 ### 工程基础
 
 | 功能 | 状态 |
 |------|------|
 | 主题切换（明/暗） | ✅ |
+| 多语言切换（zh-CN / en-US / ja-JP） | ✅ |
 | CSS 变量令牌系统 | ✅ |
 | 权限路由守卫 | ✅ |
 | PermissionButton 权限按钮 | ✅ |
 | ErrorBoundary | ✅ |
-| Vitest 单测（25 个） | ✅ |
+| Vitest 单测（39 个） | ✅ |
 | Playwright E2E Spec | ✅ |
 | GitHub Actions CI | ✅ |
 | 错误监控 + Web Vitals | ✅ |
@@ -583,4 +626,4 @@ ADR 文件位于 `docs/architecture/adr/`，格式：
 
 ---
 
-*最后更新：2026-06-27（密码 RSA 加密 + 登录错误提示优化）*
+*最后更新：2026-06-28（新增引用悬停预览、消息复制、提问编辑重发三项 Chat 功能；`injectCitationLinks` 提取至 `utils/citationHelpers.ts`；新增 14 个 citationHelpers Vitest 单测；管理后台删除用户改用 `modal.confirm` + `instance.update` 倒计时确认模式）*

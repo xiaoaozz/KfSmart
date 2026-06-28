@@ -458,7 +458,8 @@ try {
 | 服务 | 说明 |
 |---|---|
 | `UserService` | 注册、登录、用户管理、邮箱 OTP |
-| `ChatHandler` | RAG 对话处理，协调知识库检索 + LLM 调用 |
+| `AvatarService` | 头像文件校验（大小/类型）、扩展名推断、保存到 `data/avatars/` 并返回访问路径 |
+| `ChatHandler` | RAG 对话处理，协调知识库检索 + LLM 调用；`truncateConversationHistory(userId, conversationId, keepCount)` 将 Redis 历史截断至前 N 条（用于编辑重发） |
 | `KnowledgeBaseService` | 知识库 CRUD，含统计和访问控制 |
 | `DocumentService` | 文档元数据管理，删除文档时清理 ES 索引和 MinIO 文件 |
 | `UploadService` | 分片上传协调，MD5 秒传，发送 Kafka 消息触发解析 |
@@ -770,7 +771,7 @@ spring.servlet.multipart.max-request-size: 100MB
 | GET | `/users/me` | 已登录 | 获取当前用户信息 + 权限列表 |
 | PUT | `/users/me` | 已登录 | 更新个人资料（邮箱/手机/简介） |
 | PUT | `/users/me/password` | 已登录 | 修改密码 |
-| POST | `/users/me/avatar` | 已登录 | 上传头像（2MB 限制） |
+| POST | `/users/me/avatar` | 已登录 | 上传头像（2MB，支持 JPEG/PNG/WebP/GIF）；响应 `{ "data": { "avatar": "/avatars/user-{id}.{ext}" } }` |
 | GET | `/users/login-records` | 已登录 | 登录记录（分页） |
 | GET | `/users/favorites` | 已登录 | 收藏列表 |
 | POST | `/users/favorites` | 已登录 | 添加收藏 |
@@ -820,6 +821,7 @@ spring.servlet.multipart.max-request-size: 100MB
 | POST | `/users/conversation/sessions` | 创建新会话 |
 | DELETE | `/users/conversation/sessions?conversation_id=` | 删除会话 |
 | PUT | `/users/conversation/sessions/pin` | 更新置顶状态 |
+| DELETE | `/users/conversation/messages?conversation_id=&keep_count=` | 截断 Redis 对话历史至前 N 条（编辑重发前调用） |
 | GET | `/chat/websocket-token` | 获取 WebSocket 内部停止令牌 |
 | WS | `/chat/{jwtToken}` | 聊天 WebSocket 连接（JWT 在路径中） |
 
@@ -890,13 +892,28 @@ spring.servlet.multipart.max-request-size: 100MB
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET/POST/PUT/DELETE | `/admin/users` | 用户管理 CRUD |
+| GET/POST/PUT | `/admin/users` | 用户管理 |
+| DELETE | `/admin/users/{userId}` | 删除用户（见下方级联说明） |
 | GET/POST/PUT/DELETE | `/admin/roles` | 角色管理 |
 | GET | `/admin/permissions` | 权限列表 |
 | GET/POST/PUT/DELETE | `/admin/org-tags` | 组织标签管理 |
 | GET | `/admin/system-status` | 系统状态监控 |
 | GET | `/admin/activity-log` | 操作记录 |
 | GET/POST/DELETE | `/admin/api-keys` | API Key 管理 |
+
+#### 删除用户级联规则（`DELETE /admin/users/{userId}`）
+
+删除普通用户时，在事务内按以下顺序处理关联数据：
+
+| 关联表 | 处理方式 | 原因 |
+|---|---|---|
+| `user_roles`（join table） | 自动级联删除 | JPA `@ManyToMany` 自动处理 |
+| `user_favorites` | **删除** | 用户私有数据，无保留意义 |
+| `conversations` | **删除** | 用户私有对话记录 |
+| `organization_tags.created_by` | **转让给执行操作的管理员** | 共享资源，不可丢失 |
+| `knowledge_bases.created_by` | **转让给执行操作的管理员** | 共享资源，文档不可孤立 |
+
+**约束：** 不允许删除 `role == ADMIN` 的账号，返回 403。
 
 ---
 
@@ -930,4 +947,4 @@ spring.servlet.multipart.max-request-size: 100MB
 
 ---
 
-*最后更新：2026-06-27（同步本次对话修复：WebSocket 协议、ModelClient 错误解析、SecurityConfig 401/403 语义）*
+*最后更新：2026-06-28（新增删除用户级联规则文档：删除用户前自动清理 `user_favorites` / `conversations`，并将 `organization_tags` / `knowledge_bases` 的 `created_by` 转让给当前管理员；`OrganizationTagRepository` 新增 `findByCreatedBy(User)`）*

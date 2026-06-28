@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.util.retry.Retry;
 
@@ -110,10 +111,12 @@ public class EmbeddingClient {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(String.class)
-                .retryWhen(Retry.fixedDelay(3, Duration.ofSeconds(1))
-                        .filter(e -> e instanceof WebClientResponseException)
-                        .doBeforeRetry(signal -> logger.warn("重试API调用 - 尝试: {}, 错误: {}",
-                                signal.totalRetries() + 1, signal.failure().getMessage())))
+                .retryWhen(Retry.fixedDelay(3, Duration.ofSeconds(2))
+                        .filter(e -> e instanceof WebClientResponseException || e instanceof WebClientRequestException)
+                        .doBeforeRetry(signal -> logger.warn("重试API调用 - 尝试: {}/{}, 错误类型: {}, 原因: {}",
+                                signal.totalRetries() + 1, 3,
+                                signal.failure().getClass().getSimpleName(),
+                                signal.failure().getMessage())))
                 .block(Duration.ofSeconds(30));
     }
 
