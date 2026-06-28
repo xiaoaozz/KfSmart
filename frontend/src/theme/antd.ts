@@ -107,5 +107,9 @@ export const getAntdTheme = (isDark: boolean): ThemeConfig => ({
       itemSelectedColor: isDark ? '#4D7CFF' : '#0052FF',
       itemHoverColor: isDark ? '#6B93FF' : '#0047E0',
     },
+    Tooltip: {
+      colorBgSpotlight: isDark ? '#1A1A2E' : '#F1F5F9',
+      colorTextLightSolid: isDark ? '#F0F4FF' : '#0F172A',
+    },
   },
 })

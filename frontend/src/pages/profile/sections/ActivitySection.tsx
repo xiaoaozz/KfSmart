@@ -2,21 +2,24 @@ import { useState } from 'react'
 import { Timeline, Button, Empty } from 'antd'
 import { HistoryOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { profileApi, type ActivityLog } from '@/api/profile'
 import styles from './Section.module.css'
 
-function timeAgo(dateStr: string): string {
+type TFunc = (key: string, opts?: Record<string, unknown>) => string
+
+function timeAgo(dateStr: string, t: TFunc): string {
   if (!dateStr) return ''
   const ts = new Date(dateStr).getTime()
   if (Number.isNaN(ts)) return dateStr
   const diff = Date.now() - ts
   const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
+  if (minutes < 1) return t('profile.activity.justNow')
+  if (minutes < 60) return t('profile.activity.minutesAgo', { n: minutes })
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
+  if (hours < 24) return t('profile.activity.hoursAgo', { n: hours })
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} 天前`
+  if (days < 30) return t('profile.activity.daysAgo', { n: days })
   return new Date(dateStr).toLocaleDateString()
 }
 
@@ -32,6 +35,7 @@ const PAGE_SIZE = 20
 
 export default function ActivitySection() {
   const [page, setPage] = useState(1)
+  const { t } = useTranslation()
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['activity-logs'],
@@ -50,7 +54,7 @@ export default function ActivitySection() {
         <div className={styles.activityDetail}>{log.detail}</div>
         <div className={styles.activityMeta}>
           <span>{log.ip || '—'}</span>
-          <span>{timeAgo(log.time)}</span>
+          <span>{timeAgo(log.time, t as TFunc)}</span>
         </div>
       </div>
     ),
@@ -59,9 +63,9 @@ export default function ActivitySection() {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <h3 className={styles.sectionTitle}>操作记录</h3>
+        <h3 className={styles.sectionTitle}>{t('profile.activity.title')}</h3>
         <Button size="small" icon={<ReloadOutlined />} onClick={() => refetch()}>
-          刷新
+          {t('common.refresh')}
         </Button>
       </div>
 
@@ -72,13 +76,13 @@ export default function ActivitySection() {
           ))}
         </div>
       ) : !records.length ? (
-        <Empty description="暂无操作记录" />
+        <Empty description={t('profile.activity.empty')} />
       ) : (
         <>
           <Timeline items={items} style={{ marginTop: 16 }} />
           {hasMore && (
             <Button type="link" icon={<HistoryOutlined />} onClick={() => setPage((p) => p + 1)}>
-              加载更多
+              {t('profile.activity.loadMore')}
             </Button>
           )}
         </>

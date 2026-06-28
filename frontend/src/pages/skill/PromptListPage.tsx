@@ -24,20 +24,11 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { promptApi } from '@/api/skill'
 import type { PromptSummary, Prompt } from '@/types/skill'
 import { PermissionButton } from '@/components/business'
 import styles from './PromptListPage.module.css'
-
-const CATEGORY_TABS = [
-  { key: '', label: '全部' },
-  { key: 'chat', label: '对话' },
-  { key: 'summary', label: '摘要' },
-  { key: 'translation', label: '翻译' },
-  { key: 'code', label: '代码' },
-  { key: 'analysis', label: '分析' },
-  { key: 'custom', label: '自定义' },
-]
 
 const CATEGORY_COLORS: Record<string, string> = {
   chat: 'blue',
@@ -51,6 +42,17 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function PromptListPage() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
+
+  const CATEGORY_TABS = [
+    { key: '', label: t('skill.prompt.categoryAll') },
+    { key: 'chat', label: t('skill.prompt.categoryChat') },
+    { key: 'summary', label: t('skill.prompt.categorySummary') },
+    { key: 'translation', label: t('skill.prompt.categoryTranslation') },
+    { key: 'code', label: t('skill.prompt.categoryCode') },
+    { key: 'analysis', label: t('skill.prompt.categoryAnalysis') },
+    { key: 'custom', label: t('skill.prompt.categoryCustom') },
+  ]
 
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState('')
@@ -90,7 +92,7 @@ export default function PromptListPage() {
       qc.invalidateQueries({ queryKey: ['prompts'] })
       setCreateOpen(false)
       createForm.resetFields()
-      message.success('已创建')
+      message.success(t('skill.prompt.createSuccess'))
     },
   })
 
@@ -106,7 +108,7 @@ export default function PromptListPage() {
       qc.invalidateQueries({ queryKey: ['prompts'] })
       setEditPrompt(null)
       editForm.resetFields()
-      message.success('已保存')
+      message.success(t('skill.prompt.updateSuccess'))
     },
   })
 
@@ -114,13 +116,13 @@ export default function PromptListPage() {
     mutationFn: (id: number) => promptApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prompts'] })
-      message.success('已删除')
+      message.success(t('skill.prompt.deleteSuccess'))
     },
   })
 
   const handleDelete = (p: PromptSummary) => {
     modal.confirm({
-      title: `删除 Prompt「${p.name}」？`,
+      title: t('skill.prompt.deleteConfirm', { name: p.name }),
       okType: 'danger',
       onOk: () => deleteMutation.mutateAsync(p.id),
     })
@@ -140,7 +142,9 @@ export default function PromptListPage() {
 
   const copyContent = (id: number) => {
     promptApi.get(id).then((p) => {
-      navigator.clipboard.writeText(p.content).then(() => message.success('已复制'))
+      navigator.clipboard
+        .writeText(p.content)
+        .then(() => message.success(t('skill.prompt.copySuccess')))
     })
   }
 
@@ -150,12 +154,12 @@ export default function PromptListPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <FileTextOutlined /> Prompt 模板
+          <FileTextOutlined /> {t('skill.prompt.title')}
         </h2>
         <div className={styles.actions}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索 Prompt…"
+            placeholder={t('skill.prompt.searchPlaceholder')}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 200 }}
@@ -168,7 +172,7 @@ export default function PromptListPage() {
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
               onClick={() => setCreateOpen(true)}
             >
-              新建 Prompt
+              {t('skill.prompt.createBtn')}
             </Button>
           </PermissionButton>
         </div>
@@ -188,7 +192,7 @@ export default function PromptListPage() {
           ))}
         </div>
       ) : !records.length ? (
-        <Empty description="暂无 Prompt 模板" />
+        <Empty description={t('skill.prompt.empty')} />
       ) : (
         <div className={styles.list}>
           {records.map((p: PromptSummary, i: number) => (
@@ -204,22 +208,24 @@ export default function PromptListPage() {
                 <div className={styles.rowMeta}>
                   <Tag color={CATEGORY_COLORS[p.category]}>{p.category}</Tag>
                   {p.description && <span className={styles.rowDesc}>{p.description}</span>}
-                  <span className={styles.rowUsage}>使用 {p.useCount} 次</span>
+                  <span className={styles.rowUsage}>
+                    {t('skill.prompt.usageCount', { count: p.useCount })}
+                  </span>
                 </div>
               </div>
               <div className={styles.rowActions}>
                 <Button size="small" icon={<CopyOutlined />} onClick={() => copyContent(p.id)}>
-                  复制
+                  {t('skill.prompt.copyBtn')}
                 </Button>
                 <Button size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(p)}>
-                  编辑
+                  {t('skill.prompt.editBtn')}
                 </Button>
                 <Button
                   size="small"
                   icon={<HistoryOutlined />}
                   onClick={() => setHistoryPromptId(p.id)}
                 >
-                  历史
+                  {t('skill.prompt.historyBtn')}
                 </Button>
                 <PermissionButton permission="prompt:delete">
                   <Button
@@ -237,7 +243,7 @@ export default function PromptListPage() {
 
       {/* Create Modal */}
       <Modal
-        title="新建 Prompt"
+        title={t('skill.prompt.createModalTitle')}
         open={createOpen}
         onCancel={() => {
           setCreateOpen(false)
@@ -250,21 +256,35 @@ export default function PromptListPage() {
       >
         <Form form={createForm} layout="vertical" onFinish={(v) => createMutation.mutate(v)}>
           <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="name" label="名称" rules={[{ required: true }]} style={{ flex: 1 }}>
+            <Form.Item
+              name="name"
+              label={t('skill.prompt.fieldName')}
+              rules={[{ required: true }]}
+              style={{ flex: 1 }}
+            >
               <Input />
             </Form.Item>
-            <Form.Item name="category" label="分类" initialValue="custom" style={{ width: 130 }}>
+            <Form.Item
+              name="category"
+              label={t('skill.prompt.fieldCategory')}
+              initialValue="custom"
+              style={{ width: 130 }}
+            >
               <Select options={CATEGORY_TABS.slice(1)} />
             </Form.Item>
           </div>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('skill.prompt.fieldDesc')}>
             <Input />
           </Form.Item>
-          <Form.Item name="content" label="Prompt 内容" rules={[{ required: true }]}>
+          <Form.Item
+            name="content"
+            label={t('skill.prompt.fieldContent')}
+            rules={[{ required: true }]}
+          >
             <Input.TextArea
               rows={10}
               style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 13 }}
-              placeholder="你是一个...&#10;&#10;用户输入：{{input}}"
+              placeholder={t('skill.prompt.contentPlaceholder')}
             />
           </Form.Item>
         </Form>
@@ -272,7 +292,7 @@ export default function PromptListPage() {
 
       {/* Edit Modal */}
       <Modal
-        title="编辑 Prompt"
+        title={t('skill.prompt.editModalTitle')}
         open={!!editPrompt}
         onCancel={() => {
           setEditPrompt(null)
@@ -285,36 +305,51 @@ export default function PromptListPage() {
       >
         <Form form={editForm} layout="vertical" onFinish={(v) => updateMutation.mutate(v)}>
           <div style={{ display: 'flex', gap: 12 }}>
-            <Form.Item name="name" label="名称" rules={[{ required: true }]} style={{ flex: 1 }}>
+            <Form.Item
+              name="name"
+              label={t('skill.prompt.fieldName')}
+              rules={[{ required: true }]}
+              style={{ flex: 1 }}
+            >
               <Input />
             </Form.Item>
-            <Form.Item name="category" label="分类" style={{ width: 130 }}>
+            <Form.Item
+              name="category"
+              label={t('skill.prompt.fieldCategory')}
+              style={{ width: 130 }}
+            >
               <Select options={CATEGORY_TABS.slice(1)} />
             </Form.Item>
           </div>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('skill.prompt.fieldDesc')}>
             <Input />
           </Form.Item>
-          <Form.Item name="content" label="Prompt 内容" rules={[{ required: true }]}>
+          <Form.Item
+            name="content"
+            label={t('skill.prompt.fieldContent')}
+            rules={[{ required: true }]}
+          >
             <Input.TextArea rows={10} style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 13 }} />
           </Form.Item>
-          <Form.Item name="note" label="版本备注">
-            <Input placeholder="描述本次改动内容（可选）" />
+          <Form.Item name="note" label={t('skill.prompt.fieldNote')}>
+            <Input placeholder={t('skill.prompt.notePlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
 
       {/* History Drawer */}
       <Drawer
-        title="版本历史"
+        title={t('skill.prompt.historyDrawerTitle')}
         open={!!historyPromptId}
         onClose={() => setHistoryPromptId(null)}
         width={400}
       >
         {versionsLoading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>加载中…</div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            {t('skill.prompt.historyLoading')}
+          </div>
         ) : !versions?.length ? (
-          <Empty description="暂无历史版本" />
+          <Empty description={t('skill.prompt.historyEmpty')} />
         ) : (
           <Timeline
             items={versions.map((v) => ({

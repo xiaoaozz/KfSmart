@@ -14,6 +14,7 @@ import {
   FileMarkdownOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { docApi } from '@/api/document'
 import type { Document, DocStatus } from '@/types/document'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
@@ -21,13 +22,6 @@ import ChunkedUploader from '@/components/business/ChunkedUploader'
 import DocPreviewDrawer from '@/components/business/DocPreviewDrawer'
 import { PermissionButton } from '@/components/business'
 import styles from './DocumentListPage.module.css'
-
-const STATUS_CFG: Record<DocStatus, { color: string; label: string }> = {
-  pending: { color: 'default', label: '等待解析' },
-  processing: { color: 'processing', label: '解析中' },
-  done: { color: 'success', label: '已就绪' },
-  error: { color: 'error', label: '解析失败' },
-}
 
 function FileIcon({ type }: { type: string }) {
   const t = type.toLowerCase()
@@ -57,6 +51,14 @@ export default function DocumentListPage() {
   const [previewDoc, setPreviewDoc] = useState<import('@/types/document').Document | null>(null)
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
+
+  const STATUS_CFG: Record<DocStatus, { color: string; label: string }> = {
+    pending: { color: 'default', label: t('doc.statusPending') },
+    processing: { color: 'processing', label: t('doc.statusProcessing') },
+    done: { color: 'success', label: t('doc.statusDone') },
+    error: { color: 'error', label: t('doc.statusError') },
+  }
 
   const queryParams = { keyword: keyword || undefined, status, current, size: pageSize }
 
@@ -72,7 +74,7 @@ export default function DocumentListPage() {
     mutationFn: docApi.delete,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['documents'] })
-      message.success('删除成功')
+      message.success(t('doc.deleteSuccess'))
     },
   })
 
@@ -80,13 +82,13 @@ export default function DocumentListPage() {
     mutationFn: docApi.reparse,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['documents'] })
-      message.success('已重新触发解析')
+      message.success(t('doc.reparseSuccess'))
     },
   })
 
   const columns: TableColumnType<Document>[] = [
     {
-      title: '文件名',
+      title: t('doc.colFileName'),
       dataIndex: 'fileName',
       ellipsis: true,
       render: (name: string, row) => (
@@ -97,48 +99,48 @@ export default function DocumentListPage() {
       ),
     },
     {
-      title: '类型',
+      title: t('doc.colType'),
       dataIndex: 'fileType',
       width: 80,
-      render: (t: string) => t.toUpperCase(),
+      render: (v: string) => v.toUpperCase(),
     },
     {
-      title: '大小',
+      title: t('doc.colSize'),
       dataIndex: 'fileSize',
       width: 90,
       render: (n: number) => formatBytes(n),
     },
     {
-      title: '状态',
+      title: t('doc.colStatus'),
       dataIndex: 'status',
       width: 100,
       render: (s: DocStatus) => <Tag color={STATUS_CFG[s].color}>{STATUS_CFG[s].label}</Tag>,
     },
     {
-      title: '所属知识库',
+      title: t('doc.colKb'),
       dataIndex: 'knowledgeBaseName',
       ellipsis: true,
       render: (v?: string) => v ?? '—',
     },
     {
-      title: '上传者',
+      title: t('doc.colUploadedBy'),
       dataIndex: 'uploadedBy',
       width: 100,
     },
     {
-      title: '上传时间',
+      title: t('doc.colUploadTime'),
       dataIndex: 'createTime',
       width: 160,
-      render: (t: string) => new Date(t).toLocaleString(),
+      render: (v: string) => new Date(v).toLocaleString(),
     },
     {
-      title: '操作',
+      title: t('doc.colActions'),
       key: 'action',
       fixed: 'right' as const,
       width: 120,
       render: (_: unknown, row) => (
         <div style={{ display: 'flex', gap: 4 }}>
-          <Tooltip title="预览详情">
+          <Tooltip title={t('doc.previewTooltip')}>
             <Button
               type="text"
               size="small"
@@ -147,7 +149,7 @@ export default function DocumentListPage() {
             />
           </Tooltip>
           {row.status === 'error' && (
-            <Tooltip title="重新解析">
+            <Tooltip title={t('doc.reparseTooltip')}>
               <PermissionButton permission="doc:write" mode="hide">
                 <Button
                   type="text"
@@ -161,14 +163,14 @@ export default function DocumentListPage() {
           )}
           <PermissionButton permission="doc:delete" mode="hide">
             <Popconfirm
-              title="确认删除此文档？"
-              description="删除后数据及向量索引均不可恢复"
+              title={t('doc.deleteConfirm')}
+              description={t('doc.deleteDesc')}
               onConfirm={() => deleteMutation.mutate(row.fileMd5)}
-              okText="删除"
+              okText={t('common.delete')}
               okButtonProps={{ danger: true }}
-              cancelText="取消"
+              cancelText={t('common.cancel')}
             >
-              <Tooltip title="删除">
+              <Tooltip title={t('doc.deleteTooltip')}>
                 <Button type="text" size="small" danger icon={<DeleteOutlined />} />
               </Tooltip>
             </Popconfirm>
@@ -185,7 +187,7 @@ export default function DocumentListPage() {
         <div className={styles.filters}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索文档名"
+            placeholder={t('doc.searchPlaceholder')}
             value={keyword}
             onChange={(e) => {
               setKeyword(e.target.value)
@@ -195,7 +197,7 @@ export default function DocumentListPage() {
             style={{ width: 240 }}
           />
           <Select
-            placeholder="解析状态"
+            placeholder={t('doc.statusPlaceholder')}
             allowClear
             value={status}
             onChange={(v) => {
@@ -213,7 +215,7 @@ export default function DocumentListPage() {
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             onClick={() => setUploadOpen(true)}
           >
-            上传文档
+            {t('doc.uploadBtn')}
           </Button>
         </PermissionButton>
       </div>
@@ -233,7 +235,7 @@ export default function DocumentListPage() {
 
       {/* Upload Modal */}
       <Modal
-        title="上传文档"
+        title={t('doc.uploadModalTitle')}
         open={uploadOpen}
         onCancel={() => setUploadOpen(false)}
         footer={null}
@@ -243,7 +245,7 @@ export default function DocumentListPage() {
         <ChunkedUploader
           onSuccess={(_, name) => {
             qc.invalidateQueries({ queryKey: ['documents'] })
-            message.success(`${name} 上传成功，正在解析`)
+            message.success(t('doc.uploadSuccess', { name }))
           }}
         />
       </Modal>

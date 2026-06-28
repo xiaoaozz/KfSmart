@@ -1,20 +1,7 @@
 import { useState } from 'react'
-import {
-  Button,
-  Input,
-  Select,
-  Tag,
-  Drawer,
-  Form,
-  App,
-  Avatar,
-  Space,
-  Tooltip,
-  Popconfirm,
-} from 'antd'
+import { Button, Input, Select, Tag, Drawer, Form, App, Space, Tooltip } from 'antd'
 import {
   SearchOutlined,
-  UserOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
@@ -22,21 +9,11 @@ import {
   TeamOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { adminUserApi, type AdminUser } from '@/api/admin'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
+import UserAvatar from '@/components/UserAvatar'
 import styles from './AdminPage.module.css'
-
-// 后端 status：0=管理员, 1=普通用户（status 由 role 派生）
-const ROLE_FILTER_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '管理员', value: 0 },
-  { label: '普通用户', value: 1 },
-]
-
-const ROLE_EDIT_OPTIONS = [
-  { label: '管理员', value: 'ADMIN' },
-  { label: '普通用户', value: 'USER' },
-]
 
 function roleFromStatus(status?: number): 'ADMIN' | 'USER' {
   return status === 0 ? 'ADMIN' : 'USER'
@@ -45,12 +22,24 @@ function roleFromStatus(status?: number): 'ADMIN' | 'USER' {
 export default function UserManagePage() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
   const [statusFilter, setStatusFilter] = useState<number | ''>('')
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [editForm] = Form.useForm<{ role: string; orgTags: string[] }>()
+
+  const ROLE_FILTER_OPTIONS = [
+    { label: t('admin.users.filterAll'), value: '' },
+    { label: t('admin.users.tagAdmin'), value: 0 },
+    { label: t('admin.users.tagUser'), value: 1 },
+  ]
+
+  const ROLE_EDIT_OPTIONS = [
+    { label: t('admin.users.tagAdmin'), value: 'ADMIN' },
+    { label: t('admin.users.tagUser'), value: 'USER' },
+  ]
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', current, pageSize, keyword, statusFilter],
@@ -79,7 +68,7 @@ export default function UserManagePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       setEditUser(null)
-      message.success('已更新')
+      message.success(t('admin.users.updateSuccess'))
     },
   })
 
@@ -87,8 +76,8 @@ export default function UserManagePage() {
     mutationFn: (id: number) => adminUserApi.resetPassword(id),
     onSuccess: (res) => {
       modal.info({
-        title: '密码已重置',
-        content: `新密码：${res.newPassword}，请告知用户尽快登录修改。`,
+        title: t('admin.users.resetPwTitle'),
+        content: t('admin.users.resetPwContent', { password: res.newPassword }),
       })
     },
   })
@@ -97,9 +86,66 @@ export default function UserManagePage() {
     mutationFn: (id: number) => adminUserApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
-      message.success('已删除')
+      message.success(t('admin.users.deleteSuccess'))
+    },
+    onError: () => {
+      message.error(t('admin.users.deleteFailed'))
     },
   })
+
+  const handleDelete = (u: AdminUser) => {
+    let count = 5
+    let timerId: number | null = null
+
+    const instance = modal.confirm({
+      title: t('admin.users.deleteModalTitle'),
+      content: (
+        <div>
+          <p style={{ marginBottom: 12, color: 'var(--kf-foreground)' }}>
+            {t('admin.users.deleteModalDesc')}
+          </p>
+          <div
+            style={{
+              padding: '8px 12px',
+              background: 'var(--kf-muted)',
+              borderLeft: '3px solid var(--kf-danger)',
+              borderRadius: 'var(--kf-radius-xs)',
+              fontFamily: 'var(--kf-font-mono)',
+              fontSize: 13,
+              color: 'var(--kf-foreground)',
+              wordBreak: 'break-all',
+            }}
+          >
+            {u.username}
+          </div>
+        </div>
+      ),
+      okText: t('admin.users.deleteConfirmCountdown', { n: count }),
+      okType: 'danger',
+      okButtonProps: { disabled: true },
+      cancelText: t('common.cancel'),
+      onOk: () => deleteMutation.mutateAsync(u.id),
+      afterClose: () => {
+        if (timerId !== null) window.clearInterval(timerId)
+      },
+    })
+
+    timerId = window.setInterval(() => {
+      count -= 1
+      if (count <= 0) {
+        window.clearInterval(timerId!)
+        timerId = null
+        instance.update({
+          okText: t('admin.users.deleteConfirmReady'),
+          okButtonProps: { disabled: false },
+        })
+      } else {
+        instance.update({
+          okText: t('admin.users.deleteConfirmCountdown', { n: count }),
+        })
+      }
+    }, 1000)
+  }
 
   const openEdit = (u: AdminUser) => {
     setEditUser(u)
@@ -111,13 +157,11 @@ export default function UserManagePage() {
 
   const columns: TableColumnType<AdminUser>[] = [
     {
-      title: '用户',
+      title: t('admin.users.colUser'),
       dataIndex: 'username',
       render: (_: string, u: AdminUser) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Avatar size={32} src={u.avatar} icon={<UserOutlined />}>
-            {u.username?.[0]?.toUpperCase()}
-          </Avatar>
+          <UserAvatar size={32} avatar={u.avatar} username={u.username} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 13 }}>{u.username}</div>
             {u.email && (
@@ -128,16 +172,20 @@ export default function UserManagePage() {
       ),
     },
     {
-      title: '角色',
+      title: t('admin.users.colRole'),
       dataIndex: 'status',
       width: 90,
       render: (s?: number) => {
         const isAdmin = s === 0
-        return <Tag color={isAdmin ? 'red' : 'blue'}>{isAdmin ? '管理员' : '普通用户'}</Tag>
+        return (
+          <Tag color={isAdmin ? 'red' : 'blue'}>
+            {isAdmin ? t('admin.users.tagAdmin') : t('admin.users.tagUser')}
+          </Tag>
+        )
       },
     },
     {
-      title: '组织',
+      title: t('admin.users.colOrg'),
       dataIndex: 'orgTags',
       render: (tags?: AdminUser['orgTags']) =>
         tags && tags.length ? (
@@ -147,34 +195,28 @@ export default function UserManagePage() {
         ),
     },
     {
-      title: '创建时间',
+      title: t('admin.users.colCreatedAt'),
       dataIndex: 'createdAt',
       width: 160,
       render: (t?: string) => (t ? new Date(t).toLocaleString() : '—'),
     },
     {
-      title: '操作',
+      title: t('admin.users.colActions'),
       width: 140,
       render: (_: unknown, u: AdminUser) => (
         <Space size="small">
-          <Tooltip title="编辑">
+          <Tooltip title={t('admin.users.tooltipEdit')}>
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(u)} />
           </Tooltip>
-          <Tooltip title="重置密码">
+          <Tooltip title={t('admin.users.tooltipResetPw')}>
             <Button
               size="small"
               icon={<KeyOutlined />}
               onClick={() => resetPwMutation.mutate(u.id)}
             />
           </Tooltip>
-          <Tooltip title="删除">
-            <Popconfirm
-              title={`删除用户「${u.username}」？`}
-              okType="danger"
-              onConfirm={() => deleteMutation.mutate(u.id)}
-            >
-              <Button size="small" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
+          <Tooltip title={t('admin.users.tooltipDelete')}>
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(u)} />
           </Tooltip>
         </Space>
       ),
@@ -185,12 +227,12 @@ export default function UserManagePage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <TeamOutlined /> 用户管理
+          <TeamOutlined /> {t('admin.users.title')}
         </h2>
         <div className={styles.filters}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索用户名…"
+            placeholder={t('admin.users.searchPlaceholder')}
             value={keyword}
             onChange={(e) => {
               setKeyword(e.target.value)
@@ -230,30 +272,30 @@ export default function UserManagePage() {
       />
 
       <Drawer
-        title="编辑用户"
+        title={t('admin.users.editDrawer')}
         open={!!editUser}
         onClose={() => setEditUser(null)}
         width={400}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button onClick={() => setEditUser(null)}>取消</Button>
+            <Button onClick={() => setEditUser(null)}>{t('common.cancel')}</Button>
             <Button
               type="primary"
               loading={updateMutation.isPending}
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
               onClick={() => editForm.submit()}
             >
-              保存
+              {t('common.save')}
             </Button>
           </div>
         }
       >
         <Form form={editForm} layout="vertical" onFinish={(v) => updateMutation.mutate(v)}>
-          <Form.Item name="role" label="角色">
+          <Form.Item name="role" label={t('admin.users.fieldRole')}>
             <Select options={ROLE_EDIT_OPTIONS} />
           </Form.Item>
-          <Form.Item name="orgTags" label="所属组织（标签 ID）">
-            <Select mode="tags" placeholder="输入或选择组织标签 ID" />
+          <Form.Item name="orgTags" label={t('admin.users.fieldOrgTags')}>
+            <Select mode="tags" placeholder={t('admin.users.orgTagPlaceholder')} />
           </Form.Item>
         </Form>
       </Drawer>

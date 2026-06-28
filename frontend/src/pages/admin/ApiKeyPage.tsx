@@ -22,6 +22,7 @@ import {
   CopyOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { adminApiKeyApi, type ApiKey } from '@/api/admin'
 import styles from './AdminPage.module.css'
 
@@ -35,18 +36,23 @@ const SCOPE_OPTIONS = [
   { label: 'admin:read', value: 'admin:read' },
 ]
 
-const STATUS_CFG = {
-  active: { color: 'success', label: '活跃', icon: <CheckCircleOutlined /> },
-  disabled: { color: 'default', label: '禁用', icon: <StopOutlined /> },
-  expired: { color: 'error', label: '已过期', icon: <StopOutlined /> },
-}
-
 export default function ApiKeyPage() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
   const [createOpen, setCreateOpen] = useState(false)
   const [createdKey, setCreatedKey] = useState<string | null>(null)
   const [form] = Form.useForm<{ name: string; scopes: string[]; expiresAt?: unknown }>()
+
+  const STATUS_CFG = {
+    active: {
+      color: 'success',
+      label: t('admin.apiKey.statusActive'),
+      icon: <CheckCircleOutlined />,
+    },
+    disabled: { color: 'default', label: t('admin.apiKey.statusDisabled'), icon: <StopOutlined /> },
+    expired: { color: 'error', label: t('admin.apiKey.statusExpired'), icon: <StopOutlined /> },
+  }
 
   const { data: keys, isLoading } = useQuery({
     queryKey: ['admin-api-keys'],
@@ -69,7 +75,7 @@ export default function ApiKeyPage() {
       adminApiKeyApi.update(id, { status }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-api-keys'] })
-      message.success('已更新')
+      message.success(t('admin.apiKey.updateSuccess'))
     },
   })
 
@@ -77,14 +83,14 @@ export default function ApiKeyPage() {
     mutationFn: (id: number) => adminApiKeyApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-api-keys'] })
-      message.success('已删除')
+      message.success(t('admin.apiKey.deleteSuccess'))
     },
   })
 
   const handleDelete = (k: ApiKey) => {
     modal.confirm({
-      title: `删除 API Key「${k.name}」？`,
-      content: '删除后无法恢复，使用此 Key 的服务将立即失效。',
+      title: t('admin.apiKey.deleteConfirmTitle', { name: k.name }),
+      content: t('admin.apiKey.deleteConfirmContent'),
       okType: 'danger',
       onOk: () => deleteMutation.mutateAsync(k.id),
     })
@@ -92,17 +98,17 @@ export default function ApiKeyPage() {
 
   const columns = [
     {
-      title: 'Key',
+      title: t('admin.apiKey.colKey'),
       dataIndex: 'keyPrefix',
       render: (prefix: string) => <span className={styles.keyMask}>{prefix}••••••••••••••••</span>,
     },
     {
-      title: '名称',
+      title: t('admin.apiKey.colName'),
       dataIndex: 'name',
       render: (n: string) => <span style={{ fontWeight: 600 }}>{n}</span>,
     },
     {
-      title: '状态',
+      title: t('admin.apiKey.colStatus'),
       dataIndex: 'status',
       width: 90,
       render: (s: ApiKey['status']) => {
@@ -115,7 +121,7 @@ export default function ApiKeyPage() {
       },
     },
     {
-      title: '权限范围',
+      title: t('admin.apiKey.colScopes'),
       dataIndex: 'scopes',
       render: (scopes: string[]) => (
         <>
@@ -128,24 +134,24 @@ export default function ApiKeyPage() {
       ),
     },
     {
-      title: '最后使用',
+      title: t('admin.apiKey.colLastUsed'),
       dataIndex: 'lastUsedTime',
       width: 150,
-      render: (t?: string) => (t ? new Date(t).toLocaleString() : '—'),
+      render: (v?: string) => (v ? new Date(v).toLocaleString() : '—'),
     },
     {
-      title: '到期',
+      title: t('admin.apiKey.colExpiry'),
       dataIndex: 'expiresAt',
       width: 120,
-      render: (t?: string) => (t ? new Date(t).toLocaleDateString() : '永久'),
+      render: (v?: string) => (v ? new Date(v).toLocaleDateString() : t('common.permanent')),
     },
     {
-      title: '操作',
+      title: t('admin.apiKey.colActions'),
       width: 110,
       render: (_: unknown, k: ApiKey) => (
         <Space size="small">
           {k.status === 'active' ? (
-            <Tooltip title="禁用">
+            <Tooltip title={t('admin.apiKey.tooltipDisable')}>
               <Button
                 size="small"
                 icon={<StopOutlined />}
@@ -153,7 +159,7 @@ export default function ApiKeyPage() {
               />
             </Tooltip>
           ) : (
-            <Tooltip title="启用">
+            <Tooltip title={t('admin.apiKey.tooltipEnable')}>
               <Button
                 size="small"
                 type="primary"
@@ -163,7 +169,7 @@ export default function ApiKeyPage() {
               />
             </Tooltip>
           )}
-          <Tooltip title="删除">
+          <Tooltip title={t('admin.apiKey.tooltipDelete')}>
             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(k)} />
           </Tooltip>
         </Space>
@@ -175,7 +181,7 @@ export default function ApiKeyPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <KeyOutlined /> API Key 管理
+          <KeyOutlined /> {t('admin.apiKey.title')}
         </h2>
         <Button
           type="primary"
@@ -183,7 +189,7 @@ export default function ApiKeyPage() {
           style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           onClick={() => setCreateOpen(true)}
         >
-          创建 API Key
+          {t('admin.apiKey.createBtn')}
         </Button>
       </div>
 
@@ -196,9 +202,8 @@ export default function ApiKeyPage() {
         size="middle"
       />
 
-      {/* Create Modal */}
       <Modal
-        title="创建 API Key"
+        title={t('admin.apiKey.createModalTitle')}
         open={createOpen}
         onCancel={() => {
           setCreateOpen(false)
@@ -218,29 +223,36 @@ export default function ApiKeyPage() {
             createMutation.mutate({ name: v.name, scopes: v.scopes, expiresAt })
           }}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input placeholder="例：生产服务账号" />
+          <Form.Item name="name" label={t('admin.apiKey.fieldName')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.apiKey.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="scopes" label="权限范围" rules={[{ required: true }]}>
-            <Select mode="multiple" options={SCOPE_OPTIONS} placeholder="选择权限" />
+          <Form.Item
+            name="scopes"
+            label={t('admin.apiKey.fieldScopes')}
+            rules={[{ required: true }]}
+          >
+            <Select
+              mode="multiple"
+              options={SCOPE_OPTIONS}
+              placeholder={t('admin.apiKey.scopesPlaceholder')}
+            />
           </Form.Item>
-          <Form.Item name="expiresAt" label="到期时间（可选）">
+          <Form.Item name="expiresAt" label={t('admin.apiKey.fieldExpiry')}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Show full key once after creation */}
       <Modal
-        title="API Key 已创建"
+        title={t('admin.apiKey.revealTitle')}
         open={!!createdKey}
         onOk={() => setCreatedKey(null)}
         onCancel={() => setCreatedKey(null)}
         cancelButtonProps={{ style: { display: 'none' } }}
-        okText="我已复制，关闭"
+        okText={t('admin.apiKey.copiedClose')}
       >
         <Descriptions column={1} bordered size="small">
-          <Descriptions.Item label="Key">
+          <Descriptions.Item label={t('admin.apiKey.revealKeyLabel')}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className={styles.keyMask} style={{ flex: 1, wordBreak: 'break-all' }}>
                 {createdKey}
@@ -250,14 +262,14 @@ export default function ApiKeyPage() {
                 icon={<CopyOutlined />}
                 onClick={() => {
                   navigator.clipboard.writeText(createdKey ?? '')
-                  message.success('已复制')
+                  message.success(t('admin.apiKey.copySuccess'))
                 }}
               />
             </div>
           </Descriptions.Item>
         </Descriptions>
         <p style={{ marginTop: 12, color: 'var(--kf-muted-foreground)', fontSize: 13 }}>
-          ⚠ 此 Key 只显示一次，请立即保存到安全的地方。
+          {t('admin.apiKey.revealWarning')}
         </p>
       </Modal>
     </div>

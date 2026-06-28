@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Avatar, Dropdown, Drawer, Button, Breadcrumb } from 'antd'
+import { Layout, Menu, Dropdown, Drawer, Button, Breadcrumb } from 'antd'
 import {
   DashboardOutlined,
   DatabaseOutlined,
@@ -20,8 +20,10 @@ import {
   DashboardFilled,
 } from '@ant-design/icons'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ThemeSwitch } from '@/components/base'
+import { useTranslation } from 'react-i18next'
+import { ThemeSwitch, LanguageSwitch } from '@/components/base'
 import NotificationBell from '@/components/layout/NotificationBell'
+import UserAvatar from '@/components/UserAvatar'
 import { useAuthStore } from '@/stores/auth'
 import { useLayoutStore } from '@/stores/layout'
 import { useCurrentUser } from '@/hooks/usePermission'
@@ -31,64 +33,67 @@ import styles from './BasicLayout.module.css'
 
 const { Header, Sider, Content } = Layout
 
-const NAV_ITEMS = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
-  { key: '/chat', icon: <MessageOutlined />, label: 'AI 对话' },
-  { key: '/knowledge-bases', icon: <DatabaseOutlined />, label: '知识库' },
-  { key: '/documents', icon: <FileTextOutlined />, label: '文档管理' },
-  features.orgManagement && { key: '/agents', icon: <RobotOutlined />, label: 'Agent 管理' },
-  features.workflowEditor && {
-    key: '/workflows',
-    icon: <ApartmentOutlined />,
-    label: '工作流',
-  },
-  {
-    key: 'skill-group',
-    icon: <BookOutlined />,
-    label: '技能库',
-    children: [
-      { key: '/skills', icon: <ThunderboltOutlined />, label: '技能' },
-      { key: '/prompts', icon: <FileTextOutlined />, label: 'Prompt' },
-      { key: '/mcp-tools', icon: <ApiOutlined />, label: 'MCP 工具' },
-      { key: '/models', icon: <RobotOutlined />, label: '模型' },
-    ],
-  },
-  { key: '/profile', icon: <UserOutlined />, label: '个人中心' },
-].filter(Boolean) as Array<{
-  key: string
-  icon: ReactElement
-  label: string
-  children?: Array<{ key: string; icon: ReactElement; label: string }>
-}>
+function useNavItems() {
+  const { t } = useTranslation()
 
-const ADMIN_ITEMS = [
-  { key: '/admin/users', icon: <UserOutlined />, label: '用户管理' },
-  { key: '/admin/roles', icon: <SafetyCertificateOutlined />, label: '角色权限' },
-  { key: '/admin/orgs', icon: <ApartmentOutlined />, label: '组织标签' },
-  { key: '/admin/api-keys', icon: <KeyOutlined />, label: 'API Key' },
-  { key: '/admin/system', icon: <DashboardFilled />, label: '系统状态' },
-  { key: '/admin/activity-logs', icon: <FileTextOutlined />, label: '操作日志' },
-]
+  const navItems = [
+    { key: '/dashboard', icon: <DashboardOutlined />, label: t('nav.dashboard') },
+    { key: '/chat', icon: <MessageOutlined />, label: t('nav.chat') },
+    { key: '/knowledge-bases', icon: <DatabaseOutlined />, label: t('nav.knowledgeBase') },
+    { key: '/documents', icon: <FileTextOutlined />, label: t('nav.documents') },
+    features.orgManagement && { key: '/agents', icon: <RobotOutlined />, label: t('nav.agents') },
+    features.workflowEditor && {
+      key: '/workflows',
+      icon: <ApartmentOutlined />,
+      label: t('nav.workflows'),
+    },
+    {
+      key: 'skill-group',
+      icon: <BookOutlined />,
+      label: t('nav.skillGroup'),
+      children: [
+        { key: '/skills', icon: <ThunderboltOutlined />, label: t('nav.skills') },
+        { key: '/prompts', icon: <FileTextOutlined />, label: t('nav.prompts') },
+        { key: '/mcp-tools', icon: <ApiOutlined />, label: t('nav.mcpTools') },
+        { key: '/models', icon: <RobotOutlined />, label: t('nav.models') },
+      ],
+    },
+    { key: '/profile', icon: <UserOutlined />, label: t('nav.profile') },
+  ].filter(Boolean) as Array<{
+    key: string
+    icon: ReactElement
+    label: string
+    children?: Array<{ key: string; icon: ReactElement; label: string }>
+  }>
+
+  const adminItems = [
+    { key: '/admin/users', icon: <UserOutlined />, label: t('nav.admin.users') },
+    { key: '/admin/roles', icon: <SafetyCertificateOutlined />, label: t('nav.admin.roles') },
+    { key: '/admin/orgs', icon: <ApartmentOutlined />, label: t('nav.admin.orgs') },
+    { key: '/admin/api-keys', icon: <KeyOutlined />, label: t('nav.admin.apiKeys') },
+    { key: '/admin/system', icon: <DashboardFilled />, label: t('nav.admin.system') },
+    { key: '/admin/activity-logs', icon: <FileTextOutlined />, label: t('nav.admin.activityLogs') },
+  ]
+
+  return { navItems, adminItems }
+}
 
 function SideMenu({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { data: user } = useCurrentUser()
+  const { navItems, adminItems } = useNavItems()
 
-  const allLeafKeys = NAV_ITEMS.flatMap((i) =>
-    i.children ? i.children.map((c) => c.key) : [i.key],
-  )
+  const allLeafKeys = navItems.flatMap((i) => (i.children ? i.children.map((c) => c.key) : [i.key]))
   const selectedKey =
     allLeafKeys.find((k) => location.pathname.startsWith(k)) ??
-    ADMIN_ITEMS.find((i) => location.pathname.startsWith(i.key))?.key ??
-    NAV_ITEMS.find((i) => !i.children && location.pathname.startsWith(i.key))?.key ??
+    adminItems.find((i) => location.pathname.startsWith(i.key))?.key ??
+    navItems.find((i) => !i.children && location.pathname.startsWith(i.key))?.key ??
     '/dashboard'
 
   const items = [
-    ...NAV_ITEMS,
-    ...(user?.role?.toUpperCase() === 'ADMIN'
-      ? [{ type: 'divider' as const }, ...ADMIN_ITEMS]
-      : []),
+    ...navItems,
+    ...(user?.role?.toUpperCase() === 'ADMIN' ? [{ type: 'divider' as const }, ...adminItems] : []),
   ]
 
   return (
@@ -123,6 +128,8 @@ export default function BasicLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const { data: user } = useCurrentUser()
+  const { t } = useTranslation()
+  const { navItems } = useNavItems()
 
   // Lazy initializer reads matchMedia once — no synchronous setState in effect
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches)
@@ -155,14 +162,14 @@ export default function BasicLayout() {
       {
         key: 'profile',
         icon: <UserOutlined />,
-        label: '个人中心',
+        label: t('user.profile'),
         onClick: () => navigate('/profile'),
       },
       { type: 'divider' as const },
       {
         key: 'logout',
         icon: <LogoutOutlined />,
-        label: '退出登录',
+        label: t('user.logout'),
         danger: true,
         onClick: handleLogout,
       },
@@ -175,18 +182,17 @@ export default function BasicLayout() {
       <SideMenu collapsed={isMobile ? false : collapsed} />
       {!isMobile && (
         <div className={styles.siderFooter}>
-          <Avatar
+          <UserAvatar
             size={collapsed ? 32 : 36}
-            src={user?.avatar}
-            style={{ background: 'var(--kf-accent)', cursor: 'pointer' }}
-          >
-            {user?.username?.[0]?.toUpperCase()}
-          </Avatar>
+            avatar={user?.avatar}
+            username={user?.username}
+            style={{ cursor: 'pointer' }}
+          />
           {!collapsed && (
             <div className={styles.userInfo}>
               <span className={styles.userName}>{user?.username}</span>
               <span className={styles.userRole}>
-                {user?.role?.toUpperCase() === 'ADMIN' ? '管理员' : '用户'}
+                {user?.role?.toUpperCase() === 'ADMIN' ? t('user.roleAdmin') : t('user.roleUser')}
               </span>
             </div>
           )}
@@ -245,21 +251,21 @@ export default function BasicLayout() {
             className={styles.breadcrumb}
             items={[
               { title: 'KfSmart' },
-              { title: NAV_ITEMS.find((i) => location.pathname.startsWith(i.key))?.label ?? '' },
+              { title: navItems.find((i) => location.pathname.startsWith(i.key))?.label ?? '' },
             ]}
           />
 
           <div className={styles.headerRight}>
             <NotificationBell />
+            <LanguageSwitch />
             <ThemeSwitch />
             <Dropdown menu={userMenu} placement="bottomRight" arrow>
-              <Avatar
+              <UserAvatar
                 size={32}
-                src={user?.avatar}
-                style={{ background: 'var(--kf-accent)', cursor: 'pointer' }}
-              >
-                {user?.username?.[0]?.toUpperCase()}
-              </Avatar>
+                avatar={user?.avatar}
+                username={user?.username}
+                style={{ cursor: 'pointer' }}
+              />
             </Dropdown>
           </div>
         </Header>
@@ -267,7 +273,14 @@ export default function BasicLayout() {
         <Content className={styles.content}>
           <AnimatePresence mode="wait">
             <motion.div
-              key={location.pathname}
+              // Normalize the chat route so switching conversations
+              // (/chat/A → /chat/B) keeps the same key — otherwise the page
+              // fade transition fires on every switch, causing the "flash".
+              key={
+                location.pathname === '/chat' || location.pathname.startsWith('/chat/')
+                  ? '/chat'
+                  : location.pathname
+              }
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}

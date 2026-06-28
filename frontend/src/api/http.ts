@@ -3,6 +3,7 @@ import axios, {
   type InternalAxiosRequestConfig,
   type AxiosResponse,
 } from 'axios'
+import i18n from '../i18n'
 
 // ------------------------------------------------------------------ camelCase
 function toCamel(s: string): string {
@@ -61,6 +62,11 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const raw = localStorage.getItem('kf-auth')
   const token: string | undefined = raw ? JSON.parse(raw)?.state?.token : undefined
   if (token) config.headers.Authorization = `Bearer ${token}`
+
+  const localeRaw = localStorage.getItem('kf-locale')
+  const locale: string = localeRaw ? (JSON.parse(localeRaw)?.state?.locale ?? 'zh-CN') : 'zh-CN'
+  config.headers['Accept-Language'] = locale
+
   return config
 })
 
@@ -109,7 +115,7 @@ http.interceptors.response.use(
     const msg: string =
       ((error.response?.data as Record<string, unknown>)?.message as string) ||
       error.message ||
-      '请求失败'
+      i18n.t('common.requestFailed')
 
     import('antd').then(({ message }) => {
       message.error(msg)

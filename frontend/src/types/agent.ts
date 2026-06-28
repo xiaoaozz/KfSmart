@@ -7,8 +7,15 @@ export interface AgentModel {
   maxTokens: number
 }
 
+export interface AgentI18n {
+  lang: string
+  name?: string
+  description?: string
+}
+
 export interface Agent {
   id: number
+  agentId?: string
   name: string
   description?: string
   status: AgentStatus

@@ -3,16 +3,11 @@ import { Tag, Collapse, Button, App } from 'antd'
 import { ArrowLeftOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { agentApi } from '@/api/agent'
 import type { AgentExecution } from '@/types/agent'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
 import styles from './AgentExecutionPage.module.css'
-
-const STATUS_CFG = {
-  running: { color: 'processing', label: '运行中' },
-  success: { color: 'success', label: '成功' },
-  failed: { color: 'error', label: '失败' },
-}
 
 function formatMs(ms: number) {
   if (ms < 1000) return `${ms}ms`
@@ -23,8 +18,15 @@ export default function AgentExecutionPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+
+  const STATUS_CFG = {
+    running: { color: 'processing', label: t('agent.executions.statusRunning') },
+    success: { color: 'success', label: t('agent.executions.statusSuccess') },
+    failed: { color: 'error', label: t('agent.executions.statusFailed') },
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['agent-executions', id, current, pageSize],
@@ -36,7 +38,7 @@ export default function AgentExecutionPage() {
 
   const columns: TableColumnType<AgentExecution>[] = [
     {
-      title: '状态',
+      title: t('agent.executions.colStatus'),
       dataIndex: 'status',
       width: 90,
       render: (s: AgentExecution['status']) => (
@@ -44,7 +46,7 @@ export default function AgentExecutionPage() {
       ),
     },
     {
-      title: '输入摘要',
+      title: t('agent.executions.colInput'),
       dataIndex: 'input',
       ellipsis: true,
       render: (v: string) => v.slice(0, 80),
@@ -56,31 +58,33 @@ export default function AgentExecutionPage() {
       render: (n: number) => n.toLocaleString(),
     },
     {
-      title: '耗时',
+      title: t('agent.executions.colDuration'),
       dataIndex: 'durationMs',
       width: 80,
       render: (ms: number) => formatMs(ms),
     },
     {
-      title: '时间',
+      title: t('agent.executions.colTime'),
       dataIndex: 'createTime',
       width: 160,
-      render: (t: string) => new Date(t).toLocaleString(),
+      render: (v: string) => new Date(v).toLocaleString(),
     },
   ]
 
   const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => message.success('已复制'))
+    navigator.clipboard
+      .writeText(text)
+      .then(() => message.success(t('agent.executions.copySuccess')))
   }
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/agents')}>
-          返回列表
+          {t('agent.executions.backBtn')}
         </Button>
         <h2 className={styles.title}>
-          <ThunderboltOutlined /> 执行记录
+          <ThunderboltOutlined /> {t('agent.executions.title')}
         </h2>
       </div>
 
@@ -103,12 +107,12 @@ export default function AgentExecutionPage() {
               items={[
                 {
                   key: 'input',
-                  label: '完整输入',
+                  label: t('agent.executions.expandInput'),
                   children: (
                     <div className={styles.codeBlock}>
                       <pre>{row.input}</pre>
                       <Button size="small" onClick={() => handleCopy(row.input)}>
-                        复制
+                        {t('common.copy')}
                       </Button>
                     </div>
                   ),
@@ -117,12 +121,12 @@ export default function AgentExecutionPage() {
                   ? [
                       {
                         key: 'output',
-                        label: '完整输出',
+                        label: t('agent.executions.expandOutput'),
                         children: (
                           <div className={styles.codeBlock}>
                             <pre>{row.output}</pre>
                             <Button size="small" onClick={() => handleCopy(row.output!)}>
-                              复制
+                              {t('common.copy')}
                             </Button>
                           </div>
                         ),

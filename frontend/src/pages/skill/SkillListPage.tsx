@@ -26,20 +26,12 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { skillApi } from '@/api/skill'
 import type { SkillSummary } from '@/types/skill'
 import { GradientCard } from '@/components/base'
 import { PermissionButton } from '@/components/business'
 import styles from './SkillListPage.module.css'
-
-const CATEGORY_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: 'HTTP 请求', value: 'http' },
-  { label: '数据库', value: 'database' },
-  { label: '文件处理', value: 'file' },
-  { label: 'AI 工具', value: 'ai' },
-  { label: '自定义', value: 'custom' },
-]
 
 const CATEGORY_COLORS: Record<string, string> = {
   http: 'blue',
@@ -49,16 +41,30 @@ const CATEGORY_COLORS: Record<string, string> = {
   custom: 'default',
 }
 
-const STATUS_CFG = {
-  draft: { color: 'default', label: '草稿', icon: <EditOutlined /> },
-  published: { color: 'success', label: '已发布', icon: <CheckCircleOutlined /> },
-  disabled: { color: 'error', label: '已停用', icon: <StopOutlined /> },
-}
-
 export default function SkillListPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
+
+  const CATEGORY_OPTIONS = [
+    { label: t('skill.categoryAll'), value: '' },
+    { label: t('skill.categoryHttp'), value: 'http' },
+    { label: t('skill.categoryDatabase'), value: 'database' },
+    { label: t('skill.categoryFile'), value: 'file' },
+    { label: t('skill.categoryAi'), value: 'ai' },
+    { label: t('skill.categoryCustom'), value: 'custom' },
+  ]
+
+  const STATUS_CFG = {
+    draft: { color: 'default', label: t('skill.statusDraft'), icon: <EditOutlined /> },
+    published: {
+      color: 'success',
+      label: t('skill.statusPublished'),
+      icon: <CheckCircleOutlined />,
+    },
+    disabled: { color: 'error', label: t('skill.statusDisabled'), icon: <StopOutlined /> },
+  }
 
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState('')
@@ -100,7 +106,7 @@ export default function SkillListPage() {
     mutationFn: (id: number) => skillApi.publish(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
-      message.success('已发布')
+      message.success(t('skill.publishSuccess'))
     },
   })
 
@@ -108,7 +114,7 @@ export default function SkillListPage() {
     mutationFn: (id: number) => skillApi.disable(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
-      message.success('已停用')
+      message.success(t('skill.disableSuccess'))
     },
   })
 
@@ -116,13 +122,13 @@ export default function SkillListPage() {
     mutationFn: (id: number) => skillApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
-      message.success('已删除')
+      message.success(t('skill.deleteSuccess'))
     },
   })
 
   const handleDelete = (sk: SkillSummary) => {
     modal.confirm({
-      title: `删除技能「${sk.name}」？`,
+      title: t('skill.deleteConfirm', { name: sk.name }),
       okType: 'danger',
       onOk: () => deleteMutation.mutateAsync(sk.id),
     })
@@ -134,35 +140,29 @@ export default function SkillListPage() {
     setTestResult('')
     try {
       let args: Record<string, unknown> = {}
-      if (testArgs.trim()) {
-        args = JSON.parse(testArgs)
-      }
+      if (testArgs.trim()) args = JSON.parse(testArgs)
       const res = await skillApi.test(testSkill.id, args)
-      setTestResult(`输出：${res.output}\n耗时：${res.durationMs}ms`)
+      setTestResult(t('skill.testOutput', { output: res.output, ms: res.durationMs }))
     } catch (e) {
-      setTestResult(e instanceof Error ? e.message : '测试失败')
+      setTestResult(e instanceof Error ? e.message : t('skill.testFailed'))
     } finally {
       setTesting(false)
     }
   }
 
-  const tabItems = CATEGORY_OPTIONS.map((opt) => ({
-    key: opt.value,
-    label: opt.label,
-  }))
-
+  const tabItems = CATEGORY_OPTIONS.map((opt) => ({ key: opt.value, label: opt.label }))
   const records = data?.records ?? []
 
   return (
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <ThunderboltOutlined /> 技能库
+          <ThunderboltOutlined /> {t('skill.title')}
         </h2>
         <div className={styles.actions}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索技能…"
+            placeholder={t('skill.searchPlaceholder')}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             style={{ width: 200 }}
@@ -175,7 +175,7 @@ export default function SkillListPage() {
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
               onClick={() => setCreateOpen(true)}
             >
-              新建技能
+              {t('skill.createBtn')}
             </Button>
           </PermissionButton>
         </div>
@@ -195,7 +195,7 @@ export default function SkillListPage() {
           ))}
         </div>
       ) : !records.length ? (
-        <Empty description="暂无技能" />
+        <Empty description={t('skill.empty')} />
       ) : (
         <div className={styles.grid}>
           {records.map((sk: SkillSummary, i: number) => (
@@ -227,7 +227,7 @@ export default function SkillListPage() {
                     icon={<EditOutlined />}
                     onClick={() => navigate(`/skills/${sk.id}/edit`)}
                   >
-                    编辑
+                    {t('skill.editor.saveBtn') /* reuse common edit label */}
                   </Button>
                   <Button
                     size="small"
@@ -238,7 +238,7 @@ export default function SkillListPage() {
                       setTestResult('')
                     }}
                   >
-                    测试
+                    {t('common.test')}
                   </Button>
                   {sk.status !== 'published' ? (
                     <PermissionButton permission="skill:publish">
@@ -248,17 +248,17 @@ export default function SkillListPage() {
                         style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
                         onClick={() => publishMutation.mutate(sk.id)}
                       >
-                        发布
+                        {t('common.publish')}
                       </Button>
                     </PermissionButton>
                   ) : (
                     <PermissionButton permission="skill:publish">
                       <Button size="small" danger onClick={() => disableMutation.mutate(sk.id)}>
-                        停用
+                        {t('common.disable')}
                       </Button>
                     </PermissionButton>
                   )}
-                  <Tooltip title="删除">
+                  <Tooltip title={t('common.delete')}>
                     <PermissionButton permission="skill:delete">
                       <Button
                         size="small"
@@ -277,7 +277,7 @@ export default function SkillListPage() {
 
       {/* Create Modal */}
       <Modal
-        title="新建技能"
+        title={t('skill.createModalTitle')}
         open={createOpen}
         onCancel={() => {
           setCreateOpen(false)
@@ -288,15 +288,15 @@ export default function SkillListPage() {
         destroyOnClose
       >
         <Form form={createForm} layout="vertical" onFinish={(v) => createMutation.mutate(v)}>
-          <Form.Item name="name" label="技能名称" rules={[{ required: true }]}>
-            <Input placeholder="例：HTTP 请求工具" />
+          <Form.Item name="name" label={t('skill.fieldName')} rules={[{ required: true }]}>
+            <Input placeholder={t('skill.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={2} placeholder="描述此技能的用途" />
+          <Form.Item name="description" label={t('skill.fieldDesc')}>
+            <Input.TextArea rows={2} placeholder={t('skill.descPlaceholder')} />
           </Form.Item>
           <Form.Item
             name="category"
-            label="分类"
+            label={t('skill.fieldCategory')}
             initialValue="custom"
             rules={[{ required: true }]}
           >
@@ -304,7 +304,7 @@ export default function SkillListPage() {
           </Form.Item>
           <Form.Item
             name="language"
-            label="语言"
+            label={t('skill.fieldLanguage')}
             initialValue="javascript"
             rules={[{ required: true }]}
           >
@@ -320,18 +320,18 @@ export default function SkillListPage() {
 
       {/* Test Modal */}
       <Modal
-        title={`测试技能 — ${testSkill?.name}`}
+        title={t('skill.testModalTitle', { name: testSkill?.name })}
         open={!!testSkill}
         onCancel={() => setTestSkill(null)}
         onOk={handleTest}
         confirmLoading={testing}
-        okText="运行"
+        okText={t('common.run')}
         destroyOnClose
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <div style={{ fontSize: 12, color: 'var(--kf-muted-foreground)', marginBottom: 4 }}>
-              参数 JSON（可选）
+              {t('skill.testArgsLabel')}
             </div>
             <Input.TextArea
               value={testArgs}
@@ -343,7 +343,7 @@ export default function SkillListPage() {
           </div>
           {testResult && (
             <Descriptions size="small" column={1} bordered>
-              <Descriptions.Item label="结果">
+              <Descriptions.Item label={t('skill.testResultLabel')}>
                 <pre
                   style={{
                     margin: 0,

@@ -1,6 +1,7 @@
 import { Collapse, Tag, Descriptions, Badge, Empty } from 'antd'
 import { RobotOutlined, StarFilled } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { modelApi } from '@/api/skill'
 import type { ModelInfo, ModelProvider } from '@/types/skill'
 import styles from './ModelConfigPage.module.css'
@@ -25,23 +26,28 @@ function formatContext(n: number) {
 }
 
 function ModelCard({ model }: { model: ModelInfo }) {
+  const { t } = useTranslation()
   return (
     <div className={styles.modelCard}>
       <div className={styles.modelHeader}>
         <span className={styles.modelName}>{model.name}</span>
         {model.isDefault && (
           <Tag color="gold" icon={<StarFilled />}>
-            默认
+            {t('skill.model.defaultTag')}
           </Tag>
         )}
       </div>
       {model.description && <p className={styles.modelDesc}>{model.description}</p>}
       <Descriptions size="small" column={2} style={{ marginTop: 8 }}>
-        <Descriptions.Item label="上下文窗口">
+        <Descriptions.Item label={t('skill.model.descContextWindow')}>
           {formatContext(model.contextLength)}
         </Descriptions.Item>
-        <Descriptions.Item label="输入价格">{formatPrice(model.inputPrice)}</Descriptions.Item>
-        <Descriptions.Item label="输出价格">{formatPrice(model.outputPrice)}</Descriptions.Item>
+        <Descriptions.Item label={t('skill.model.descInputPrice')}>
+          {formatPrice(model.inputPrice)}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('skill.model.descOutputPrice')}>
+          {formatPrice(model.outputPrice)}
+        </Descriptions.Item>
       </Descriptions>
       {model.capabilities.length > 0 && (
         <div className={styles.capabilities}>
@@ -57,6 +63,7 @@ function ModelCard({ model }: { model: ModelInfo }) {
 }
 
 export default function ModelConfigPage() {
+  const { t } = useTranslation()
   const { data: providers, isLoading } = useQuery({
     queryKey: ['models'],
     queryFn: () => modelApi.list(),
@@ -68,7 +75,7 @@ export default function ModelConfigPage() {
       <div className={styles.root}>
         <div className={styles.topBar}>
           <h2 className={styles.pageTitle}>
-            <RobotOutlined /> 模型配置
+            <RobotOutlined /> {t('skill.model.title')}
           </h2>
         </div>
         <div className={styles.skeleton} />
@@ -84,7 +91,7 @@ export default function ModelConfigPage() {
         <span className={styles.providerName}>{p.name}</span>
         <Badge count={p.models.length} color="blue" />
         <Tag color="processing">
-          <Badge status="processing" /> 已接入
+          <Badge status="processing" /> {t('skill.model.connectedTag')}
         </Tag>
       </div>
     ),
@@ -101,15 +108,13 @@ export default function ModelConfigPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <RobotOutlined /> 模型配置
+          <RobotOutlined /> {t('skill.model.title')}
         </h2>
-        <p className={styles.subtitle}>
-          以下模型由系统管理员配置，仅供查看。如需更改请联系管理员。
-        </p>
+        <p className={styles.subtitle}>{t('skill.model.subtitle')}</p>
       </div>
 
       {!items.length ? (
-        <Empty description="暂无模型配置" />
+        <Empty description={t('skill.model.empty')} />
       ) : (
         <Collapse
           defaultActiveKey={providers?.map((p) => p.id) ?? []}

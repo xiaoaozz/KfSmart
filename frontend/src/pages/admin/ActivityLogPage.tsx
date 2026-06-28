@@ -2,28 +2,27 @@ import { useState } from 'react'
 import { Table, Input, Select, DatePicker, Button, Tag, Space } from 'antd'
 import { SearchOutlined, ReloadOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { adminLogApi, type AdminActivityLog } from '@/api/admin'
 import styles from './AdminPage.module.css'
-
-const ACTION_OPTIONS = [
-  { label: '全部操作', value: '' },
-  { label: '用户登录', value: 'user.login' },
-  { label: '用户登出', value: 'user.logout' },
-  { label: '文件上传', value: 'file.upload' },
-  { label: '文件删除', value: 'file.delete' },
-  { label: '角色变更', value: 'role.update' },
-  { label: 'API Key 创建', value: 'apikey.create' },
-  { label: '系统配置', value: 'system.config' },
-]
-
-const STATUS_COLOR: Record<string, string> = { success: 'success', failed: 'error' }
-const STATUS_LABEL: Record<string, string> = { success: '成功', failed: '失败' }
 
 export default function ActivityLogPage() {
   const [keyword, setKeyword] = useState('')
   const [action, setAction] = useState('')
   const [page, setPage] = useState(1)
   const [dateRange, setDateRange] = useState<[string, string] | null>(null)
+  const { t } = useTranslation()
+
+  const ACTION_OPTIONS = [
+    { label: t('admin.activityLog.actions.all'), value: '' },
+    { label: t('admin.activityLog.actions.userLogin'), value: 'user.login' },
+    { label: t('admin.activityLog.actions.userLogout'), value: 'user.logout' },
+    { label: t('admin.activityLog.actions.fileUpload'), value: 'file.upload' },
+    { label: t('admin.activityLog.actions.fileDelete'), value: 'file.delete' },
+    { label: t('admin.activityLog.actions.roleUpdate'), value: 'role.update' },
+    { label: t('admin.activityLog.actions.apikeyCreate'), value: 'apikey.create' },
+    { label: t('admin.activityLog.actions.systemConfig'), value: 'system.config' },
+  ]
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin-activity-logs', keyword, action, page, dateRange],
@@ -40,17 +39,17 @@ export default function ActivityLogPage() {
 
   const columns = [
     {
-      title: '时间',
+      title: t('admin.activityLog.colTime'),
       dataIndex: 'createTime',
       width: 170,
-      render: (t: string) => (
+      render: (v: string) => (
         <span style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}>
-          {new Date(t).toLocaleString()}
+          {new Date(v).toLocaleString()}
         </span>
       ),
     },
     {
-      title: '操作人',
+      title: t('admin.activityLog.colOperator'),
       dataIndex: 'username',
       width: 120,
       render: (u: string, r: AdminActivityLog) => (
@@ -69,7 +68,7 @@ export default function ActivityLogPage() {
       ),
     },
     {
-      title: '操作',
+      title: t('admin.activityLog.colAction'),
       dataIndex: 'action',
       width: 150,
       render: (a: string) => (
@@ -77,7 +76,7 @@ export default function ActivityLogPage() {
       ),
     },
     {
-      title: '资源',
+      title: t('admin.activityLog.colResource'),
       dataIndex: 'resource',
       width: 100,
       render: (res: string, r: AdminActivityLog) => (
@@ -98,19 +97,22 @@ export default function ActivityLogPage() {
       ),
     },
     {
-      title: '详情',
+      title: t('admin.activityLog.colDetail'),
       dataIndex: 'detail',
       render: (d: string) => (
         <span style={{ fontSize: 13, color: 'var(--kf-muted-foreground)' }}>{d}</span>
       ),
     },
     {
-      title: '状态',
+      title: t('admin.activityLog.colStatus'),
       dataIndex: 'status',
       width: 75,
-      render: (s: AdminActivityLog['status']) => (
-        <Tag color={STATUS_COLOR[s]}>{STATUS_LABEL[s]}</Tag>
-      ),
+      render: (s: AdminActivityLog['status']) => {
+        const colorMap: Record<string, string> = { success: 'success', failed: 'error' }
+        const labelKey =
+          s === 'success' ? 'admin.activityLog.statusSuccess' : 'admin.activityLog.statusFailed'
+        return <Tag color={colorMap[s]}>{t(labelKey)}</Tag>
+      },
     },
   ]
 
@@ -118,16 +120,16 @@ export default function ActivityLogPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <FileTextOutlined /> 操作日志
+          <FileTextOutlined /> {t('admin.activityLog.title')}
         </h2>
         <Button icon={<ReloadOutlined />} onClick={() => refetch()}>
-          刷新
+          {t('common.refresh')}
         </Button>
       </div>
 
       <div className={styles.filters}>
         <Input
-          placeholder="搜索用户名 / IP / 详情"
+          placeholder={t('admin.activityLog.searchPlaceholder')}
           prefix={<SearchOutlined />}
           style={{ width: 220 }}
           value={keyword}
@@ -165,7 +167,7 @@ export default function ActivityLogPage() {
               setPage(1)
             }}
           >
-            重置
+            {t('common.reset')}
           </Button>
         </Space>
       </div>
@@ -180,7 +182,7 @@ export default function ActivityLogPage() {
           pageSize: 20,
           total: data?.total,
           onChange: setPage,
-          showTotal: (t) => `共 ${t} 条`,
+          showTotal: (total) => t('admin.activityLog.total', { count: total }),
         }}
         size="middle"
       />

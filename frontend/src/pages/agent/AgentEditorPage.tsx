@@ -4,6 +4,7 @@ import { SaveOutlined, SendOutlined, ArrowLeftOutlined, RobotOutlined } from '@a
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { agentApi } from '@/api/agent'
 import { kbApi } from '@/api/knowledge-base'
 import type { AgentFormValues } from '@/types/agent'
@@ -29,6 +30,7 @@ export default function AgentEditorPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [form] = Form.useForm<AgentFormValues>()
   const [testInput, setTestInput] = useState('')
   const [testOutput, setTestOutput] = useState('')
@@ -62,7 +64,7 @@ export default function AgentEditorPage() {
       isEdit ? agentApi.update(Number(id), values) : agentApi.create(values),
     onSuccess: (agent) => {
       qc.invalidateQueries({ queryKey: ['agents'] })
-      message.success(isEdit ? '保存成功' : '创建成功')
+      message.success(isEdit ? t('agent.editor.saveSuccess') : t('agent.editor.createSuccess'))
       if (!isEdit) navigate(`/agents/${agent.id}/edit`, { replace: true })
     },
   })
@@ -73,9 +75,9 @@ export default function AgentEditorPage() {
     setTestOutput('')
     try {
       await agentApi.testRun(Number(id), testInput)
-      setTestOutput('（测试运行已触发，结果通过 WebSocket 推送）')
+      setTestOutput(t('agent.editor.testTriggered'))
     } catch {
-      setTestOutput('测试运行失败')
+      setTestOutput(t('agent.editor.testFailed'))
     } finally {
       setTesting(false)
     }
@@ -91,12 +93,13 @@ export default function AgentEditorPage() {
 
   return (
     <div className={styles.root}>
-      {/* Header bar */}
       <div className={styles.topBar}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/agents')}>
-          返回列表
+          {t('agent.editor.backBtn')}
         </Button>
-        <h2 className={styles.pageTitle}>{isEdit ? '编辑 Agent' : '新建 Agent'}</h2>
+        <h2 className={styles.pageTitle}>
+          {isEdit ? t('agent.editor.editTitle') : t('agent.editor.createTitle')}
+        </h2>
         <Space>
           <Button
             type="primary"
@@ -105,13 +108,12 @@ export default function AgentEditorPage() {
             onClick={() => form.submit()}
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           >
-            保存
+            {t('agent.editor.saveBtn')}
           </Button>
         </Space>
       </div>
 
       <div className={styles.body}>
-        {/* Left: configuration form */}
         <motion.div
           className={styles.formPanel}
           initial={{ opacity: 0, x: -16 }}
@@ -124,60 +126,74 @@ export default function AgentEditorPage() {
             onFinish={(v) => saveMutation.mutate(v)}
             initialValues={{ model: DEFAULT_MODEL, knowledgeBaseIds: [], skillIds: [] }}
           >
-            <Divider style={{ fontSize: 13, textAlign: 'left' }}>基本信息</Divider>
+            <Divider style={{ fontSize: 13, textAlign: 'left' }}>
+              {t('agent.editor.sectionBasic')}
+            </Divider>
 
             <Form.Item
               name="name"
-              label="名称"
-              rules={[{ required: true, message: '请输入 Agent 名称' }]}
+              label={t('agent.editor.fieldName')}
+              rules={[{ required: true, message: t('agent.editor.nameRequired') }]}
             >
-              <Input placeholder="Agent 名称" />
+              <Input placeholder={t('agent.editor.namePlaceholder')} />
             </Form.Item>
 
-            <Form.Item name="description" label="描述">
-              <Input.TextArea rows={2} placeholder="简要描述此 Agent 的用途" />
+            <Form.Item name="description" label={t('agent.editor.fieldDesc')}>
+              <Input.TextArea rows={2} placeholder={t('agent.editor.descPlaceholder')} />
             </Form.Item>
 
             <Form.Item
               name="systemPrompt"
-              label="系统 Prompt"
-              rules={[{ required: true, message: '请输入系统 Prompt' }]}
+              label={t('agent.editor.fieldPrompt')}
+              rules={[{ required: true, message: t('agent.editor.promptRequired') }]}
             >
               <Input.TextArea
                 rows={8}
-                placeholder="你是一个专业的 AI 助手，..."
+                placeholder={t('agent.editor.promptPlaceholder')}
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 13 }}
               />
             </Form.Item>
 
-            <Divider style={{ fontSize: 13, textAlign: 'left' }}>知识库</Divider>
+            <Divider style={{ fontSize: 13, textAlign: 'left' }}>
+              {t('agent.editor.sectionKb')}
+            </Divider>
 
-            <Form.Item name="knowledgeBaseIds" label="关联知识库">
+            <Form.Item name="knowledgeBaseIds" label={t('agent.editor.fieldKb')}>
               <Select
                 mode="multiple"
-                placeholder="选择知识库（可多选）"
+                placeholder={t('agent.editor.kbPlaceholder')}
                 options={kbData?.records.map((kb) => ({ label: kb.name, value: kb.id }))}
                 allowClear
               />
             </Form.Item>
 
-            <Divider style={{ fontSize: 13, textAlign: 'left' }}>模型配置</Divider>
+            <Divider style={{ fontSize: 13, textAlign: 'left' }}>
+              {t('agent.editor.sectionModel')}
+            </Divider>
 
-            <Form.Item name={['model', 'name']} label="模型">
+            <Form.Item name={['model', 'name']} label={t('agent.editor.fieldModel')}>
               <Select options={MODEL_OPTIONS} />
             </Form.Item>
 
-            <Form.Item name={['model', 'temperature']} label={`温度（创造性）`}>
-              <Slider min={0} max={2} step={0.05} marks={{ 0: '严谨', 1: '均衡', 2: '创意' }} />
+            <Form.Item name={['model', 'temperature']} label={t('agent.editor.fieldTemp')}>
+              <Slider
+                min={0}
+                max={2}
+                step={0.05}
+                marks={{
+                  0: t('agent.editor.tempStrict'),
+                  1: t('agent.editor.tempBalanced'),
+                  2: t('agent.editor.tempCreative'),
+                }}
+              />
             </Form.Item>
 
-            <Form.Item name={['model', 'maxTokens']} label="最大 Token 数">
+            <Form.Item name={['model', 'maxTokens']} label={t('agent.editor.fieldMaxTokens')}>
               <InputNumber min={256} max={8192} step={256} style={{ width: '100%' }} />
             </Form.Item>
           </Form>
         </motion.div>
 
-        {/* Right: preview chat */}
         <motion.div
           className={styles.previewPanel}
           initial={{ opacity: 0, x: 16 }}
@@ -185,20 +201,20 @@ export default function AgentEditorPage() {
           transition={{ duration: 0.3 }}
         >
           <div className={styles.previewHeader}>
-            <RobotOutlined /> 测试预览
+            <RobotOutlined /> {t('agent.editor.previewHeader')}
           </div>
           <div className={styles.previewOutput}>
             {testOutput ? (
               <div className={styles.outputText}>{testOutput}</div>
             ) : (
-              <div className={styles.outputEmpty}>输入测试内容后点击发送，将触发 Agent 运行</div>
+              <div className={styles.outputEmpty}>{t('agent.editor.previewEmpty')}</div>
             )}
           </div>
           <div className={styles.previewInput}>
             <Input.TextArea
               value={testInput}
               onChange={(e) => setTestInput(e.target.value)}
-              placeholder="输入测试消息…"
+              placeholder={t('agent.editor.testPlaceholder')}
               autoSize={{ minRows: 2, maxRows: 5 }}
               disabled={!isEdit || testing}
             />
@@ -210,9 +226,9 @@ export default function AgentEditorPage() {
               onClick={handleTest}
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             >
-              发送
+              {t('common.send')}
             </Button>
-            {!isEdit && <div className={styles.saveHint}>请先保存 Agent 后再测试</div>}
+            {!isEdit && <div className={styles.saveHint}>{t('agent.editor.saveHint')}</div>}
           </div>
         </motion.div>
       </div>

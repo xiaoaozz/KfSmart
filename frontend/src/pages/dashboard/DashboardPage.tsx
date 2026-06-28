@@ -10,6 +10,7 @@ import {
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { http } from '@/api/http'
 import { profileApi, type UsageStats, type ActivityLog } from '@/api/profile'
 import { GradientText, GradientCard } from '@/components/base'
@@ -69,6 +70,7 @@ function StatCard({
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { data: user } = useCurrentUser()
+  const { t } = useTranslation()
 
   const { data: stats } = useQuery<UsageStats>({
     queryKey: ['users', 'usage-stats'],
@@ -78,7 +80,7 @@ export default function DashboardPage() {
 
   const { data: recentChats } = useQuery<RecentChat[]>({
     queryKey: ['conversations', 'sessions', 'recent'],
-    queryFn: () => http.get<RecentChat[]>('/conversations/sessions').then((r) => r.data),
+    queryFn: () => http.get<RecentChat[]>('/users/conversation/sessions').then((r) => r.data),
     retry: false,
   })
 
@@ -92,25 +94,25 @@ export default function DashboardPage() {
   const STATS = [
     {
       icon: <DatabaseOutlined />,
-      label: '知识库',
+      label: t('dashboard.stats.knowledgeBase'),
       key: 'knowledgeBaseCount' as keyof UsageStats,
       delay: 0.05,
     },
     {
       icon: <FileTextOutlined />,
-      label: '文档',
+      label: t('dashboard.stats.documents'),
       key: 'totalDocuments' as keyof UsageStats,
       delay: 0.1,
     },
     {
       icon: <MessageOutlined />,
-      label: '对话',
+      label: t('dashboard.stats.conversations'),
       key: 'totalConversations' as keyof UsageStats,
       delay: 0.15,
     },
     {
       icon: <StarOutlined />,
-      label: '收藏',
+      label: t('dashboard.stats.favorites'),
       key: 'favoriteCount' as keyof UsageStats,
       delay: 0.2,
     },
@@ -119,22 +121,22 @@ export default function DashboardPage() {
   const QUICK_ACTIONS = [
     {
       icon: <DatabaseOutlined />,
-      label: '新建知识库',
-      desc: '创建知识库，上传文档',
+      label: t('dashboard.actions.newKb'),
+      desc: t('dashboard.actions.newKbDesc'),
       path: '/knowledge-bases',
-      accent: true,
+      accent: false,
     },
     {
       icon: <MessageOutlined />,
-      label: '开始对话',
-      desc: '与 AI 助手交流',
+      label: t('dashboard.actions.startChat'),
+      desc: t('dashboard.actions.startChatDesc'),
       path: '/chat',
       accent: false,
     },
     {
       icon: <PlusOutlined />,
-      label: '上传文档',
-      desc: '支持 PDF / Word / Markdown',
+      label: t('dashboard.actions.uploadDoc'),
+      desc: t('dashboard.actions.uploadDocDesc'),
       path: '/documents',
       accent: false,
     },
@@ -150,9 +152,10 @@ export default function DashboardPage() {
         transition={{ duration: 0.5 }}
       >
         <h1 className={styles.welcomeTitle}>
-          你好，<GradientText>{user?.username ?? '...'}</GradientText>
+          {t('dashboard.greeting')}
+          <GradientText>{user?.username ?? '...'}</GradientText>
         </h1>
-        <p className={styles.welcomeSub}>KfSmart AI Platform 为您的团队提供智能知识管理能力</p>
+        <p className={styles.welcomeSub}>{t('dashboard.subtitle')}</p>
       </motion.div>
 
       {/* Stats */}
@@ -179,15 +182,15 @@ export default function DashboardPage() {
           >
             <GradientCard className={styles.panel}>
               <div className={styles.panelHeader}>
-                <span className={styles.panelTitle}>最近对话</span>
+                <span className={styles.panelTitle}>{t('dashboard.recentChats')}</span>
                 <span className={styles.panelMore} onClick={() => navigate('/chat')}>
-                  全部 <ArrowRightOutlined />
+                  {t('dashboard.viewAll')} <ArrowRightOutlined />
                 </span>
               </div>
               {!recentChats ? (
                 <Skeleton active paragraph={{ rows: 4 }} />
               ) : recentChats.length === 0 ? (
-                <div className={styles.empty}>暂无对话，点击上方"开始对话"试试</div>
+                <div className={styles.empty}>{t('dashboard.emptyChats')}</div>
               ) : (
                 <ul className={styles.chatList}>
                   {recentChats.slice(0, 5).map((c) => (
@@ -218,12 +221,12 @@ export default function DashboardPage() {
           >
             <GradientCard className={styles.panel}>
               <div className={styles.panelHeader}>
-                <span className={styles.panelTitle}>近期操作</span>
+                <span className={styles.panelTitle}>{t('dashboard.recentActivity')}</span>
               </div>
               {!activities ? (
                 <Skeleton active paragraph={{ rows: 5 }} />
               ) : activities.length === 0 ? (
-                <div className={styles.empty}>暂无近期操作</div>
+                <div className={styles.empty}>{t('dashboard.emptyActivity')}</div>
               ) : (
                 <Timeline
                   items={activities.slice(0, 6).map((a) => {
@@ -258,7 +261,7 @@ export default function DashboardPage() {
         style={{ marginTop: 16 }}
       >
         <div className={styles.panelTitle} style={{ marginBottom: 12 }}>
-          快捷入口
+          {t('dashboard.quickActions')}
         </div>
         <Row gutter={[16, 16]}>
           {QUICK_ACTIONS.map((a) => (

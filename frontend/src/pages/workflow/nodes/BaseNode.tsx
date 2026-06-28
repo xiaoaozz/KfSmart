@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { NODE_COLORS, NODE_LABELS } from './nodeTypes'
+import { useTranslation } from 'react-i18next'
+import { NODE_COLORS } from './nodeTypes'
 import styles from './BaseNode.module.css'
 
 interface Props {
@@ -22,8 +23,9 @@ export default function BaseNode({
   children,
   extra,
 }: Props) {
+  const { t } = useTranslation()
   const color = NODE_COLORS[type] ?? '#aaa'
-  const label = NODE_LABELS[type] ?? type
+  const label = t('workflow.nodeLabel.' + type, { defaultValue: type })
 
   return (
     <div

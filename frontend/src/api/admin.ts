@@ -52,6 +52,7 @@ export interface Role {
 // ---- Org Tag ----
 export interface OrgTag {
   id: number
+  tagId?: string
   name: string
   code: string
   description?: string
@@ -59,6 +60,12 @@ export interface OrgTag {
   children?: OrgTag[]
   userCount: number
   createTime: string
+}
+
+export interface TagI18n {
+  lang: string
+  name?: string
+  description?: string
 }
 
 // ---- System Status ----
@@ -150,6 +157,12 @@ export const adminOrgApi = {
   },
   delete(id: number) {
     return http.delete<void>(`/admin/org-tags/${id}`).then(data)
+  },
+  getI18n(tagId: string) {
+    return http.get<TagI18n[]>(`/admin/org-tags/${tagId}/i18n`).then(data)
+  },
+  upsertI18n(tagId: string, payload: TagI18n) {
+    return http.put<TagI18n>(`/admin/org-tags/${tagId}/i18n`, payload).then(data)
   },
 }
 

@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { workflowApi } from '@/api/workflow'
 import type { WorkflowNode, WorkflowEdge } from '@/types/workflow'
 import StartNode from './nodes/StartNode'
@@ -35,7 +36,7 @@ import KbNode from './nodes/KbNode'
 import CodeNode from './nodes/CodeNode'
 import ConditionNode from './nodes/ConditionNode'
 import NodeConfigDrawer from './NodeConfigDrawer'
-import { NODE_LABELS, NODE_COLORS } from './nodes/nodeTypes'
+import { NODE_COLORS } from './nodes/nodeTypes'
 import styles from './WorkflowEditorPage.module.css'
 
 const NODE_TYPES: NodeTypes = {
@@ -54,12 +55,7 @@ const DEFAULT_NODES: Node[] = [
 
 const DEFAULT_EDGES: Edge[] = [{ id: 'e-start-end', source: 'start-1', target: 'end-1' }]
 
-const NODE_PALETTE: Array<{ type: string }> = [
-  { type: 'llm' },
-  { type: 'kb' },
-  { type: 'code' },
-  { type: 'condition' },
-]
+const NODE_PALETTE_TYPES = ['llm', 'kb', 'code', 'condition']
 
 let nodeIdCounter = 100
 
@@ -88,6 +84,7 @@ export default function WorkflowEditorPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(DEFAULT_NODES)
@@ -135,13 +132,13 @@ export default function WorkflowEditorPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflows'] })
-      message.success('已保存')
+      message.success(t('workflow.editor.saveSuccess'))
     },
   })
 
   const runMutation = useMutation({
-    mutationFn: () => workflowApi.run(Number(id), '（测试运行）'),
-    onSuccess: () => message.success('运行已触发'),
+    mutationFn: () => workflowApi.run(Number(id), ''),
+    onSuccess: () => message.success(t('workflow.editor.runTriggered')),
   })
 
   const onConnect = useCallback(
@@ -166,15 +163,15 @@ export default function WorkflowEditorPage() {
 
   const deleteSelectedNode = useCallback(() => {
     if (!selectedNode) return
-    const id = selectedNode.id
-    if (id === 'start-1' || id === 'end-1') {
-      message.warning('不能删除开始/结束节点')
+    const nodeId = selectedNode.id
+    if (nodeId === 'start-1' || nodeId === 'end-1') {
+      message.warning(t('workflow.editor.cannotDeleteFixed'))
       return
     }
-    setNodes((nds) => nds.filter((n) => n.id !== id))
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id))
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId))
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
     setSelectedNode(null)
-  }, [selectedNode, setNodes, setEdges, message])
+  }, [selectedNode, setNodes, setEdges, message, t])
 
   const addNode = useCallback(
     (type: string) => {
@@ -193,14 +190,13 @@ export default function WorkflowEditorPage() {
 
   return (
     <div className={styles.root}>
-      {/* Top bar */}
       <div className={styles.topBar}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/workflows')}>
-          返回
+          {t('workflow.editor.backBtn')}
         </Button>
-        <span className={styles.wfName}>{wf?.name ?? '工作流编辑器'}</span>
+        <span className={styles.wfName}>{wf?.name ?? t('workflow.editor.defaultTitle')}</span>
         <Space>
-          <Tooltip title="保存 (Ctrl+S)">
+          <Tooltip title={t('workflow.editor.saveTooltip')}>
             <Button
               icon={<SaveOutlined />}
               loading={saveMutation.isPending}
@@ -208,26 +204,25 @@ export default function WorkflowEditorPage() {
               type="primary"
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             >
-              保存
+              {t('workflow.editor.saveBtn')}
             </Button>
           </Tooltip>
-          <Tooltip title="运行测试">
+          <Tooltip title={t('workflow.editor.runTooltip')}>
             <Button
               icon={<PlayCircleOutlined />}
               loading={runMutation.isPending}
               onClick={() => runMutation.mutate()}
             >
-              运行
+              {t('workflow.editor.runBtn')}
             </Button>
           </Tooltip>
         </Space>
       </div>
 
       <div className={styles.canvas}>
-        {/* Sidebar node palette */}
         <div className={styles.palette}>
-          <div className={styles.paletteTitle}>节点</div>
-          {NODE_PALETTE.map(({ type }) => (
+          <div className={styles.paletteTitle}>{t('workflow.editor.paletteTitle')}</div>
+          {NODE_PALETTE_TYPES.map((type) => (
             <button
               key={type}
               className={styles.paletteItem}
@@ -235,22 +230,21 @@ export default function WorkflowEditorPage() {
               onClick={() => addNode(type)}
             >
               <span className={styles.paletteDot} />
-              {NODE_LABELS[type]}
+              {t('workflow.nodeLabel.' + type, { defaultValue: type })}
             </button>
           ))}
           <Divider style={{ margin: '8px 0' }} />
-          <Tooltip title="删除选中节点">
+          <Tooltip title={t('workflow.editor.deleteNodeTooltip')}>
             <button
               className={`${styles.paletteItem} ${styles.paletteDelete}`}
               onClick={deleteSelectedNode}
               disabled={!selectedNode}
             >
-              <DeleteOutlined /> 删除节点
+              <DeleteOutlined /> {t('workflow.editor.deleteNodeBtn')}
             </button>
           </Tooltip>
         </div>
 
-        {/* React Flow canvas */}
         <div className={styles.flow} ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
@@ -277,10 +271,10 @@ export default function WorkflowEditorPage() {
             />
             <Panel position="top-right">
               <Space>
-                <Tooltip title="撤销">
+                <Tooltip title={t('workflow.editor.undoTooltip')}>
                   <Button size="small" icon={<UndoOutlined />} />
                 </Tooltip>
-                <Tooltip title="重做">
+                <Tooltip title={t('workflow.editor.redoTooltip')}>
                   <Button size="small" icon={<RedoOutlined />} />
                 </Tooltip>
               </Space>

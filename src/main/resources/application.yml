@@ -59,8 +59,8 @@ spring:
   mail:
     host: smtp.qq.com
     port: 465
-    username: your_qq@qq.com        # 替换为真实 QQ 邮箱地址
-    password: your_smtp_authcode    # QQ 邮箱「授权码」，不是 QQ 登录密码
+    username: 2827263956@qq.com        # 替换为真实 QQ 邮箱地址
+    password: nrwaseyncrckdedh    # QQ 邮箱「授权码」，不是 QQ 登录密码
     default-encoding: UTF-8
     properties:
       mail.smtp.auth: true
@@ -117,7 +117,7 @@ log4j:
 embedding:
   api:
     url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    key:    # 填入通义千问API key
+    key: sk-a9ae249184d0449687b4e65b16ca73e4   # 填入通义千问API key
     model: text-embedding-v4
     batch-size: 10  # 单次请求最大行数（DashScope限制为10）
     dimension: 2048  # 指定向量维度

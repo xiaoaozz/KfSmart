@@ -1,16 +1,18 @@
 import { Button, Result } from 'antd'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 export default function Page500() {
   const nav = useNavigate()
+  const { t } = useTranslation()
   return (
     <Result
       status="500"
       title="500"
-      subTitle="服务器内部错误，请稍后再试"
+      subTitle={t('error.500.subtitle')}
       extra={
         <Button type="primary" onClick={() => nav('/dashboard')}>
-          返回首页
+          {t('common.backHome')}
         </Button>
       }
     />

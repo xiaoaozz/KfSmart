@@ -2,32 +2,43 @@ import { useState } from 'react'
 import { Tree, Button, Modal, Form, Input, App, Space, Tooltip, Empty } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import type { DataNode } from 'antd/es/tree'
 import { adminOrgApi, type OrgTag } from '@/api/admin'
 import styles from './AdminPage.module.css'
 
-function toTreeData(nodes: OrgTag[]): DataNode[] {
+interface OrgTagFormValues {
+  name: string
+  code: string
+  description?: string
+}
+
+function toTreeData(
+  nodes: OrgTag[],
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): DataNode[] {
   return nodes.map((n) => ({
     key: n.id,
     title: (
       <span>
         {n.name}
         <span style={{ fontSize: 12, color: 'var(--kf-muted-foreground)', marginLeft: 6 }}>
-          ({n.code}) · {n.userCount} 用户
+          ({n.code}) · {t('common.userCount', { count: n.userCount })}
         </span>
       </span>
     ),
-    children: n.children ? toTreeData(n.children) : undefined,
+    children: n.children ? toTreeData(n.children, t) : undefined,
   }))
 }
 
 export default function OrgTagPage() {
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<OrgTag | null>(null)
   const [parentId, setParentId] = useState<number | undefined>()
-  const [form] = Form.useForm<{ name: string; code: string; description?: string }>()
+  const [form] = Form.useForm<OrgTagFormValues>()
 
   const { data: tree } = useQuery({
     queryKey: ['admin-org-tree'],
@@ -35,24 +46,28 @@ export default function OrgTagPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (v: { name: string; code: string; description?: string }) =>
-      adminOrgApi.create({ ...v, parentId }),
+    mutationFn: (v: OrgTagFormValues) =>
+      adminOrgApi.create({ name: v.name, code: v.code, description: v.description, parentId }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
       setFormOpen(false)
       form.resetFields()
-      message.success('已创建')
+      message.success(t('admin.orgTag.createSuccess'))
     },
   })
 
   const updateMutation = useMutation({
-    mutationFn: (v: { name: string; code: string; description?: string }) =>
-      adminOrgApi.update(editTarget!.id, v),
+    mutationFn: (v: OrgTagFormValues) =>
+      adminOrgApi.update(editTarget!.id, {
+        name: v.name,
+        code: v.code,
+        description: v.description,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
       setFormOpen(false)
       setEditTarget(null)
-      message.success('已更新')
+      message.success(t('admin.orgTag.updateSuccess'))
     },
   })
 
@@ -60,7 +75,7 @@ export default function OrgTagPage() {
     mutationFn: (id: number) => adminOrgApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
-      message.success('已删除')
+      message.success(t('admin.orgTag.deleteSuccess'))
     },
   })
 
@@ -77,7 +92,6 @@ export default function OrgTagPage() {
     setFormOpen(true)
   }
 
-  // Find a flat org by id for delete confirmation
   const findOrg = (nodes: OrgTag[], id: number): OrgTag | undefined => {
     for (const n of nodes) {
       if (n.id === id) return n
@@ -94,13 +108,13 @@ export default function OrgTagPage() {
     deleteMutation.mutate(org.id)
   }
 
-  const treeData = toTreeData(tree ?? [])
+  const treeData = toTreeData(tree ?? [], t)
 
   return (
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <ApartmentOutlined /> 组织标签
+          <ApartmentOutlined /> {t('admin.orgTag.title')}
         </h2>
         <Space>
           <Button
@@ -109,14 +123,14 @@ export default function OrgTagPage() {
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             onClick={() => openCreate()}
           >
-            新建根节点
+            {t('admin.orgTag.createRoot')}
           </Button>
         </Space>
       </div>
 
       <div className={styles.orgTree}>
         {!treeData.length ? (
-          <Empty description="暂无组织结构" />
+          <Empty description={t('admin.orgTag.emptyDesc')} />
         ) : (
           <Tree
             treeData={treeData}
@@ -124,7 +138,7 @@ export default function OrgTagPage() {
             titleRender={(node) => (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
                 <span style={{ flex: 1 }}>{node.title as React.ReactNode}</span>
-                <Tooltip title="添加子节点">
+                <Tooltip title={t('admin.orgTag.tooltipAddChild')}>
                   <Button
                     size="small"
                     type="text"
@@ -135,7 +149,7 @@ export default function OrgTagPage() {
                     }}
                   />
                 </Tooltip>
-                <Tooltip title="编辑">
+                <Tooltip title={t('admin.orgTag.tooltipEdit')}>
                   <Button
                     size="small"
                     type="text"
@@ -147,7 +161,7 @@ export default function OrgTagPage() {
                     }}
                   />
                 </Tooltip>
-                <Tooltip title="删除">
+                <Tooltip title={t('admin.orgTag.tooltipDelete')}>
                   <Button
                     size="small"
                     type="text"
@@ -166,7 +180,11 @@ export default function OrgTagPage() {
       </div>
 
       <Modal
-        title={editTarget ? `编辑 — ${editTarget.name}` : '新建组织节点'}
+        title={
+          editTarget
+            ? t('admin.orgTag.editTitle', { name: editTarget.name })
+            : t('admin.orgTag.createTitle')
+        }
         open={formOpen}
         onCancel={() => {
           setFormOpen(false)
@@ -182,24 +200,27 @@ export default function OrgTagPage() {
           layout="vertical"
           onFinish={(v) => (editTarget ? updateMutation.mutate(v) : createMutation.mutate(v))}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input placeholder="例：研发部" />
+          <Form.Item name="name" label={t('admin.orgTag.fieldName')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.orgTag.namePlaceholder')} />
           </Form.Item>
           <Form.Item
             name="code"
-            label="编码"
+            label={t('admin.orgTag.fieldCode')}
             rules={[
               {
                 required: true,
                 pattern: /^[a-z0-9_-]+$/,
-                message: '只允许小写字母、数字、下划线和横线',
+                message: t('admin.orgTag.codePattern'),
               },
             ]}
           >
-            <Input placeholder="例：rd-dept" style={{ fontFamily: 'var(--kf-font-mono)' }} />
+            <Input
+              placeholder={t('admin.orgTag.codePlaceholder')}
+              style={{ fontFamily: 'var(--kf-font-mono)' }}
+            />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input placeholder="可选" />
+          <Form.Item name="description" label={t('admin.orgTag.fieldDescription')}>
+            <Input placeholder={t('admin.orgTag.descriptionPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>

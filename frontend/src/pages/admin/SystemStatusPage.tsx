@@ -10,6 +10,7 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { adminSystemApi, type SystemMetrics } from '@/api/admin'
 import styles from './AdminPage.module.css'
 
@@ -65,25 +66,30 @@ function MetricCard({
   )
 }
 
-const SERVICE_STATUS_CFG = {
-  up: { color: 'success', icon: <CheckCircleOutlined />, label: '正常' },
-  degraded: { color: 'warning', icon: <ExclamationCircleOutlined />, label: '降级' },
-  down: { color: 'error', icon: <CloseCircleOutlined />, label: '故障' },
-}
-
 export default function SystemStatusPage() {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['system-metrics'],
     queryFn: () => adminSystemApi.metrics(),
     refetchInterval: 5000,
   })
 
+  const SERVICE_STATUS_CFG = {
+    up: { color: 'success', icon: <CheckCircleOutlined />, label: t('admin.system.statusUp') },
+    degraded: {
+      color: 'warning',
+      icon: <ExclamationCircleOutlined />,
+      label: t('admin.system.statusDegraded'),
+    },
+    down: { color: 'error', icon: <CloseCircleOutlined />, label: t('admin.system.statusDown') },
+  }
+
   if (isLoading || !data) {
     return (
       <div className={styles.root}>
         <div className={styles.topBar}>
           <h2 className={styles.pageTitle}>
-            <DashboardOutlined /> 系统状态
+            <DashboardOutlined /> {t('admin.system.title')}
           </h2>
         </div>
         <div className={styles.metricsGrid}>
@@ -107,33 +113,35 @@ export default function SystemStatusPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <DashboardOutlined /> 系统状态
+          <DashboardOutlined /> {t('admin.system.title')}
         </h2>
-        <span style={{ fontSize: 12, color: 'var(--kf-muted-foreground)' }}>每 5 秒自动刷新</span>
+        <span style={{ fontSize: 12, color: 'var(--kf-muted-foreground)' }}>
+          {t('admin.system.autoRefresh')}
+        </span>
       </div>
 
       <div className={styles.metricsGrid}>
         <MetricCard
           icon={<ThunderboltOutlined />}
-          label="JVM 堆内存"
+          label={t('admin.system.jvmHeap')}
           value={formatBytes(m.jvm.heapUsed)}
           unit={`/ ${formatBytes(m.jvm.heapMax)}`}
           percent={heapPct}
-          sub={`运行时长 ${formatMs(m.jvm.uptime)}`}
+          sub={t('admin.system.uptime', { time: formatMs(m.jvm.uptime) })}
           color="#6366f1"
         />
         <MetricCard
           icon={<DashboardOutlined />}
-          label="CPU 使用率"
+          label={t('admin.system.cpu')}
           value={`${(m.cpu.usage * 100).toFixed(1)}`}
           unit="%"
           percent={m.cpu.usage * 100}
-          sub={`${m.cpu.cores} 核 · 负载 ${m.cpu.loadAvg.toFixed(2)}`}
+          sub={t('admin.system.coreLoad', { cores: m.cpu.cores, load: m.cpu.loadAvg.toFixed(2) })}
           color="#f59e0b"
         />
         <MetricCard
           icon={<HddOutlined />}
-          label="磁盘"
+          label={t('admin.system.disk')}
           value={formatBytes(m.disk.used)}
           unit={`/ ${formatBytes(m.disk.total)}`}
           percent={diskPct}
@@ -142,26 +150,29 @@ export default function SystemStatusPage() {
         />
         <MetricCard
           icon={<DatabaseOutlined />}
-          label="数据库连接"
+          label={t('admin.system.dbConnections')}
           value={String(m.db.activeConnections)}
           unit={`/ ${m.db.maxConnections}`}
           percent={dbPct}
-          sub={`查询 ${m.db.queryCount.toLocaleString()} 次`}
+          sub={t('admin.system.dbQueries', { count: m.db.queryCount.toLocaleString() })}
           color="#0052ff"
         />
         <MetricCard
           icon={<CloudServerOutlined />}
-          label="缓存命中率"
+          label={t('admin.system.cacheHitRate')}
           value={cachePct.toFixed(1)}
           unit="%"
           percent={cachePct}
-          sub={`${m.cache.keyCount.toLocaleString()} 个 Key · ${formatBytes(m.cache.memoryUsed)}`}
+          sub={t('admin.system.cacheKeys', {
+            count: m.cache.keyCount.toLocaleString(),
+            mem: formatBytes(m.cache.memoryUsed),
+          })}
           color="#8b5cf6"
         />
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--kf-foreground)', margin: '8px 0' }}>
-        外部服务
+        {t('admin.system.externalServices')}
       </h3>
       <div className={styles.serviceList}>
         {m.services.map((svc) => {

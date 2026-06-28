@@ -24,6 +24,7 @@ import {
 import { motion } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { kbApi } from '@/api/knowledge-base'
 import type { KnowledgeBase, KbFormValues } from '@/types/knowledge-base'
 import { GradientButton, GradientCard } from '@/components/base'
@@ -40,25 +41,26 @@ function KbCard({
   onDelete: (id: string) => void
 }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-      <GradientCard className={styles.card} onClick={() => navigate(`/knowledge-bases/${kb.id}`)}>
+      <GradientCard className={styles.card} onClick={() => navigate(`/knowledge-bases/${kb.kbId}`)}>
         <div className={styles.cardHeader}>
           <DatabaseOutlined className={styles.cardIcon} />
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
             <PermissionButton permission="kb:write" mode="hide">
-              <Tooltip title="编辑">
+              <Tooltip title={t('common.edit')}>
                 <EditOutlined className={styles.actionBtn} onClick={() => onEdit(kb)} />
               </Tooltip>
             </PermissionButton>
             <PermissionButton permission="kb:delete" mode="hide">
               <Popconfirm
-                title="确认删除此知识库？"
-                description="删除后数据不可恢复"
-                onConfirm={() => onDelete(kb.id)}
-                okText="删除"
+                title={t('kb.deleteConfirm')}
+                description={t('kb.deleteWarning')}
+                onConfirm={() => onDelete(kb.kbId)}
+                okText={t('common.delete')}
                 okButtonProps={{ danger: true }}
-                cancelText="取消"
+                cancelText={t('common.cancel')}
               >
                 <DeleteOutlined className={`${styles.actionBtn} ${styles.danger}`} />
               </Popconfirm>
@@ -71,21 +73,23 @@ function KbCard({
 
         <div className={styles.cardMeta}>
           <span className={styles.metaItem}>
-            <FileTextOutlined /> {kb.docCount} 文档
+            <FileTextOutlined /> {t('common.docCount', { count: kb.fileCount })}
           </span>
-          {kb.organizationTag && (
+          {kb.orgTag && (
             <Tag color="blue" style={{ fontSize: 12 }}>
-              {kb.organizationTag}
+              {kb.orgTag}
             </Tag>
           )}
           <Tag color={kb.isPublic ? 'green' : 'default'} style={{ fontSize: 12 }}>
-            {kb.isPublic ? '公开' : '私有'}
+            {kb.isPublic ? t('common.public') : t('common.private')}
           </Tag>
         </div>
 
         <div className={styles.cardFooter}>
-          <span className={styles.createdBy}>by {kb.createdBy}</span>
-          <span className={styles.createdAt}>{new Date(kb.updateTime).toLocaleDateString()}</span>
+          <span className={styles.createdBy}>{t('common.createdBy', { name: kb.createdBy })}</span>
+          <span className={styles.createdAt}>
+            {kb.updatedAt ? new Date(kb.updatedAt).toLocaleDateString() : '—'}
+          </span>
         </div>
       </GradientCard>
     </motion.div>
@@ -100,6 +104,7 @@ export default function KbListPage() {
   const [form] = Form.useForm<KbFormValues>()
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
 
   const { data, isLoading } = useQuery({
     queryKey: ['knowledge-bases', { keyword, isPublic }],
@@ -110,7 +115,7 @@ export default function KbListPage() {
     mutationFn: kbApi.create,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['knowledge-bases'] })
-      message.success('创建成功')
+      message.success(t('kb.createSuccess'))
       setModalOpen(false)
       form.resetFields()
     },
@@ -121,7 +126,7 @@ export default function KbListPage() {
       kbApi.update(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['knowledge-bases'] })
-      message.success('更新成功')
+      message.success(t('kb.updateSuccess'))
       setModalOpen(false)
       setEditing(null)
     },
@@ -131,7 +136,7 @@ export default function KbListPage() {
     mutationFn: kbApi.delete,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['knowledge-bases'] })
-      message.success('删除成功')
+      message.success(t('kb.deleteSuccess'))
     },
   })
 
@@ -146,7 +151,7 @@ export default function KbListPage() {
     form.setFieldsValue({
       name: kb.name,
       description: kb.description,
-      organizationTag: kb.organizationTag,
+      orgTag: kb.orgTag,
       isPublic: kb.isPublic,
     })
     setModalOpen(true)
@@ -154,7 +159,7 @@ export default function KbListPage() {
 
   const handleSubmit = async (values: KbFormValues) => {
     if (editing) {
-      await updateMutation.mutateAsync({ id: editing.id, data: values })
+      await updateMutation.mutateAsync({ id: editing.kbId, data: values })
     } else {
       await createMutation.mutateAsync(values)
     }
@@ -169,27 +174,27 @@ export default function KbListPage() {
         <div className={styles.filters}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索知识库"
+            placeholder={t('kb.searchPlaceholder')}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             allowClear
             style={{ width: 240 }}
           />
           <Select
-            placeholder="访问权限"
+            placeholder={t('kb.accessFilter')}
             allowClear
             value={isPublic}
             onChange={(v) => setIsPublic(v)}
             style={{ width: 120 }}
             options={[
-              { label: '公开', value: true },
-              { label: '私有', value: false },
+              { label: t('common.public'), value: true },
+              { label: t('common.private'), value: false },
             ]}
           />
         </div>
         <PermissionButton permission="kb:write" mode="hide">
           <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
-            新建知识库
+            {t('kb.createNew')}
           </GradientButton>
         </PermissionButton>
       </div>
@@ -205,12 +210,12 @@ export default function KbListPage() {
         </Row>
       ) : kbs.length === 0 ? (
         <EmptyState
-          title="暂无知识库"
-          description="创建一个知识库，开始组织您的文档"
+          title={t('kb.emptyTitle')}
+          description={t('kb.emptyDesc')}
           action={
             <PermissionButton permission="kb:write" mode="hide">
               <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
-                新建知识库
+                {t('kb.createNew')}
               </GradientButton>
             </PermissionButton>
           }
@@ -231,7 +236,7 @@ export default function KbListPage() {
 
       {/* Create / Edit Modal */}
       <Modal
-        title={editing ? '编辑知识库' : '新建知识库'}
+        title={editing ? t('kb.editTitle') : t('kb.createTitle')}
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false)
@@ -239,7 +244,7 @@ export default function KbListPage() {
         }}
         onOk={() => form.submit()}
         confirmLoading={createMutation.isPending || updateMutation.isPending}
-        okText={editing ? '保存' : '创建'}
+        okText={editing ? t('kb.saveOk') : t('kb.createOk')}
         destroyOnClose
       >
         <Form
@@ -248,17 +253,21 @@ export default function KbListPage() {
           onFinish={handleSubmit}
           initialValues={{ isPublic: false }}
         >
-          <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
-            <Input placeholder="知识库名称" />
+          <Form.Item
+            name="name"
+            label={t('kb.form.name')}
+            rules={[{ required: true, message: t('kb.form.nameRequired') }]}
+          >
+            <Input placeholder={t('kb.form.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} placeholder="可选描述" />
+          <Form.Item name="description" label={t('kb.form.description')}>
+            <Input.TextArea rows={3} placeholder={t('kb.form.descriptionPlaceholder')} />
           </Form.Item>
-          <Form.Item name="organizationTag" label="组织标签">
-            <Input placeholder="所属组织（可选）" />
+          <Form.Item name="orgTag" label={t('kb.form.orgTag')}>
+            <Input placeholder={t('kb.form.orgTagPlaceholder')} />
           </Form.Item>
-          <Form.Item name="isPublic" label="是否公开" valuePropName="checked">
-            <Switch checkedChildren="公开" unCheckedChildren="私有" />
+          <Form.Item name="isPublic" label={t('kb.form.isPublic')} valuePropName="checked">
+            <Switch checkedChildren={t('common.public')} unCheckedChildren={t('common.private')} />
           </Form.Item>
         </Form>
       </Modal>

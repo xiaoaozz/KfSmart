@@ -7,6 +7,7 @@ import {
   LaptopOutlined,
 } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { profileApi, type LoginRecord } from '@/api/profile'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
 import styles from './Section.module.css'
@@ -14,6 +15,7 @@ import styles from './Section.module.css'
 export default function LoginRecordSection() {
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const { t } = useTranslation()
 
   const { data, isLoading } = useQuery({
     queryKey: ['login-records', current, pageSize],
@@ -22,24 +24,24 @@ export default function LoginRecordSection() {
 
   const columns: TableColumnType<LoginRecord>[] = [
     {
-      title: '状态',
+      title: t('profile.loginRecord.colStatus'),
       dataIndex: 'status',
       width: 80,
       render: (s: LoginRecord['status'], record: LoginRecord) =>
         s === 'SUCCESS' ? (
           <Tag color="success" icon={<CheckCircleOutlined />}>
-            成功
+            {t('profile.loginRecord.statusSuccess')}
           </Tag>
         ) : (
-          <Tooltip title={record.failReason || '登录失败'}>
+          <Tooltip title={record.failReason || t('profile.loginRecord.defaultFailReason')}>
             <Tag color="error" icon={<CloseCircleOutlined />}>
-              失败
+              {t('profile.loginRecord.statusFailed')}
             </Tag>
           </Tooltip>
         ),
     },
     {
-      title: 'IP 地址',
+      title: t('profile.loginRecord.colIp'),
       dataIndex: 'ipAddress',
       width: 140,
       render: (ip?: string) =>
@@ -53,7 +55,7 @@ export default function LoginRecordSection() {
         ),
     },
     {
-      title: '设备 / 浏览器',
+      title: t('profile.loginRecord.colDevice'),
       dataIndex: 'deviceInfo',
       render: (d?: string) =>
         d ? (
@@ -69,23 +71,23 @@ export default function LoginRecordSection() {
         ),
     },
     {
-      title: '位置',
+      title: t('profile.loginRecord.colLocation'),
       dataIndex: 'location',
       width: 120,
       render: (loc?: string) =>
         loc ?? <span style={{ color: 'var(--kf-muted-foreground)' }}>—</span>,
     },
     {
-      title: '时间',
+      title: t('profile.loginRecord.colTime'),
       dataIndex: 'loginTime',
       width: 160,
-      render: (t?: string) => (t ? new Date(t).toLocaleString() : '—'),
+      render: (v?: string) => (v ? new Date(v).toLocaleString() : '—'),
     },
   ]
 
   return (
     <div className={styles.section}>
-      <h3 className={styles.sectionTitle}>登录记录</h3>
+      <h3 className={styles.sectionTitle}>{t('profile.loginRecord.title')}</h3>
       <PageTable<LoginRecord>
         rowKey="id"
         columns={columns}

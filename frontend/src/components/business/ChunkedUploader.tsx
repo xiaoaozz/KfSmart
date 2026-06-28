@@ -8,7 +8,6 @@ const { Dragger } = Upload
 
 const CHUNK_SIZE = 5 * 1024 * 1024 // 5 MB
 const CONCURRENCY = 3
-const SIMPLE_THRESHOLD = 10 * 1024 * 1024 // files ≤ 10 MB use simple upload
 
 interface FileTask {
   uid: string
@@ -21,7 +20,7 @@ interface FileTask {
 }
 
 interface ChunkedUploaderProps {
-  knowledgeBaseId?: number
+  kbId?: string
   onSuccess?: (documentId: number, fileName: string) => void
   maxCount?: number
   accept?: string
@@ -41,7 +40,7 @@ async function runConcurrent<T>(tasks: (() => Promise<T>)[], concurrency: number
 }
 
 export default function ChunkedUploader({
-  knowledgeBaseId,
+  kbId,
   onSuccess,
   maxCount = 10,
   accept = '.pdf,.doc,.docx,.md,.txt,.csv,.xlsx,.pptx',
@@ -58,15 +57,6 @@ export default function ChunkedUploader({
     updateTask(uid, { status: 'uploading', percent: 0 })
 
     try {
-      // Small file → simple upload
-      if (file.size <= SIMPLE_THRESHOLD) {
-        const result = await uploadApi.simple(file, knowledgeBaseId)
-        updateTask(uid, { status: 'done', percent: 100, documentId: result.documentId })
-        onSuccess?.(result.documentId, file.name)
-        return
-      }
-
-      // Large file → chunked upload
       // fileMd5 is a pseudo-key until real Worker-based MD5 is implemented
       const fileMd5 = `${file.name}-${file.size}-${file.lastModified}`
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
@@ -100,7 +90,7 @@ export default function ChunkedUploader({
           chunkIndex,
           totalSize: file.size,
           chunk,
-          knowledgeBaseId,
+          kbId,
         })
         doneCount++
         updateTask(uid, { percent: Math.round((doneCount / totalChunks) * 95) })
@@ -114,7 +104,7 @@ export default function ChunkedUploader({
       }
 
       // Merge
-      const result = await uploadApi.merge(fileMd5, file.name, knowledgeBaseId)
+      const result = await uploadApi.merge(fileMd5, file.name)
       updateTask(uid, { status: 'done', percent: 100, documentId: result.documentId })
       onSuccess?.(result.documentId, file.name)
     } catch (e) {

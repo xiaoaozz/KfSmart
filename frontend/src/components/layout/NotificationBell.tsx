@@ -1,6 +1,7 @@
 import { Badge, Button, List, Popover, Spin, Typography, App, Empty } from 'antd'
 import { BellOutlined, CheckOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { http } from '@/api/http'
 
 interface Notification {
@@ -25,6 +26,7 @@ function useUnreadCount() {
 function NotificationList() {
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
 
   const { data, isLoading } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -45,7 +47,7 @@ function NotificationList() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications'] })
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
-      message.success('已全部标记为已读')
+      message.success(t('notification.allMarkedRead'))
     },
   })
 
@@ -54,7 +56,7 @@ function NotificationList() {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="暂无通知"
+        description={t('notification.empty')}
         style={{ padding: '16px 0' }}
       />
     )
@@ -74,7 +76,7 @@ function NotificationList() {
         }}
       >
         <Typography.Text strong style={{ fontSize: 13 }}>
-          通知
+          {t('notification.title')}
         </Typography.Text>
         {hasUnread && (
           <Button
@@ -85,7 +87,7 @@ function NotificationList() {
             onClick={() => readAll.mutate()}
             style={{ padding: 0, fontSize: 12 }}
           >
-            全部已读
+            {t('notification.markAllRead')}
           </Button>
         )}
       </div>

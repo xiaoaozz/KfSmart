@@ -25,6 +25,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private LoggingInterceptor loggingInterceptor;
 
+    @Autowired
+    private LocaleInterceptor localeInterceptor;
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
@@ -48,6 +51,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(localeInterceptor)
+                .addPathPatterns("/api/**");
         // 注册日志拦截器，排除静态资源
         registry.addInterceptor(loggingInterceptor)
                 .addPathPatterns("/**")

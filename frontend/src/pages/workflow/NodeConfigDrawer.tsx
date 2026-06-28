@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Drawer, Form, Input, Select, Slider, InputNumber, Button } from 'antd'
 import type { Node } from '@xyflow/react'
-import { NODE_LABELS } from './nodes/nodeTypes'
+import { useTranslation } from 'react-i18next'
 
 const LLM_OPTIONS = [
   { label: 'DeepSeek Chat', value: 'deepseek-chat' },
@@ -16,6 +16,7 @@ interface Props {
 
 export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
   const [form] = Form.useForm()
+  const { t } = useTranslation()
 
   useEffect(() => {
     if (node) {
@@ -31,55 +32,85 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
   }
 
   const type = node?.type ?? ''
+  const nodeLabel = t('workflow.nodeLabel.' + type, { defaultValue: type })
 
   return (
     <Drawer
-      title={`配置 — ${NODE_LABELS[type] ?? type}`}
+      title={t('workflow.nodeConfig.title', { label: nodeLabel })}
       open={!!node}
       onClose={onClose}
       width={360}
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             type="primary"
             onClick={handleSave}
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           >
-            保存
+            {t('common.save')}
           </Button>
         </div>
       }
     >
       <Form form={form} layout="vertical">
         {type === 'start' && (
-          <Form.Item name="inputVariable" label="输入变量名" initialValue="input">
+          <Form.Item
+            name="inputVariable"
+            label={t('workflow.nodeConfig.inputVariable')}
+            initialValue="input"
+          >
             <Input placeholder="input" />
           </Form.Item>
         )}
 
         {type === 'end' && (
-          <Form.Item name="outputVariable" label="输出变量名" initialValue="output">
+          <Form.Item
+            name="outputVariable"
+            label={t('workflow.nodeConfig.outputVariable')}
+            initialValue="output"
+          >
             <Input placeholder="output" />
           </Form.Item>
         )}
 
         {type === 'llm' && (
           <>
-            <Form.Item name="model" label="模型" initialValue="deepseek-chat">
+            <Form.Item
+              name="model"
+              label={t('workflow.nodeConfig.model')}
+              initialValue="deepseek-chat"
+            >
               <Select options={LLM_OPTIONS} />
             </Form.Item>
-            <Form.Item name="systemPrompt" label="系统 Prompt">
+            <Form.Item name="systemPrompt" label={t('workflow.nodeConfig.systemPrompt')}>
               <Input.TextArea
                 rows={6}
-                placeholder="你是一个专业的 AI 助手…"
+                placeholder={t('workflow.nodeConfig.promptPlaceholder')}
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
-            <Form.Item name="temperature" label="温度" initialValue={0.7}>
-              <Slider min={0} max={2} step={0.05} marks={{ 0: '严谨', 1: '均衡', 2: '创意' }} />
+            <Form.Item
+              name="temperature"
+              label={t('workflow.nodeConfig.temperature')}
+              initialValue={0.7}
+            >
+              <Slider
+                min={0}
+                max={2}
+                step={0.05}
+                marks={{
+                  0: t('workflow.nodeConfig.tempStrict'),
+                  1: t('workflow.nodeConfig.tempBalanced'),
+                  2: t('workflow.nodeConfig.tempCreative'),
+                }}
+              />
             </Form.Item>
-            <Form.Item name="maxTokens" label="最大 Token" initialValue={2048}>
+            <Form.Item
+              name="maxTokens"
+              label={t('workflow.nodeConfig.maxTokens')}
+              initialValue={2048}
+            >
               <InputNumber min={256} max={8192} step={256} style={{ width: '100%' }} />
             </Form.Item>
           </>
@@ -87,13 +118,21 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
 
         {type === 'kb' && (
           <>
-            <Form.Item name="knowledgeBaseId" label="知识库 ID" rules={[{ required: true }]}>
+            <Form.Item
+              name="knowledgeBaseId"
+              label={t('workflow.nodeConfig.kbId')}
+              rules={[{ required: true }]}
+            >
               <InputNumber min={1} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="topK" label="返回条数" initialValue={5}>
+            <Form.Item name="topK" label={t('workflow.nodeConfig.topK')} initialValue={5}>
               <InputNumber min={1} max={20} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item name="threshold" label="相似度阈值" initialValue={0.7}>
+            <Form.Item
+              name="threshold"
+              label={t('workflow.nodeConfig.threshold')}
+              initialValue={0.7}
+            >
               <Slider min={0} max={1} step={0.05} />
             </Form.Item>
           </>
@@ -101,7 +140,11 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
 
         {type === 'code' && (
           <>
-            <Form.Item name="language" label="语言" initialValue="javascript">
+            <Form.Item
+              name="language"
+              label={t('workflow.nodeConfig.language')}
+              initialValue="javascript"
+            >
               <Select
                 options={[
                   { label: 'JavaScript', value: 'javascript' },
@@ -109,10 +152,10 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
                 ]}
               />
             </Form.Item>
-            <Form.Item name="code" label="代码">
+            <Form.Item name="code" label={t('workflow.nodeConfig.code')}>
               <Input.TextArea
                 rows={12}
-                placeholder="// input: string\n// return string"
+                placeholder="// input: string&#10;// return string"
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
@@ -121,23 +164,27 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
 
         {type === 'condition' && (
           <>
-            <Form.Item name="variable" label="变量" initialValue="input">
+            <Form.Item
+              name="variable"
+              label={t('workflow.nodeConfig.variable')}
+              initialValue="input"
+            >
               <Input placeholder="input" />
             </Form.Item>
-            <Form.Item name="operator" label="操作符" initialValue="eq">
+            <Form.Item name="operator" label={t('workflow.nodeConfig.operator')} initialValue="eq">
               <Select
                 options={[
-                  { label: '等于', value: 'eq' },
-                  { label: '不等于', value: 'neq' },
-                  { label: '包含', value: 'contains' },
-                  { label: '不包含', value: 'not_contains' },
-                  { label: '大于', value: 'gt' },
-                  { label: '小于', value: 'lt' },
+                  { label: t('workflow.nodeConfig.opEq'), value: 'eq' },
+                  { label: t('workflow.nodeConfig.opNeq'), value: 'neq' },
+                  { label: t('workflow.nodeConfig.opContains'), value: 'contains' },
+                  { label: t('workflow.nodeConfig.opNotContains'), value: 'not_contains' },
+                  { label: t('workflow.nodeConfig.opGt'), value: 'gt' },
+                  { label: t('workflow.nodeConfig.opLt'), value: 'lt' },
                 ]}
               />
             </Form.Item>
-            <Form.Item name="value" label="值">
-              <Input placeholder="比较值" />
+            <Form.Item name="value" label={t('workflow.nodeConfig.value')}>
+              <Input placeholder={t('workflow.nodeConfig.valuePlaceholder')} />
             </Form.Item>
           </>
         )}

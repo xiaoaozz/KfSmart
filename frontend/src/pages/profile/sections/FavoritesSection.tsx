@@ -13,20 +13,11 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { profileApi, type Favorite } from '@/api/profile'
 import styles from './Section.module.css'
 
 type FavType = '' | Favorite['type']
-
-const TYPE_TABS: Array<{ key: FavType; label: string; icon: React.ReactNode }> = [
-  { key: '', label: '全部', icon: <StarOutlined /> },
-  { key: 'knowledge', label: '知识库', icon: <DatabaseOutlined /> },
-  { key: 'document', label: '文档', icon: <FileTextOutlined /> },
-  { key: 'agent', label: 'Agent', icon: <RobotOutlined /> },
-  { key: 'workflow', label: '工作流', icon: <ApartmentOutlined /> },
-  { key: 'chat', label: '对话', icon: <MessageOutlined /> },
-  { key: 'prompt', label: 'Prompt', icon: <FileOutlined /> },
-]
 
 const TYPE_ROUTES: Record<string, string> = {
   knowledge: '/knowledge-bases',
@@ -38,18 +29,6 @@ const TYPE_ROUTES: Record<string, string> = {
   skill: '/skills',
   mcp_tool: '/skills',
   model: '/skills',
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  knowledge: '知识库',
-  document: '文档',
-  agent: 'Agent',
-  workflow: '工作流',
-  chat: '对话',
-  prompt: 'Prompt',
-  skill: '技能',
-  mcp_tool: 'MCP 工具',
-  model: '模型',
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -68,7 +47,30 @@ export default function FavoritesSection() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [activeType, setActiveType] = useState<FavType>('')
+
+  const TYPE_TABS: Array<{ key: FavType; label: string; icon: React.ReactNode }> = [
+    { key: '', label: t('profile.favorites.tabs.all'), icon: <StarOutlined /> },
+    { key: 'knowledge', label: t('profile.favorites.tabs.knowledge'), icon: <DatabaseOutlined /> },
+    { key: 'document', label: t('profile.favorites.tabs.document'), icon: <FileTextOutlined /> },
+    { key: 'agent', label: t('profile.favorites.tabs.agent'), icon: <RobotOutlined /> },
+    { key: 'workflow', label: t('profile.favorites.tabs.workflow'), icon: <ApartmentOutlined /> },
+    { key: 'chat', label: t('profile.favorites.tabs.chat'), icon: <MessageOutlined /> },
+    { key: 'prompt', label: t('profile.favorites.tabs.prompt'), icon: <FileOutlined /> },
+  ]
+
+  const TYPE_LABELS: Record<string, string> = {
+    knowledge: t('profile.favorites.labels.knowledge'),
+    document: t('profile.favorites.labels.document'),
+    agent: t('profile.favorites.labels.agent'),
+    workflow: t('profile.favorites.labels.workflow'),
+    chat: t('profile.favorites.labels.chat'),
+    prompt: t('profile.favorites.labels.prompt'),
+    skill: t('profile.favorites.labels.skill'),
+    mcp_tool: t('profile.favorites.labels.mcp_tool'),
+    model: t('profile.favorites.labels.model'),
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['favorites', activeType],
@@ -79,7 +81,7 @@ export default function FavoritesSection() {
     mutationFn: (id: number) => profileApi.removeFavorite(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['favorites'] })
-      message.success('已取消收藏')
+      message.success(t('profile.favorites.unfavoriteSuccess'))
     },
   })
 
@@ -88,7 +90,7 @@ export default function FavoritesSection() {
 
   return (
     <div className={styles.section}>
-      <h3 className={styles.sectionTitle}>我的收藏</h3>
+      <h3 className={styles.sectionTitle}>{t('profile.favorites.title')}</h3>
 
       <Tabs
         activeKey={activeType}
@@ -111,7 +113,7 @@ export default function FavoritesSection() {
           ))}
         </div>
       ) : !records.length ? (
-        <Empty description="暂无收藏" />
+        <Empty description={t('profile.favorites.empty')} />
       ) : (
         <div className={styles.favList}>
           {records.map((fav: Favorite, i: number) => (
@@ -140,7 +142,7 @@ export default function FavoritesSection() {
                 <span className={styles.favTime}>
                   {fav.createdAt ? new Date(fav.createdAt).toLocaleDateString() : ''}
                 </span>
-                <Tooltip title="取消收藏">
+                <Tooltip title={t('profile.favorites.unfavoriteTooltip')}>
                   <Button
                     size="small"
                     type="text"

@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect } from 'react'
-import { Form, Input, Button, Avatar, App } from 'antd'
-import { UserOutlined, CameraOutlined, SaveOutlined } from '@ant-design/icons'
+import { Form, Input, Button, App } from 'antd'
+import { CameraOutlined, SaveOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
+import UserAvatar from '@/components/UserAvatar'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { profileApi } from '@/api/profile'
 import styles from './Section.module.css'
@@ -14,6 +16,7 @@ interface ProfileFormValues {
 export default function BasicInfoSection() {
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [form] = Form.useForm<ProfileFormValues>()
   // 头像上传后立即预览；后端在 /me/avatar 接口内已持久化，无需随 updateProfile 再发
   const [uploadedAvatar, setUploadedAvatar] = useState<string | null>(null)
@@ -42,7 +45,7 @@ export default function BasicInfoSection() {
     mutationFn: (v: ProfileFormValues) => profileApi.updateProfile(v),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users', 'me'] })
-      message.success('资料已更新')
+      message.success(t('profile.basic.updateSuccess'))
     },
   })
 
@@ -51,7 +54,7 @@ export default function BasicInfoSection() {
     onSuccess: (res) => {
       setUploadedAvatar(res.avatar)
       qc.invalidateQueries({ queryKey: ['users', 'me'] })
-      message.success('头像已上传')
+      message.success(t('profile.basic.avatarSuccess'))
     },
   })
 
@@ -59,7 +62,7 @@ export default function BasicInfoSection() {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
-      message.error('头像不能超过 2MB')
+      message.error(t('profile.basic.avatarTooLarge'))
       return
     }
     avatarMutation.mutate(file)
@@ -67,11 +70,11 @@ export default function BasicInfoSection() {
 
   return (
     <div className={styles.section}>
-      <h3 className={styles.sectionTitle}>基本资料</h3>
+      <h3 className={styles.sectionTitle}>{t('profile.basic.title')}</h3>
 
       <div className={styles.avatarRow}>
         <div className={styles.avatarWrap}>
-          <Avatar size={80} src={avatarUrl} icon={<UserOutlined />} />
+          <UserAvatar size={80} avatar={avatarUrl} username={user?.username} />
           <button className={styles.avatarOverlay} onClick={() => uploadRef.current?.click()}>
             <CameraOutlined />
           </button>
@@ -85,8 +88,10 @@ export default function BasicInfoSection() {
         </div>
         <div className={styles.avatarHint}>
           <div className={styles.avatarName}>{user?.username}</div>
-          <div className={styles.avatarRole}>{user?.role === 'ADMIN' ? '管理员' : '普通用户'}</div>
-          <div className={styles.avatarTip}>支持 JPG、PNG、WebP、GIF，最大 2MB</div>
+          <div className={styles.avatarRole}>
+            {user?.role === 'ADMIN' ? t('profile.basic.roleAdmin') : t('profile.basic.roleUser')}
+          </div>
+          <div className={styles.avatarTip}>{t('profile.basic.avatarTip')}</div>
         </div>
       </div>
 
@@ -96,17 +101,21 @@ export default function BasicInfoSection() {
         onFinish={(v) => updateMutation.mutate(v)}
         style={{ maxWidth: 480 }}
       >
-        <Form.Item name="email" label="邮箱" rules={[{ required: true, type: 'email' }]}>
+        <Form.Item
+          name="email"
+          label={t('profile.basic.fieldEmail')}
+          rules={[{ required: true, type: 'email' }]}
+        >
           <Input />
         </Form.Item>
         <Form.Item
           name="phone"
-          label="手机号"
-          rules={[{ pattern: /^[0-9+\-()\s]{6,32}$/, message: '手机号格式不正确' }]}
+          label={t('profile.basic.fieldPhone')}
+          rules={[{ pattern: /^[0-9+\-()\s]{6,32}$/, message: t('profile.basic.phonePattern') }]}
         >
           <Input />
         </Form.Item>
-        <Form.Item name="bio" label="个人简介">
+        <Form.Item name="bio" label={t('profile.basic.fieldBio')}>
           <Input.TextArea rows={3} maxLength={500} showCount />
         </Form.Item>
         <Form.Item>
@@ -117,7 +126,7 @@ export default function BasicInfoSection() {
             loading={updateMutation.isPending}
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           >
-            保存修改
+            {t('profile.basic.saveBtn')}
           </Button>
         </Form.Item>
       </Form>

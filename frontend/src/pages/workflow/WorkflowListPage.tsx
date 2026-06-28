@@ -13,26 +13,32 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { workflowApi } from '@/api/workflow'
 import type { WorkflowSummary } from '@/types/workflow'
 import { GradientCard } from '@/components/base'
 import { PermissionButton } from '@/components/business'
 import styles from './WorkflowListPage.module.css'
 
-const STATUS_CFG = {
-  draft: { color: 'default', label: '草稿', icon: <EditOutlined /> },
-  published: { color: 'success', label: '已发布', icon: <CheckCircleOutlined /> },
-  disabled: { color: 'error', label: '已停用', icon: <StopOutlined /> },
-}
-
 export default function WorkflowListPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [form] = Form.useForm<{ name: string; description?: string }>()
   const [current, setCurrent] = useState(1)
+
+  const STATUS_CFG = {
+    draft: { color: 'default', label: t('workflow.statusDraft'), icon: <EditOutlined /> },
+    published: {
+      color: 'success',
+      label: t('workflow.statusPublished'),
+      icon: <CheckCircleOutlined />,
+    },
+    disabled: { color: 'error', label: t('workflow.statusDisabled'), icon: <StopOutlined /> },
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['workflows', current, keyword],
@@ -53,7 +59,7 @@ export default function WorkflowListPage() {
     mutationFn: (id: number) => workflowApi.publish(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflows'] })
-      message.success('已发布')
+      message.success(t('workflow.publishSuccess'))
     },
   })
 
@@ -61,7 +67,7 @@ export default function WorkflowListPage() {
     mutationFn: (id: number) => workflowApi.disable(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflows'] })
-      message.success('已停用')
+      message.success(t('workflow.disableSuccess'))
     },
   })
 
@@ -69,14 +75,14 @@ export default function WorkflowListPage() {
     mutationFn: (id: number) => workflowApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflows'] })
-      message.success('已删除')
+      message.success(t('workflow.deleteSuccess'))
     },
   })
 
   const handleDelete = (wf: WorkflowSummary) => {
     modal.confirm({
-      title: `删除工作流「${wf.name}」？`,
-      content: '此操作不可撤销',
+      title: t('workflow.deleteConfirm', { name: wf.name }),
+      content: t('workflow.deleteContent'),
       okType: 'danger',
       onOk: () => deleteMutation.mutateAsync(wf.id),
     })
@@ -86,12 +92,12 @@ export default function WorkflowListPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <ApiOutlined /> 工作流
+          <ApiOutlined /> {t('workflow.title')}
         </h2>
         <div className={styles.actions}>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索工作流…"
+            placeholder={t('workflow.searchPlaceholder')}
             value={keyword}
             onChange={(e) => {
               setKeyword(e.target.value)
@@ -107,7 +113,7 @@ export default function WorkflowListPage() {
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
               onClick={() => setCreateOpen(true)}
             >
-              新建工作流
+              {t('workflow.createBtn')}
             </Button>
           </PermissionButton>
         </div>
@@ -120,7 +126,7 @@ export default function WorkflowListPage() {
           ))}
         </div>
       ) : !data?.records.length ? (
-        <Empty description="暂无工作流" />
+        <Empty description={t('workflow.empty')} />
       ) : (
         <div className={styles.grid}>
           {data.records.map((wf: WorkflowSummary, i: number) => (
@@ -132,6 +138,7 @@ export default function WorkflowListPage() {
             >
               <WorkflowCard
                 wf={wf}
+                statusCfg={STATUS_CFG}
                 onEdit={() => navigate(`/workflows/${wf.id}/edit`)}
                 onPublish={() => publishMutation.mutate(wf.id)}
                 onDisable={() => disableMutation.mutate(wf.id)}
@@ -157,7 +164,7 @@ export default function WorkflowListPage() {
       )}
 
       <Modal
-        title="新建工作流"
+        title={t('workflow.createModalTitle')}
         open={createOpen}
         onCancel={() => {
           setCreateOpen(false)
@@ -170,13 +177,13 @@ export default function WorkflowListPage() {
         <Form form={form} layout="vertical" onFinish={(v) => createMutation.mutate(v)}>
           <Form.Item
             name="name"
-            label="名称"
-            rules={[{ required: true, message: '请输入工作流名称' }]}
+            label={t('workflow.fieldName')}
+            rules={[{ required: true, message: t('workflow.nameRequired') }]}
           >
-            <Input placeholder="例：客服问答流程" />
+            <Input placeholder={t('workflow.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input.TextArea rows={3} placeholder="简要描述此工作流用途" />
+          <Form.Item name="description" label={t('workflow.fieldDesc')}>
+            <Input.TextArea rows={3} placeholder={t('workflow.descPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -184,17 +191,28 @@ export default function WorkflowListPage() {
   )
 }
 
+type StatusCfg = Record<string, { color: string; label: string; icon: React.ReactNode }>
+
 interface WorkflowCardProps {
   wf: WorkflowSummary
+  statusCfg: StatusCfg
   onEdit: () => void
   onPublish: () => void
   onDisable: () => void
   onDelete: () => void
 }
 
-function WorkflowCard({ wf, onEdit, onPublish, onDisable, onDelete }: WorkflowCardProps) {
+function WorkflowCard({
+  wf,
+  statusCfg,
+  onEdit,
+  onPublish,
+  onDisable,
+  onDelete,
+}: WorkflowCardProps) {
+  const { t } = useTranslation()
   const isPublished = wf.status === 'published'
-  const cfg = STATUS_CFG[wf.status]
+  const cfg = statusCfg[wf.status]
 
   return (
     <GradientCard featured={isPublished} className={styles.card}>
@@ -207,13 +225,13 @@ function WorkflowCard({ wf, onEdit, onPublish, onDisable, onDelete }: WorkflowCa
       {wf.description && <p className={styles.cardDesc}>{wf.description}</p>}
       <div className={styles.cardMeta}>
         <span>
-          <PlayCircleOutlined /> {wf.runCount} 次运行
+          <PlayCircleOutlined /> {t('workflow.runCount', { count: wf.runCount })}
         </span>
         <span>{new Date(wf.updateTime).toLocaleDateString()}</span>
       </div>
       <div className={styles.cardActions}>
         <Button size="small" icon={<EditOutlined />} onClick={onEdit}>
-          编辑
+          {t('common.edit')}
         </Button>
         {wf.status !== 'published' ? (
           <PermissionButton permission="workflow:publish">
@@ -223,17 +241,17 @@ function WorkflowCard({ wf, onEdit, onPublish, onDisable, onDelete }: WorkflowCa
               onClick={onPublish}
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             >
-              发布
+              {t('common.publish')}
             </Button>
           </PermissionButton>
         ) : (
           <PermissionButton permission="workflow:publish">
             <Button size="small" danger onClick={onDisable}>
-              停用
+              {t('common.disable')}
             </Button>
           </PermissionButton>
         )}
-        <Tooltip title="删除">
+        <Tooltip title={t('common.delete')}>
           <PermissionButton permission="workflow:delete">
             <Button size="small" danger icon={<DeleteOutlined />} onClick={onDelete} />
           </PermissionButton>

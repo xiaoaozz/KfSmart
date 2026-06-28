@@ -3,24 +3,25 @@ import { Form, Input, Button, Progress, App } from 'antd'
 import { UserOutlined, MailOutlined, LockOutlined, SafetyOutlined } from '@ant-design/icons'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { authApi, type RegisterParams } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { GradientButton } from '@/components/base'
 import styles from './RegisterPage.module.css'
 
-function passwordStrength(pw: string): { score: number; label: string; color: string } {
-  if (!pw) return { score: 0, label: '', color: '' }
+function passwordStrength(pw: string): { score: number; labelKey: string; color: string } {
+  if (!pw) return { score: 0, labelKey: '', color: '' }
   let score = 0
   if (pw.length >= 8) score++
   if (/[A-Z]/.test(pw)) score++
   if (/[0-9]/.test(pw)) score++
   if (/[^A-Za-z0-9]/.test(pw)) score++
   const map = [
-    { score: 0, label: '', color: '' },
-    { score: 1, label: '弱', color: '#ef4444' },
-    { score: 2, label: '一般', color: '#f59e0b' },
-    { score: 3, label: '较强', color: '#3b82f6' },
-    { score: 4, label: '强', color: '#10b981' },
+    { score: 0, labelKey: '', color: '' },
+    { score: 1, labelKey: 'auth.register.strengthWeak', color: '#ef4444' },
+    { score: 2, labelKey: 'auth.register.strengthFair', color: '#f59e0b' },
+    { score: 3, labelKey: 'auth.register.strengthGood', color: '#3b82f6' },
+    { score: 4, labelKey: 'auth.register.strengthStrong', color: '#10b981' },
   ]
   return map[score]
 }
@@ -37,6 +38,7 @@ export default function RegisterPage() {
   const setTokens = useAuthStore((s) => s.setTokens)
   const navigate = useNavigate()
   const { message } = App.useApp()
+  const { t } = useTranslation()
   const [form] = Form.useForm()
   const strength = passwordStrength(pw)
 
@@ -57,7 +59,7 @@ export default function RegisterPage() {
     setSendingCode(true)
     try {
       await authApi.sendEmailCode(email)
-      message.success('验证码已发送，请查收邮件')
+      message.success(t('auth.register.codeSent'))
       setCountdown(COUNTDOWN)
       timerRef.current = setInterval(() => {
         setCountdown((c) => {
@@ -86,7 +88,7 @@ export default function RegisterPage() {
         emailCode: values.emailCode,
       })
       setTokens(result.token, result.refreshToken)
-      message.success('注册成功，欢迎加入！')
+      message.success(t('auth.register.success'))
       navigate('/dashboard', { replace: true })
     } catch {
       // Error shown by interceptor
@@ -103,8 +105,8 @@ export default function RegisterPage() {
       transition={{ duration: 0.4 }}
     >
       <div className={styles.header}>
-        <h2 className={styles.title}>创建账号</h2>
-        <p className={styles.subtitle}>开始使用 KfSmart AI Platform</p>
+        <h2 className={styles.title}>{t('auth.register.title')}</h2>
+        <p className={styles.subtitle}>{t('auth.register.subtitle')}</p>
       </div>
 
       <Form
@@ -118,33 +120,41 @@ export default function RegisterPage() {
         <Form.Item
           name="username"
           rules={[
-            { required: true, message: '请输入用户名' },
-            { min: 2, message: '用户名至少 2 个字符' },
+            { required: true, message: t('auth.register.usernameRequired') },
+            { min: 2, message: t('auth.register.usernameMinLength') },
           ]}
         >
-          <Input prefix={<UserOutlined />} placeholder="用户名" autoComplete="username" />
+          <Input
+            prefix={<UserOutlined />}
+            placeholder={t('auth.register.username')}
+            autoComplete="username"
+          />
         </Form.Item>
 
         <Form.Item
           name="email"
           rules={[
-            { required: true, message: '请输入邮箱' },
-            { type: 'email', message: '邮箱格式不正确' },
+            { required: true, message: t('auth.register.emailRequired') },
+            { type: 'email', message: t('auth.register.emailInvalid') },
           ]}
         >
-          <Input prefix={<MailOutlined />} placeholder="邮箱地址" autoComplete="email" />
+          <Input
+            prefix={<MailOutlined />}
+            placeholder={t('auth.register.email')}
+            autoComplete="email"
+          />
         </Form.Item>
 
         <Form.Item
           name="emailCode"
           rules={[
-            { required: true, message: '请输入邮箱验证码' },
-            { pattern: /^\d{6}$/, message: '验证码为 6 位数字' },
+            { required: true, message: t('auth.register.emailCodeRequired') },
+            { pattern: /^\d{6}$/, message: t('auth.register.emailCodePattern') },
           ]}
         >
           <Input
             prefix={<SafetyOutlined />}
-            placeholder="6 位验证码"
+            placeholder={t('auth.register.emailCode')}
             maxLength={6}
             autoComplete="one-time-code"
             suffix={
@@ -156,7 +166,9 @@ export default function RegisterPage() {
                 onClick={handleSendCode}
                 style={{ padding: '0 4px', fontSize: 13, whiteSpace: 'nowrap' }}
               >
-                {countdown > 0 ? `${countdown}s 后重试` : '获取验证码'}
+                {countdown > 0
+                  ? t('auth.register.resendAfter', { sec: countdown })
+                  : t('auth.register.sendCode')}
               </Button>
             }
           />
@@ -165,13 +177,13 @@ export default function RegisterPage() {
         <Form.Item
           name="password"
           rules={[
-            { required: true, message: '请输入密码' },
-            { min: 8, message: '密码至少 8 位' },
+            { required: true, message: t('auth.register.passwordRequired') },
+            { min: 8, message: t('auth.register.passwordMinLength') },
           ]}
         >
           <Input.Password
             prefix={<LockOutlined />}
-            placeholder="密码（至少 8 位）"
+            placeholder={t('auth.register.password')}
             autoComplete="new-password"
             onChange={(e) => setPw(e.target.value)}
           />
@@ -186,7 +198,9 @@ export default function RegisterPage() {
               size="small"
               style={{ marginBottom: 4 }}
             />
-            <span style={{ fontSize: 12, color: strength.color }}>{strength.label}</span>
+            <span style={{ fontSize: 12, color: strength.color }}>
+              {strength.labelKey ? t(strength.labelKey) : ''}
+            </span>
           </div>
         )}
 
@@ -194,33 +208,35 @@ export default function RegisterPage() {
           name="confirm"
           dependencies={['password']}
           rules={[
-            { required: true, message: '请确认密码' },
+            { required: true, message: t('auth.register.confirmRequired') },
             ({ getFieldValue }) => ({
               validator(_, value) {
                 if (!value || getFieldValue('password') === value) return Promise.resolve()
-                return Promise.reject(new Error('两次密码不一致'))
+                return Promise.reject(new Error(t('auth.register.confirmMismatch')))
               },
             }),
           ]}
         >
           <Input.Password
             prefix={<LockOutlined />}
-            placeholder="确认密码"
+            placeholder={t('auth.register.confirmPassword')}
             autoComplete="new-password"
           />
         </Form.Item>
 
         <Form.Item style={{ marginTop: 8 }}>
           <GradientButton size="lg" loading={loading} style={{ width: '100%' }} type="submit">
-            注册
+            {t('auth.register.submit')}
           </GradientButton>
         </Form.Item>
       </Form>
 
       <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <span style={{ color: 'var(--kf-muted-foreground)', fontSize: 14 }}>已有账号？</span>{' '}
+        <span style={{ color: 'var(--kf-muted-foreground)', fontSize: 14 }}>
+          {t('auth.register.hasAccount')}
+        </span>{' '}
         <Link to="/login" style={{ color: 'var(--kf-accent)', fontWeight: 500 }}>
-          立即登录
+          {t('auth.register.login')}
         </Link>
       </div>
     </motion.div>

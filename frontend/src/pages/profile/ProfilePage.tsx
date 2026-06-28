@@ -9,6 +9,7 @@ import {
   SafetyOutlined,
 } from '@ant-design/icons'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import BasicInfoSection from './sections/BasicInfoSection'
 import PasswordSection from './sections/PasswordSection'
 import NotificationSection from './sections/NotificationSection'
@@ -16,15 +17,6 @@ import FavoritesSection from './sections/FavoritesSection'
 import ActivitySection from './sections/ActivitySection'
 import LoginRecordSection from './sections/LoginRecordSection'
 import styles from './ProfilePage.module.css'
-
-const MENU_ITEMS = [
-  { key: 'basic', icon: <UserOutlined />, label: '基本资料' },
-  { key: 'password', icon: <LockOutlined />, label: '修改密码' },
-  { key: 'notifications', icon: <BellOutlined />, label: '通知设置' },
-  { key: 'favorites', icon: <StarOutlined />, label: '我的收藏' },
-  { key: 'activity', icon: <HistoryOutlined />, label: '操作记录' },
-  { key: 'login', icon: <SafetyOutlined />, label: '登录记录' },
-]
 
 const SECTIONS: Record<string, React.ReactNode> = {
   basic: <BasicInfoSection />,
@@ -37,11 +29,21 @@ const SECTIONS: Record<string, React.ReactNode> = {
 
 export default function ProfilePage() {
   const [activeKey, setActiveKey] = useState('basic')
+  const { t } = useTranslation()
+
+  const MENU_ITEMS = [
+    { key: 'basic', icon: <UserOutlined />, label: t('profile.nav.basic') },
+    { key: 'password', icon: <LockOutlined />, label: t('profile.nav.password') },
+    { key: 'notifications', icon: <BellOutlined />, label: t('profile.nav.notifications') },
+    { key: 'favorites', icon: <StarOutlined />, label: t('profile.nav.favorites') },
+    { key: 'activity', icon: <HistoryOutlined />, label: t('profile.nav.activity') },
+    { key: 'login', icon: <SafetyOutlined />, label: t('profile.nav.login') },
+  ]
 
   return (
     <div className={styles.root}>
       <div className={styles.sidebar}>
-        <div className={styles.sidebarTitle}>个人中心</div>
+        <div className={styles.sidebarTitle}>{t('profile.sidebarTitle')}</div>
         <Menu
           mode="inline"
           selectedKeys={[activeKey]}

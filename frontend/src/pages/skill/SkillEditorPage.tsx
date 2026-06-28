@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { skillApi } from '@/api/skill'
 import type { SkillParam } from '@/types/skill'
 import styles from './SkillEditorPage.module.css'
@@ -23,6 +24,8 @@ export default function SkillEditorPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message } = App.useApp()
+  const { t } = useTranslation()
+
   const [form] = Form.useForm<{
     name: string
     description?: string
@@ -68,7 +71,7 @@ export default function SkillEditorPage() {
     mutationFn: (values: FormValues) => skillApi.update(Number(id), { ...values, params }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
-      message.success('保存成功')
+      message.success(t('skill.editor.saveSuccess'))
     },
   })
 
@@ -85,9 +88,9 @@ export default function SkillEditorPage() {
       let args: Record<string, unknown> = {}
       if (testArgs.trim()) args = JSON.parse(testArgs)
       const res = await skillApi.test(Number(id), args)
-      setTestResult(`输出：\n${res.output}\n\n耗时：${res.durationMs}ms`)
+      setTestResult(t('skill.editor.testOutput', { output: res.output, ms: res.durationMs }))
     } catch (e) {
-      setTestResult(e instanceof Error ? e.message : '测试失败')
+      setTestResult(e instanceof Error ? e.message : t('skill.editor.testFailed'))
     } finally {
       setTesting(false)
     }
@@ -120,9 +123,9 @@ export default function SkillEditorPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/skills')}>
-          返回
+          {t('skill.editor.backBtn')}
         </Button>
-        <h2 className={styles.pageTitle}>技能编辑器</h2>
+        <h2 className={styles.pageTitle}>{t('skill.editor.title')}</h2>
         <Space>
           <Button
             type="primary"
@@ -131,33 +134,42 @@ export default function SkillEditorPage() {
             onClick={handleSave}
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           >
-            保存
+            {t('skill.editor.saveBtn')}
           </Button>
         </Space>
       </div>
 
       <div className={styles.body}>
-        {/* Left: config + code */}
         <div className={styles.leftPanel}>
           <Form form={form} layout="vertical">
             <div className={styles.row2}>
-              <Form.Item name="name" label="名称" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Form.Item
+                name="name"
+                label={t('skill.editor.fieldName')}
+                rules={[{ required: true }]}
+                style={{ flex: 1 }}
+              >
                 <Input />
               </Form.Item>
-              <Form.Item name="category" label="分类" initialValue="custom" style={{ width: 140 }}>
+              <Form.Item
+                name="category"
+                label={t('skill.editor.fieldCategory')}
+                initialValue="custom"
+                style={{ width: 140 }}
+              >
                 <Select
                   options={[
                     { label: 'HTTP', value: 'http' },
-                    { label: '数据库', value: 'database' },
-                    { label: '文件', value: 'file' },
+                    { label: t('skill.editor.categoryDatabase'), value: 'database' },
+                    { label: t('skill.editor.categoryFile'), value: 'file' },
                     { label: 'AI', value: 'ai' },
-                    { label: '自定义', value: 'custom' },
+                    { label: t('skill.editor.categoryCustom'), value: 'custom' },
                   ]}
                 />
               </Form.Item>
               <Form.Item
                 name="language"
-                label="语言"
+                label={t('skill.editor.fieldLanguage')}
                 initialValue="javascript"
                 style={{ width: 130 }}
               >
@@ -170,11 +182,11 @@ export default function SkillEditorPage() {
               </Form.Item>
             </div>
 
-            <Form.Item name="description" label="描述">
-              <Input placeholder="简要描述此技能功能" />
+            <Form.Item name="description" label={t('skill.editor.fieldDesc')}>
+              <Input placeholder={t('skill.editor.descPlaceholder')} />
             </Form.Item>
 
-            <Form.Item name="code" label="代码">
+            <Form.Item name="code" label={t('skill.editor.fieldCode')}>
               <Input.TextArea
                 rows={16}
                 className={styles.codeArea}
@@ -182,7 +194,11 @@ export default function SkillEditorPage() {
               />
             </Form.Item>
 
-            <Form.Item name="outputType" label="输出类型" initialValue="string">
+            <Form.Item
+              name="outputType"
+              label={t('skill.editor.fieldOutputType')}
+              initialValue="string"
+            >
               <Select
                 options={[
                   { label: 'string', value: 'string' },
@@ -194,12 +210,11 @@ export default function SkillEditorPage() {
             </Form.Item>
           </Form>
 
-          {/* Params table */}
           <div className={styles.paramsSection}>
             <div className={styles.paramsHeader}>
-              <span className={styles.paramsSectionTitle}>参数定义</span>
+              <span className={styles.paramsSectionTitle}>{t('skill.editor.paramsTitle')}</span>
               <Button size="small" icon={<PlusOutlined />} onClick={addParam}>
-                添加参数
+                {t('skill.editor.addParamBtn')}
               </Button>
             </div>
             <Table
@@ -209,7 +224,7 @@ export default function SkillEditorPage() {
               pagination={false}
               columns={[
                 {
-                  title: '参数名',
+                  title: t('skill.editor.colParamName'),
                   dataIndex: 'name',
                   render: (v: string, _: SkillParam, i: number) => (
                     <Input
@@ -221,7 +236,7 @@ export default function SkillEditorPage() {
                   ),
                 },
                 {
-                  title: '类型',
+                  title: t('skill.editor.colParamType'),
                   dataIndex: 'type',
                   width: 110,
                   render: (v: string, _: SkillParam, i: number) => (
@@ -235,7 +250,7 @@ export default function SkillEditorPage() {
                   ),
                 },
                 {
-                  title: '必填',
+                  title: t('skill.editor.colParamRequired'),
                   dataIndex: 'required',
                   width: 60,
                   render: (v: boolean, _: SkillParam, i: number) => (
@@ -247,13 +262,13 @@ export default function SkillEditorPage() {
                   ),
                 },
                 {
-                  title: '描述',
+                  title: t('skill.editor.colParamDesc'),
                   dataIndex: 'description',
                   render: (v: string, _: SkillParam, i: number) => (
                     <Input
                       size="small"
                       value={v}
-                      placeholder="可选"
+                      placeholder={t('skill.editor.paramDescPlaceholder')}
                       onChange={(e) => updateParam(i, 'description', e.target.value)}
                     />
                   ),
@@ -262,7 +277,10 @@ export default function SkillEditorPage() {
                   title: '',
                   width: 40,
                   render: (_: unknown, __: SkillParam, i: number) => (
-                    <Popconfirm title="删除此参数？" onConfirm={() => removeParam(i)}>
+                    <Popconfirm
+                      title={t('skill.editor.deleteParamConfirm')}
+                      onConfirm={() => removeParam(i)}
+                    >
                       <Button size="small" type="text" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
                   ),
@@ -272,14 +290,13 @@ export default function SkillEditorPage() {
           </div>
         </div>
 
-        {/* Right: test panel */}
         <div className={styles.testPanel}>
           <div className={styles.testHeader}>
-            <PlayCircleOutlined /> 测试运行
+            <PlayCircleOutlined /> {t('skill.editor.testPanelTitle')}
           </div>
           <div className={styles.testBody}>
             <div>
-              <div className={styles.testLabel}>参数 JSON</div>
+              <div className={styles.testLabel}>{t('skill.editor.testArgsLabel')}</div>
               <Input.TextArea
                 value={testArgs}
                 onChange={(e) => setTestArgs(e.target.value)}
@@ -295,17 +312,17 @@ export default function SkillEditorPage() {
               onClick={handleTest}
               style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             >
-              运行测试
+              {t('skill.editor.testRunBtn')}
             </Button>
             {testResult && (
               <div>
-                <div className={styles.testLabel}>输出</div>
+                <div className={styles.testLabel}>{t('skill.editor.testOutputLabel')}</div>
                 <pre className={styles.testOutput}>{testResult}</pre>
               </div>
             )}
             {params.length > 0 && (
               <div>
-                <div className={styles.testLabel}>参数说明</div>
+                <div className={styles.testLabel}>{t('skill.editor.testParamsLabel')}</div>
                 <div className={styles.paramHints}>
                   {params.map((p) => (
                     <div key={p.name} className={styles.paramHint}>
@@ -313,7 +330,7 @@ export default function SkillEditorPage() {
                         {p.name}
                       </Tag>
                       <Tag>{p.type}</Tag>
-                      {p.required && <Tag color="orange">必填</Tag>}
+                      {p.required && <Tag color="orange">{t('skill.editor.requiredTag')}</Tag>}
                       {p.description && (
                         <span className={styles.paramHintDesc}>{p.description}</span>
                       )}

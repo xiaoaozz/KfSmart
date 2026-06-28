@@ -7,6 +7,7 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import type { DataNode } from 'antd/es/tree'
 import { adminRoleApi, type Role, type Permission } from '@/api/admin'
 import styles from './AdminPage.module.css'
@@ -25,6 +26,7 @@ function buildPermTree(permissions: Permission[]): DataNode[] {
 export default function RoleManagePage() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
   const [formOpen, setFormOpen] = useState(false)
   const [editRole, setEditRole] = useState<Role | null>(null)
   const [checkedKeys, setCheckedKeys] = useState<string[]>([])
@@ -53,7 +55,7 @@ export default function RoleManagePage() {
       setFormOpen(false)
       form.resetFields()
       setCheckedKeys([])
-      message.success('角色已创建')
+      message.success(t('admin.role.createSuccess'))
     },
   })
 
@@ -67,7 +69,7 @@ export default function RoleManagePage() {
       qc.invalidateQueries({ queryKey: ['admin-roles'] })
       setEditRole(null)
       form.resetFields()
-      message.success('已更新')
+      message.success(t('admin.role.updateSuccess'))
     },
   })
 
@@ -75,7 +77,7 @@ export default function RoleManagePage() {
     mutationFn: (id: number) => adminRoleApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-roles'] })
-      message.success('已删除')
+      message.success(t('admin.role.deleteSuccess'))
     },
   })
 
@@ -95,7 +97,7 @@ export default function RoleManagePage() {
 
   const handleConfirmDelete = (r: Role) => {
     modal.confirm({
-      title: `删除角色「${r.name}」？`,
+      title: t('admin.role.deleteConfirm', { name: r.name }),
       okType: 'danger',
       onOk: () => deleteMutation.mutateAsync(r.id),
     })
@@ -105,7 +107,7 @@ export default function RoleManagePage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <SafetyCertificateOutlined /> 角色权限
+          <SafetyCertificateOutlined /> {t('admin.role.title')}
         </h2>
         <Button
           type="primary"
@@ -113,7 +115,7 @@ export default function RoleManagePage() {
           style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
           onClick={openCreate}
         >
-          新建角色
+          {t('admin.role.createBtn')}
         </Button>
       </div>
 
@@ -149,14 +151,14 @@ export default function RoleManagePage() {
                 {r.permissions.length > 8 && <Tag>+{r.permissions.length - 8}</Tag>}
               </div>
             </div>
-            <Tag color="blue">{r.userCount} 用户</Tag>
+            <Tag color="blue">{t('common.userCount', { count: r.userCount })}</Tag>
             <Space>
-              <Tooltip title="编辑">
+              <Tooltip title={t('admin.role.tooltipEdit')}>
                 <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(r)} />
               </Tooltip>
-              <Tooltip title="删除">
+              <Tooltip title={t('admin.role.tooltipDelete')}>
                 <Popconfirm
-                  title={`删除角色「${r.name}」？`}
+                  title={t('admin.role.deleteConfirm', { name: r.name })}
                   okType="danger"
                   onConfirm={() => handleConfirmDelete(r)}
                 >
@@ -169,7 +171,11 @@ export default function RoleManagePage() {
       </div>
 
       <Modal
-        title={editRole ? `编辑角色 — ${editRole.name}` : '新建角色'}
+        title={
+          editRole
+            ? t('admin.role.editTitle', { name: editRole.name })
+            : t('admin.role.createTitle')
+        }
         open={formOpen}
         onCancel={() => {
           setFormOpen(false)
@@ -185,13 +191,13 @@ export default function RoleManagePage() {
           layout="vertical"
           onFinish={(v) => (editRole ? updateMutation.mutate(v) : createMutation.mutate(v))}
         >
-          <Form.Item name="name" label="角色名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label={t('admin.role.fieldName')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label={t('admin.role.fieldDescription')}>
             <Input />
           </Form.Item>
-          <Form.Item label="权限">
+          <Form.Item label={t('admin.role.fieldPermissions')}>
             <Tree
               checkable
               treeData={permTree}

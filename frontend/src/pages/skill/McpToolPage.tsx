@@ -25,17 +25,11 @@ import {
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { mcpApi } from '@/api/skill'
 import type { McpTool } from '@/types/skill'
 import { PermissionButton } from '@/components/business'
 import styles from './McpToolPage.module.css'
-
-const STATUS_CFG = {
-  connected: { color: 'success', label: '已连接', icon: <CheckCircleOutlined /> },
-  disconnected: { color: 'default', label: '未连接', icon: <DisconnectOutlined /> },
-  error: { color: 'error', label: '错误', icon: <ExclamationCircleOutlined /> },
-  testing: { color: 'processing', label: '测试中', icon: <SyncOutlined spin /> },
-}
 
 const TRANSPORT_OPTIONS = [
   { label: 'stdio', value: 'stdio' },
@@ -46,6 +40,30 @@ const TRANSPORT_OPTIONS = [
 export default function McpToolPage() {
   const qc = useQueryClient()
   const { message, modal } = App.useApp()
+  const { t } = useTranslation()
+
+  const STATUS_CFG = {
+    connected: {
+      color: 'success',
+      label: t('skill.mcp.statusConnected'),
+      icon: <CheckCircleOutlined />,
+    },
+    disconnected: {
+      color: 'default',
+      label: t('skill.mcp.statusDisconnected'),
+      icon: <DisconnectOutlined />,
+    },
+    error: {
+      color: 'error',
+      label: t('skill.mcp.statusError'),
+      icon: <ExclamationCircleOutlined />,
+    },
+    testing: {
+      color: 'processing',
+      label: t('skill.mcp.statusTesting'),
+      icon: <SyncOutlined spin />,
+    },
+  }
 
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<McpTool | null>(null)
@@ -69,7 +87,7 @@ export default function McpToolPage() {
       qc.invalidateQueries({ queryKey: ['mcp-tools'] })
       setFormOpen(false)
       form.resetFields()
-      message.success('已添加')
+      message.success(t('skill.mcp.addSuccess'))
     },
   })
 
@@ -80,7 +98,7 @@ export default function McpToolPage() {
       setFormOpen(false)
       setEditTarget(null)
       form.resetFields()
-      message.success('已更新')
+      message.success(t('skill.mcp.updateSuccess'))
     },
   })
 
@@ -88,15 +106,15 @@ export default function McpToolPage() {
     mutationFn: (id: number) => mcpApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mcp-tools'] })
-      message.success('已删除')
+      message.success(t('skill.mcp.deleteSuccess'))
     },
   })
 
-  const handleDelete = (t: McpTool) => {
+  const handleDelete = (tool: McpTool) => {
     modal.confirm({
-      title: `删除 MCP 工具「${t.name}」？`,
+      title: t('skill.mcp.deleteConfirm', { name: tool.name }),
       okType: 'danger',
-      onOk: () => deleteMutation.mutateAsync(t.id),
+      onOk: () => deleteMutation.mutateAsync(tool.id),
     })
   }
 
@@ -106,29 +124,29 @@ export default function McpToolPage() {
     setFormOpen(true)
   }
 
-  const handleOpenEdit = (t: McpTool) => {
-    setEditTarget(t)
+  const handleOpenEdit = (tool: McpTool) => {
+    setEditTarget(tool)
     form.setFieldsValue({
-      name: t.name,
-      description: t.description,
-      transport: t.transport,
-      endpoint: t.endpoint,
+      name: tool.name,
+      description: tool.description,
+      transport: tool.transport,
+      endpoint: tool.endpoint,
     })
     setFormOpen(true)
   }
 
-  const handleTest = async (t: McpTool) => {
-    setTestingId(t.id)
+  const handleTest = async (tool: McpTool) => {
+    setTestingId(tool.id)
     try {
-      const res = await mcpApi.test(t.id)
+      const res = await mcpApi.test(tool.id)
       if (res.success) {
         qc.invalidateQueries({ queryKey: ['mcp-tools'] })
-        message.success(`连接成功，发现 ${res.toolCount} 个工具`)
+        message.success(t('skill.mcp.testSuccess', { count: res.toolCount }))
       } else {
-        message.error(`连接失败：${res.message}`)
+        message.error(t('skill.mcp.testFailed', { msg: res.message }))
       }
     } catch {
-      message.error('测试连接失败')
+      message.error(t('skill.mcp.testError'))
     } finally {
       setTestingId(null)
     }
@@ -145,7 +163,7 @@ export default function McpToolPage() {
     <div className={styles.root}>
       <div className={styles.topBar}>
         <h2 className={styles.pageTitle}>
-          <ApiOutlined /> MCP 工具
+          <ApiOutlined /> {t('skill.mcp.title')}
         </h2>
         <PermissionButton permission="mcp:create">
           <Button
@@ -154,14 +172,12 @@ export default function McpToolPage() {
             style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
             onClick={handleOpenCreate}
           >
-            添加 MCP 工具
+            {t('skill.mcp.addBtn')}
           </Button>
         </PermissionButton>
       </div>
 
-      <div className={styles.subtitle}>
-        通过 MCP（Model Context Protocol）协议连接外部工具，Agent 和工作流可直接调用。
-      </div>
+      <div className={styles.subtitle}>{t('skill.mcp.subtitle')}</div>
 
       {isLoading ? (
         <div className={styles.listSkeleton}>
@@ -170,14 +186,14 @@ export default function McpToolPage() {
           ))}
         </div>
       ) : !tools?.length ? (
-        <Empty description="暂无 MCP 工具配置" />
+        <Empty description={t('skill.mcp.empty')} />
       ) : (
         <div className={styles.list}>
-          {tools.map((t: McpTool, i: number) => {
-            const cfg = STATUS_CFG[t.status] ?? STATUS_CFG.disconnected
+          {tools.map((tool: McpTool, i: number) => {
+            const cfg = STATUS_CFG[tool.status] ?? STATUS_CFG.disconnected
             return (
               <motion.div
-                key={t.id}
+                key={tool.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
@@ -186,30 +202,32 @@ export default function McpToolPage() {
                 <div className={styles.cardHeader}>
                   <Badge
                     status={
-                      t.status === 'connected'
+                      tool.status === 'connected'
                         ? 'success'
-                        : t.status === 'error'
+                        : tool.status === 'error'
                           ? 'error'
                           : 'default'
                     }
                   />
-                  <span className={styles.cardName}>{t.name}</span>
+                  <span className={styles.cardName}>{tool.name}</span>
                   <Tag color={cfg.color} icon={cfg.icon}>
                     {cfg.label}
                   </Tag>
-                  {t.toolCount > 0 && <Tag color="blue">{t.toolCount} 工具</Tag>}
+                  {tool.toolCount > 0 && (
+                    <Tag color="blue">{t('skill.mcp.toolCount', { count: tool.toolCount })}</Tag>
+                  )}
                 </div>
-                {t.description && <div className={styles.cardDesc}>{t.description}</div>}
+                {tool.description && <div className={styles.cardDesc}>{tool.description}</div>}
                 <Descriptions size="small" column={2}>
-                  <Descriptions.Item label="传输协议">
-                    {t.transport.toUpperCase()}
+                  <Descriptions.Item label={t('skill.mcp.descTransport')}>
+                    {tool.transport.toUpperCase()}
                   </Descriptions.Item>
-                  <Descriptions.Item label="端点">
-                    <span className={styles.endpoint}>{t.endpoint}</span>
+                  <Descriptions.Item label={t('skill.mcp.descEndpoint')}>
+                    <span className={styles.endpoint}>{tool.endpoint}</span>
                   </Descriptions.Item>
-                  {t.lastTestTime && (
-                    <Descriptions.Item label="最后连接">
-                      {new Date(t.lastTestTime).toLocaleString()}
+                  {tool.lastTestTime && (
+                    <Descriptions.Item label={t('skill.mcp.descLastTest')}>
+                      {new Date(tool.lastTestTime).toLocaleString()}
                     </Descriptions.Item>
                   )}
                 </Descriptions>
@@ -217,28 +235,28 @@ export default function McpToolPage() {
                   <Space>
                     <Button
                       size="small"
-                      icon={<SyncOutlined spin={testingId === t.id} />}
-                      loading={testingId === t.id}
-                      onClick={() => handleTest(t)}
+                      icon={<SyncOutlined spin={testingId === tool.id} />}
+                      loading={testingId === tool.id}
+                      onClick={() => handleTest(tool)}
                     >
-                      测试连接
+                      {t('skill.mcp.testBtn')}
                     </Button>
-                    <Tooltip title="编辑">
+                    <Tooltip title={t('skill.mcp.tooltipEdit')}>
                       <PermissionButton permission="mcp:update">
                         <Button
                           size="small"
                           icon={<EditOutlined />}
-                          onClick={() => handleOpenEdit(t)}
+                          onClick={() => handleOpenEdit(tool)}
                         />
                       </PermissionButton>
                     </Tooltip>
-                    <Tooltip title="删除">
+                    <Tooltip title={t('skill.mcp.tooltipDelete')}>
                       <PermissionButton permission="mcp:delete">
                         <Button
                           size="small"
                           danger
                           icon={<DeleteOutlined />}
-                          onClick={() => handleDelete(t)}
+                          onClick={() => handleDelete(tool)}
                         />
                       </PermissionButton>
                     </Tooltip>
@@ -251,7 +269,7 @@ export default function McpToolPage() {
       )}
 
       <Modal
-        title={editTarget ? '编辑 MCP 工具' : '添加 MCP 工具'}
+        title={editTarget ? t('skill.mcp.editModalTitle') : t('skill.mcp.addModalTitle')}
         open={formOpen}
         onCancel={() => {
           setFormOpen(false)
@@ -264,16 +282,16 @@ export default function McpToolPage() {
         width={520}
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input placeholder="例：Brave 浏览器搜索" />
+          <Form.Item name="name" label={t('skill.mcp.fieldName')} rules={[{ required: true }]}>
+            <Input placeholder={t('skill.mcp.namePlaceholder')} />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <Input placeholder="简要描述此工具功能" />
+          <Form.Item name="description" label={t('skill.mcp.fieldDesc')}>
+            <Input placeholder={t('skill.mcp.descPlaceholder')} />
           </Form.Item>
           <div style={{ display: 'flex', gap: 12 }}>
             <Form.Item
               name="transport"
-              label="传输协议"
+              label={t('skill.mcp.fieldTransport')}
               initialValue="sse"
               style={{ width: 120 }}
               rules={[{ required: true }]}
@@ -282,7 +300,7 @@ export default function McpToolPage() {
             </Form.Item>
             <Form.Item
               name="endpoint"
-              label="端点地址"
+              label={t('skill.mcp.fieldEndpoint')}
               style={{ flex: 1 }}
               rules={[{ required: true }]}
             >
@@ -292,8 +310,8 @@ export default function McpToolPage() {
               />
             </Form.Item>
           </div>
-          <Form.Item name="apiKey" label="API Key（可选）">
-            <Input.Password placeholder="Bearer token 或 API Key" />
+          <Form.Item name="apiKey" label={t('skill.mcp.fieldApiKey')}>
+            <Input.Password placeholder={t('skill.mcp.apiKeyPlaceholder')} />
           </Form.Item>
         </Form>
       </Modal>

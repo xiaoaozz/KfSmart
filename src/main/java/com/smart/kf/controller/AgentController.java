@@ -1,6 +1,7 @@
 package com.smart.kf.controller;
 
 import com.smart.kf.model.agent.Agent;
+import com.smart.kf.model.agent.AgentI18n;
 import com.smart.kf.service.agent.AgentExecutionService;
 import com.smart.kf.service.agent.AgentService;
 import com.smart.kf.utils.pagination.PageQuery;
@@ -89,6 +90,22 @@ public class AgentController {
         return ok("Agent对话成功",
             agentExecutionService.chat(agentId, query, history, input, username));
     }
+
+    @GetMapping("/{agentId}/i18n")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> getAgentI18n(@PathVariable String agentId) {
+        return ok("获取翻译成功", agentService.getAgentI18n(agentId));
+    }
+
+    @PutMapping("/{agentId}/i18n")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> upsertAgentI18n(
+            @PathVariable String agentId,
+            @RequestBody AgentI18nRequest request) {
+        return ok("翻译已保存", agentService.upsertAgentI18n(agentId, request.lang(), request.name(), request.description()));
+    }
+
+    public record AgentI18nRequest(String lang, String name, String description) {}
 
     private ResponseEntity<?> ok(String message, Object data) {
         Map<String, Object> response = new HashMap<>();

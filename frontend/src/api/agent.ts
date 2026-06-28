@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { Agent, AgentFormValues, AgentExecution } from '@/types/agent'
+import type { Agent, AgentFormValues, AgentExecution, AgentI18n } from '@/types/agent'
 import type { PageResult } from '@/types/api'
 
 export const agentApi = {
@@ -27,4 +27,10 @@ export const agentApi = {
   /** Quick test run — triggers a single-turn chat execution */
   testRun: (agentId: number, input: string) =>
     http.post<{ executionId: string }>(`/agents/${agentId}/chat`, { input }).then((r) => r.data),
+
+  getI18n: (agentId: string) =>
+    http.get<AgentI18n[]>(`/agents/${agentId}/i18n`).then((r) => r.data),
+
+  upsertI18n: (agentId: string, payload: AgentI18n) =>
+    http.put<AgentI18n>(`/agents/${agentId}/i18n`, payload).then((r) => r.data),
 }
