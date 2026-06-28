@@ -1,9 +1,12 @@
 import { motion } from 'framer-motion'
 import { Outlet } from 'react-router-dom'
-import { ThemeSwitch } from '@/components/base'
+import { useTranslation } from 'react-i18next'
+import { ThemeSwitch, LanguageSwitch } from '@/components/base'
 import styles from './AuthLayout.module.css'
 
 export default function AuthLayout() {
+  const { t } = useTranslation()
+
   return (
     <div className={styles.root}>
       {/* Left brand panel */}
@@ -31,17 +34,22 @@ export default function AuthLayout() {
             <span className={styles.logoText}>KfSmart</span>
           </div>
           <h1 className={styles.tagline}>
-            AI Knowledge
-            <br />
-            Management
+            {t('auth.brand.tagline')
+              .split('\n')
+              .map((line, i, arr) => (
+                <span key={i}>
+                  {line}
+                  {i < arr.length - 1 && <br />}
+                </span>
+              ))}
           </h1>
-          <p className={styles.subTagline}>智能文档处理 · RAG 语义检索 · AI 对话增强</p>
+          <p className={styles.subTagline}>{t('auth.brand.subTagline')}</p>
 
           <ul className={styles.features}>
-            {['企业级知识库管理', '向量语义检索', '流式 AI 对话', '可视化工作流编排'].map((f) => (
-              <li key={f} className={styles.feature}>
+            {(['kb', 'vector', 'chat', 'workflow'] as const).map((key) => (
+              <li key={key} className={styles.feature}>
                 <span className={styles.featureDot} />
-                {f}
+                {t(`auth.brand.features.${key}`)}
               </li>
             ))}
           </ul>
@@ -50,7 +58,8 @@ export default function AuthLayout() {
 
       {/* Right form panel */}
       <div className={styles.form}>
-        <div className={styles.themeToggle}>
+        <div className={styles.topRight}>
+          <LanguageSwitch />
           <ThemeSwitch />
         </div>
         <motion.div

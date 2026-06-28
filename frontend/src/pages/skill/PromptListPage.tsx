@@ -57,7 +57,7 @@ export default function PromptListPage() {
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState('')
   const [editPrompt, setEditPrompt] = useState<Prompt | null>(null)
-  const [historyPromptId, setHistoryPromptId] = useState<number | null>(null)
+  const [historyPromptId, setHistoryPromptId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm] = Form.useForm<{
     name: string
@@ -103,7 +103,7 @@ export default function PromptListPage() {
       category: string
       content: string
       note?: string
-    }) => promptApi.update(editPrompt!.id, v),
+    }) => promptApi.update(editPrompt!.templateId, v),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prompts'] })
       setEditPrompt(null)
@@ -113,7 +113,7 @@ export default function PromptListPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => promptApi.delete(id),
+    mutationFn: (templateId: string) => promptApi.delete(templateId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prompts'] })
       message.success(t('skill.prompt.deleteSuccess'))
@@ -124,12 +124,12 @@ export default function PromptListPage() {
     modal.confirm({
       title: t('skill.prompt.deleteConfirm', { name: p.name }),
       okType: 'danger',
-      onOk: () => deleteMutation.mutateAsync(p.id),
+      onOk: () => deleteMutation.mutateAsync(p.templateId),
     })
   }
 
   const handleEditOpen = (p: PromptSummary) => {
-    promptApi.get(p.id).then((full) => {
+    promptApi.get(p.templateId).then((full) => {
       setEditPrompt(full)
       editForm.setFieldsValue({
         name: full.name,
@@ -140,8 +140,8 @@ export default function PromptListPage() {
     })
   }
 
-  const copyContent = (id: number) => {
-    promptApi.get(id).then((p) => {
+  const copyContent = (templateId: string) => {
+    promptApi.get(templateId).then((p) => {
       navigator.clipboard
         .writeText(p.content)
         .then(() => message.success(t('skill.prompt.copySuccess')))
@@ -214,7 +214,11 @@ export default function PromptListPage() {
                 </div>
               </div>
               <div className={styles.rowActions}>
-                <Button size="small" icon={<CopyOutlined />} onClick={() => copyContent(p.id)}>
+                <Button
+                  size="small"
+                  icon={<CopyOutlined />}
+                  onClick={() => copyContent(p.templateId)}
+                >
                   {t('skill.prompt.copyBtn')}
                 </Button>
                 <Button size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(p)}>
@@ -223,7 +227,7 @@ export default function PromptListPage() {
                 <Button
                   size="small"
                   icon={<HistoryOutlined />}
-                  onClick={() => setHistoryPromptId(p.id)}
+                  onClick={() => setHistoryPromptId(p.templateId)}
                 >
                   {t('skill.prompt.historyBtn')}
                 </Button>
@@ -359,10 +363,12 @@ export default function PromptListPage() {
                   <div className={styles.versionHeader}>
                     <Tag color="blue">v{v.version}</Tag>
                     <span className={styles.versionTime}>
-                      {new Date(v.createTime).toLocaleString()}
+                      {new Date(v.snapshotAt).toLocaleString()}
                     </span>
                   </div>
-                  {v.note && <div className={styles.versionNote}>{v.note}</div>}
+                  {v.changeDescription && (
+                    <div className={styles.versionNote}>{v.changeDescription}</div>
+                  )}
                   <Divider style={{ margin: '8px 0' }} />
                   <pre className={styles.versionContent}>
                     {v.content.slice(0, 200)}

@@ -147,6 +147,60 @@ export default function UserManagePage() {
     }, 1000)
   }
 
+  const handleResetPw = (u: AdminUser) => {
+    let count = 5
+    let timerId: number | null = null
+
+    const instance = modal.confirm({
+      title: t('admin.users.resetPwModalTitle'),
+      content: (
+        <div>
+          <p style={{ marginBottom: 12, color: 'var(--kf-foreground)' }}>
+            {t('admin.users.resetPwModalDesc')}
+          </p>
+          <div
+            style={{
+              padding: '8px 12px',
+              background: 'var(--kf-muted)',
+              borderLeft: '3px solid var(--kf-accent)',
+              borderRadius: 'var(--kf-radius-xs)',
+              fontFamily: 'var(--kf-font-mono)',
+              fontSize: 13,
+              color: 'var(--kf-foreground)',
+              wordBreak: 'break-all',
+            }}
+          >
+            {u.username}
+          </div>
+        </div>
+      ),
+      okText: t('admin.users.deleteConfirmCountdown', { n: count }),
+      okType: 'primary',
+      okButtonProps: { disabled: true },
+      cancelText: t('common.cancel'),
+      onOk: () => resetPwMutation.mutateAsync(u.id),
+      afterClose: () => {
+        if (timerId !== null) window.clearInterval(timerId)
+      },
+    })
+
+    timerId = window.setInterval(() => {
+      count -= 1
+      if (count <= 0) {
+        window.clearInterval(timerId!)
+        timerId = null
+        instance.update({
+          okText: t('admin.users.deleteConfirmReady'),
+          okButtonProps: { disabled: false },
+        })
+      } else {
+        instance.update({
+          okText: t('admin.users.deleteConfirmCountdown', { n: count }),
+        })
+      }
+    }, 1000)
+  }
+
   const openEdit = (u: AdminUser) => {
     setEditUser(u)
     editForm.setFieldsValue({
@@ -209,11 +263,7 @@ export default function UserManagePage() {
             <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(u)} />
           </Tooltip>
           <Tooltip title={t('admin.users.tooltipResetPw')}>
-            <Button
-              size="small"
-              icon={<KeyOutlined />}
-              onClick={() => resetPwMutation.mutate(u.id)}
-            />
+            <Button size="small" icon={<KeyOutlined />} onClick={() => handleResetPw(u)} />
           </Tooltip>
           <Tooltip title={t('admin.users.tooltipDelete')}>
             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(u)} />

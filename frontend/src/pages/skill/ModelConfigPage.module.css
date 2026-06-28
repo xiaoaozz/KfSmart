@@ -1,101 +1,132 @@
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.topBar {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pageTitle {
-  font-family: var(--kf-font-display);
-  font-size: 22px;
-  color: var(--kf-foreground);
-  margin: 0;
+.toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
-.subtitle {
-  font-size: 13px;
-  color: var(--kf-muted-foreground);
-  margin: 0;
-}
-
-.providerLabel {
+/* Card */
+.card {
+  padding: 20px;
+  height: 100%;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
 }
 
-.providerName {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--kf-foreground);
-}
-
-.modelGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-}
-
-.modelCard {
-  background: var(--kf-background);
-  border: 1px solid var(--kf-border);
-  border-radius: var(--kf-radius-sm);
-  padding: 14px;
+.cardHeader {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.modelHeader {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
 
-.modelName {
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.titleInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.cardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--kf-radius-sm);
+  background: var(--kf-accent-gradient-r, linear-gradient(135deg, #667eea, #764ba2));
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cardName {
+  font-size: 15px;
   font-weight: 600;
-  font-size: 14px;
   color: var(--kf-foreground);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--kf-font-mono);
 }
 
-.modelDesc {
+.cardSubName {
   font-size: 12px;
   color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   margin: 0;
   line-height: 1.5;
 }
 
-.capabilities {
+.cardMeta {
   display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.cardParams {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.paramItem {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  display: flex;
+  align-items: center;
   gap: 4px;
-  margin-top: 2px;
 }
 
-.skeleton {
-  height: 120px;
-  background: linear-gradient(90deg, var(--kf-muted) 25%, var(--kf-card) 50%, var(--kf-muted) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
-  border-radius: var(--kf-radius-md);
-  margin-bottom: 12px;
+.cardFooter {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--kf-border);
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+.apiUrl {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--kf-subtle-foreground, var(--kf-muted-foreground));
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.apiUrl code {
+  font-family: var(--kf-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

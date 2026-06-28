@@ -1,126 +1,171 @@
-import { Collapse, Tag, Descriptions, Badge, Empty } from 'antd'
-import { RobotOutlined, StarFilled } from '@ant-design/icons'
+import { useState } from 'react'
+import { Input, Tag, Row, Col, Skeleton } from 'antd'
+import {
+  SearchOutlined,
+  RobotOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ApiOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons'
+import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { modelApi } from '@/api/skill'
-import type { ModelInfo, ModelProvider } from '@/types/skill'
+import type { ModelConfig } from '@/types/skill'
+import { GradientCard } from '@/components/base'
+import { EmptyState } from '@/components/business'
 import styles from './ModelConfigPage.module.css'
 
-const CAPABILITY_COLORS: Record<string, string> = {
-  chat: 'blue',
-  embedding: 'purple',
-  vision: 'orange',
-  code: 'green',
-  reasoning: 'cyan',
-  function_calling: 'magenta',
+const PROVIDER_LABEL_MAP: Record<string, string> = {
+  DeepSeek: 'skill.model.providerDeepseek',
+  OpenAI: 'skill.model.providerOpenai',
+  通义千问: 'skill.model.providerQwen',
+  '智谱 AI': 'skill.model.providerZhipu',
+  文心一言: 'skill.model.providerErnie',
+  Anthropic: 'skill.model.providerAnthropic',
+  Ollama: 'skill.model.providerOllama',
+  其他: 'skill.model.providerOther',
 }
 
-function formatPrice(price: number) {
-  return `¥${price.toFixed(4)} / 1K token`
+const CATEGORY_MAP: Record<string, string> = {
+  向量模型: 'skill.model.categoryEmbedding',
+  多模态模型: 'skill.model.categoryMultimodal',
+  代码模型: 'skill.model.categoryCode',
+  本地模型: 'skill.model.categoryLocal',
+  对话模型: 'skill.model.categoryChat',
 }
 
-function formatContext(n: number) {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(0)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(0)}K`
-  return String(n)
+const STATUS_MAP: Record<string, string> = {
+  激活中: 'skill.model.statusActive',
+  可用: 'skill.model.statusAvailable',
 }
 
-function ModelCard({ model }: { model: ModelInfo }) {
-  const { t } = useTranslation()
+function ModelCard({
+  model,
+  t,
+}: {
+  model: ModelConfig
+  t: (key: string, opts?: Record<string, unknown>) => string
+}) {
+  const providerLabel = t(PROVIDER_LABEL_MAP[model.providerLabel] ?? model.providerLabel)
+  const category = t(CATEGORY_MAP[model.category] ?? model.category)
+  const statusLabel = t(STATUS_MAP[model.status] ?? model.status)
+  const description = model.remark
+    ? model.remark
+    : t('skill.model.autoDescription', {
+        modelName: model.modelName,
+        provider: providerLabel,
+        category,
+      })
+
   return (
-    <div className={styles.modelCard}>
-      <div className={styles.modelHeader}>
-        <span className={styles.modelName}>{model.name}</span>
-        {model.isDefault && (
-          <Tag color="gold" icon={<StarFilled />}>
-            {t('skill.model.defaultTag')}
-          </Tag>
-        )}
-      </div>
-      {model.description && <p className={styles.modelDesc}>{model.description}</p>}
-      <Descriptions size="small" column={2} style={{ marginTop: 8 }}>
-        <Descriptions.Item label={t('skill.model.descContextWindow')}>
-          {formatContext(model.contextLength)}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('skill.model.descInputPrice')}>
-          {formatPrice(model.inputPrice)}
-        </Descriptions.Item>
-        <Descriptions.Item label={t('skill.model.descOutputPrice')}>
-          {formatPrice(model.outputPrice)}
-        </Descriptions.Item>
-      </Descriptions>
-      {model.capabilities.length > 0 && (
-        <div className={styles.capabilities}>
-          {model.capabilities.map((cap) => (
-            <Tag key={cap} color={CAPABILITY_COLORS[cap] ?? 'default'}>
-              {cap}
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <GradientCard className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.titleRow}>
+            <span className={styles.cardIcon}>{model.icon}</span>
+            <div className={styles.titleInfo}>
+              <h3 className={styles.cardName}>{model.modelName}</h3>
+              <span className={styles.cardSubName}>{model.name}</span>
+            </div>
+          </div>
+          {model.active ? (
+            <Tag color="success" icon={<CheckCircleOutlined />} style={{ fontSize: 12 }}>
+              {statusLabel}
             </Tag>
-          ))}
+          ) : (
+            <Tag color="default" icon={<ClockCircleOutlined />} style={{ fontSize: 12 }}>
+              {statusLabel}
+            </Tag>
+          )}
         </div>
-      )}
-    </div>
+
+        {description && <p className={styles.cardDesc}>{description}</p>}
+
+        <div className={styles.cardMeta}>
+          <Tag color="blue" style={{ fontSize: 12 }}>
+            {providerLabel}
+          </Tag>
+          <Tag style={{ fontSize: 12 }}>{category}</Tag>
+          <Tag style={{ fontSize: 12 }}>{model.authType}</Tag>
+        </div>
+
+        <div className={styles.cardParams}>
+          <span className={styles.paramItem}>
+            <ThunderboltOutlined /> {t('skill.model.paramTemperature')}: {model.temperature}
+          </span>
+          <span className={styles.paramItem}>
+            <RobotOutlined /> {t('skill.model.paramMaxTokens')}: {model.maxTokens}
+          </span>
+          <span className={styles.paramItem}>
+            {t('skill.model.paramTopP')}: {model.topP}
+          </span>
+        </div>
+
+        <div className={styles.cardFooter}>
+          <span className={styles.apiUrl} title={model.apiUrl}>
+            <ApiOutlined style={{ fontSize: 12, marginRight: 4 }} />
+            <code>{model.apiUrl}</code>
+          </span>
+        </div>
+      </GradientCard>
+    </motion.div>
   )
 }
 
 export default function ModelConfigPage() {
   const { t } = useTranslation()
-  const { data: providers, isLoading } = useQuery({
+  const [keyword, setKeyword] = useState('')
+
+  const { data: models, isLoading } = useQuery({
     queryKey: ['models'],
     queryFn: () => modelApi.list(),
     staleTime: 5 * 60 * 1000,
   })
 
-  if (isLoading) {
-    return (
-      <div className={styles.root}>
-        <div className={styles.topBar}>
-          <h2 className={styles.pageTitle}>
-            <RobotOutlined /> {t('skill.model.title')}
-          </h2>
-        </div>
-        <div className={styles.skeleton} />
-        <div className={styles.skeleton} />
-      </div>
-    )
-  }
-
-  const items = (providers ?? []).map((p: ModelProvider) => ({
-    key: p.id,
-    label: (
-      <div className={styles.providerLabel}>
-        <span className={styles.providerName}>{p.name}</span>
-        <Badge count={p.models.length} color="blue" />
-        <Tag color="processing">
-          <Badge status="processing" /> {t('skill.model.connectedTag')}
-        </Tag>
-      </div>
-    ),
-    children: (
-      <div className={styles.modelGrid}>
-        {p.models.map((m) => (
-          <ModelCard key={m.id} model={m} />
-        ))}
-      </div>
-    ),
-  }))
+  const safeModels = models ?? []
+  const filtered = keyword
+    ? safeModels.filter(
+        (m) =>
+          m.modelName.toLowerCase().includes(keyword.toLowerCase()) ||
+          m.name.toLowerCase().includes(keyword.toLowerCase()) ||
+          m.providerLabel.toLowerCase().includes(keyword.toLowerCase()) ||
+          m.category.toLowerCase().includes(keyword.toLowerCase()),
+      )
+    : safeModels
 
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <RobotOutlined /> {t('skill.model.title')}
-        </h2>
-        <p className={styles.subtitle}>{t('skill.model.subtitle')}</p>
+      <div className={styles.toolbar}>
+        <Input
+          prefix={<SearchOutlined />}
+          placeholder={t('skill.model.searchPlaceholder')}
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          allowClear
+          style={{ width: 240 }}
+        />
       </div>
 
-      {!items.length ? (
-        <Empty description={t('skill.model.empty')} />
+      {isLoading ? (
+        <Row gutter={[16, 16]}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Col key={i} xs={24} sm={12} lg={8}>
+              <Skeleton active />
+            </Col>
+          ))}
+        </Row>
+      ) : filtered.length === 0 ? (
+        <EmptyState title={t('skill.model.empty')} />
       ) : (
-        <Collapse
-          defaultActiveKey={providers?.map((p) => p.id) ?? []}
-          items={items}
-          style={{ background: 'transparent' }}
-        />
+        <Row gutter={[16, 16]}>
+          {filtered.map((m) => (
+            <Col key={m.id} xs={24} sm={12} lg={8}>
+              <ModelCard model={m} t={t} />
+            </Col>
+          ))}
+        </Row>
       )}
     </div>
   )

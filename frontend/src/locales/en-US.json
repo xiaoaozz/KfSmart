@@ -67,6 +67,16 @@
     "roleUser": "User"
   },
   "auth": {
+    "brand": {
+      "tagline": "AI Knowledge\nManagement",
+      "subTagline": "Intelligent Document Processing · RAG Semantic Retrieval · AI Chat Enhancement",
+      "features": {
+        "kb": "Enterprise Knowledge Base Management",
+        "vector": "Vector Semantic Search",
+        "chat": "Streaming AI Chat",
+        "workflow": "Visual Workflow Orchestration"
+      }
+    },
     "login": {
       "title": "Welcome back",
       "subtitle": "Sign in to KfSmart AI Platform",
@@ -265,6 +275,8 @@
       "deleteFailed": "Delete failed, please try again",
       "resetPwTitle": "Password Reset",
       "resetPwContent": "New password: {{password}} — please ask the user to sign in and change it.",
+      "resetPwModalTitle": "Reset User Password",
+      "resetPwModalDesc": "The user's password will be reset to a new randomly generated password.",
       "updateSuccess": "Updated",
       "deleteSuccess": "Deleted"
     },
@@ -733,7 +745,27 @@
       "connectedTag": "Connected",
       "descContextWindow": "Context Window",
       "descInputPrice": "Input Price",
-      "descOutputPrice": "Output Price"
+      "descOutputPrice": "Output Price",
+      "searchPlaceholder": "Search models",
+      "paramTemperature": "Temp",
+      "paramMaxTokens": "Max Tokens",
+      "paramTopP": "Top P",
+      "providerDeepseek": "DeepSeek",
+      "providerOpenai": "OpenAI",
+      "providerQwen": "Qwen",
+      "providerZhipu": "Zhipu AI",
+      "providerErnie": "ERNIE",
+      "providerAnthropic": "Anthropic",
+      "providerOllama": "Ollama",
+      "providerOther": "Other",
+      "categoryEmbedding": "Embedding",
+      "categoryMultimodal": "Multimodal",
+      "categoryCode": "Code",
+      "categoryLocal": "Local",
+      "categoryChat": "Chat",
+      "statusActive": "Active",
+      "statusAvailable": "Available",
+      "autoDescription": "{{modelName}} is provided by {{provider}} API Key config, suitable for {{category}}, workflow LLM nodes, and Agent calls."
     }
   },
   "workflow": {

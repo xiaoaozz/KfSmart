@@ -40,11 +40,13 @@ export interface Permission {
   group: string
 }
 
+export type PermissionString = string | { permCode: string; permName: string }
+
 export interface Role {
   id: number
   name: string
   description?: string
-  permissions: string[]
+  permissions: PermissionString[]
   userCount: number
   createTime: string
 }

@@ -1,5 +1,19 @@
 import { useState } from 'react'
-import { Button, Form, Input, Select, Table, App, Spin, Space, Tag, Switch, Popconfirm } from 'antd'
+import {
+  Button,
+  Form,
+  Input,
+  Select,
+  App,
+  Spin,
+  Space,
+  Tag,
+  Switch,
+  Popconfirm,
+  Table,
+  Descriptions,
+  Alert,
+} from 'antd'
 import {
   ArrowLeftOutlined,
   SaveOutlined,
@@ -11,16 +25,60 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { skillApi } from '@/api/skill'
-import type { SkillParam } from '@/types/skill'
+import type { SkillTestResult } from '@/types/skill'
 import styles from './SkillEditorPage.module.css'
 
-const PARAM_TYPES = ['string', 'number', 'boolean', 'object', 'array'].map((v) => ({
+const SCHEMA_TYPES = ['string', 'number', 'boolean', 'object', 'array'].map((v) => ({
   label: v,
   value: v,
 }))
 
+interface SchemaProperty {
+  name: string
+  type: string
+  description?: string
+  required: boolean
+  defaultValue?: string
+}
+
+function parseInputSchema(json?: string): SchemaProperty[] {
+  if (!json) return []
+  try {
+    const schema = JSON.parse(json)
+    const props = schema.properties ?? {}
+    const required: string[] = schema.required ?? []
+    return Object.entries(props).map(([name, def]: [string, unknown]) => ({
+      name,
+      type: (def as Record<string, unknown>).type ?? 'string',
+      description: (def as Record<string, unknown>).description ?? '',
+      required: required.includes(name),
+      defaultValue:
+        (def as Record<string, unknown>).default != null
+          ? String((def as Record<string, unknown>).default)
+          : undefined,
+    }))
+  } catch {
+    return []
+  }
+}
+
+function buildInputSchema(properties: SchemaProperty[]): string {
+  const obj: Record<string, unknown> = { type: 'object', properties: {}, required: [] }
+  const required: string[] = []
+  for (const prop of properties) {
+    ;(obj.properties as Record<string, unknown>)[prop.name] = {
+      type: prop.type,
+      ...(prop.description ? { description: prop.description } : {}),
+      ...(prop.defaultValue != null ? { default: prop.defaultValue } : {}),
+    }
+    if (prop.required) required.push(prop.name)
+  }
+  obj.required = required
+  return JSON.stringify(obj, null, 2)
+}
+
 export default function SkillEditorPage() {
-  const { id } = useParams<{ id: string }>()
+  const { skillId } = useParams<{ skillId: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { message } = App.useApp()
@@ -30,30 +88,32 @@ export default function SkillEditorPage() {
     name: string
     description?: string
     category: string
-    language: string
-    code: string
-    outputType: string
+    instruction: string
+    systemPrompt?: string
+    outputSchema?: string
+    tags?: string
   }>()
-  const [params, setParams] = useState<SkillParam[]>([])
+  const [schemaProperties, setSchemaProperties] = useState<SchemaProperty[]>([])
   const [testArgs, setTestArgs] = useState('')
-  const [testResult, setTestResult] = useState('')
+  const [testResult, setTestResult] = useState<SkillTestResult | null>(null)
   const [testing, setTesting] = useState(false)
 
   const { isLoading } = useQuery({
-    queryKey: ['skills', id],
-    queryFn: () => skillApi.get(Number(id)),
-    enabled: !!id,
+    queryKey: ['skills', skillId],
+    queryFn: () => skillApi.get(skillId!),
+    enabled: !!skillId,
     gcTime: 0,
     select: (sk) => {
       form.setFieldsValue({
         name: sk.name,
         description: sk.description,
         category: sk.category,
-        language: sk.language,
-        code: sk.code,
-        outputType: sk.outputType,
+        instruction: sk.instruction ?? '',
+        systemPrompt: sk.systemPrompt ?? '',
+        outputSchema: sk.outputSchema,
+        tags: sk.tags,
       })
-      setParams(sk.params)
+      setSchemaProperties(parseInputSchema(sk.inputSchema))
       return sk
     },
   })
@@ -62,13 +122,18 @@ export default function SkillEditorPage() {
     name: string
     description?: string
     category: string
-    language: string
-    code: string
-    outputType: string
+    instruction: string
+    systemPrompt?: string
+    outputSchema?: string
+    tags?: string
   }
 
   const saveMutation = useMutation({
-    mutationFn: (values: FormValues) => skillApi.update(Number(id), { ...values, params }),
+    mutationFn: (values: FormValues) =>
+      skillApi.update(skillId!, {
+        ...values,
+        inputSchema: buildInputSchema(schemaProperties),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
       message.success(t('skill.editor.saveSuccess'))
@@ -83,32 +148,32 @@ export default function SkillEditorPage() {
 
   const handleTest = async () => {
     setTesting(true)
-    setTestResult('')
+    setTestResult(null)
     try {
       let args: Record<string, unknown> = {}
       if (testArgs.trim()) args = JSON.parse(testArgs)
-      const res = await skillApi.test(Number(id), args)
-      setTestResult(t('skill.editor.testOutput', { output: res.output, ms: res.durationMs }))
+      const res = await skillApi.test(skillId!, args)
+      setTestResult(res)
     } catch (e) {
-      setTestResult(e instanceof Error ? e.message : t('skill.editor.testFailed'))
+      message.error(e instanceof Error ? e.message : t('skill.editor.testFailed'))
     } finally {
       setTesting(false)
     }
   }
 
-  const addParam = () => {
-    setParams((prev) => [
+  const addProperty = () => {
+    setSchemaProperties((prev) => [
       ...prev,
       { name: `param${prev.length + 1}`, type: 'string', required: false },
     ])
   }
 
-  const updateParam = (idx: number, key: keyof SkillParam, value: unknown) => {
-    setParams((prev) => prev.map((p, i) => (i === idx ? { ...p, [key]: value } : p)))
+  const updateProperty = (idx: number, key: keyof SchemaProperty, value: unknown) => {
+    setSchemaProperties((prev) => prev.map((p, i) => (i === idx ? { ...p, [key]: value } : p)))
   }
 
-  const removeParam = (idx: number) => {
-    setParams((prev) => prev.filter((_, i) => i !== idx))
+  const removeProperty = (idx: number) => {
+    setSchemaProperties((prev) => prev.filter((_, i) => i !== idx))
   }
 
   if (isLoading) {
@@ -154,31 +219,10 @@ export default function SkillEditorPage() {
               <Form.Item
                 name="category"
                 label={t('skill.editor.fieldCategory')}
-                initialValue="custom"
-                style={{ width: 140 }}
+                initialValue="通用技能"
+                style={{ width: 200 }}
               >
-                <Select
-                  options={[
-                    { label: 'HTTP', value: 'http' },
-                    { label: t('skill.editor.categoryDatabase'), value: 'database' },
-                    { label: t('skill.editor.categoryFile'), value: 'file' },
-                    { label: 'AI', value: 'ai' },
-                    { label: t('skill.editor.categoryCustom'), value: 'custom' },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item
-                name="language"
-                label={t('skill.editor.fieldLanguage')}
-                initialValue="javascript"
-                style={{ width: 130 }}
-              >
-                <Select
-                  options={[
-                    { label: 'JavaScript', value: 'javascript' },
-                    { label: 'Python', value: 'python' },
-                  ]}
-                />
+                <Input placeholder={t('skill.editor.fieldCategory')} />
               </Form.Item>
             </div>
 
@@ -186,51 +230,56 @@ export default function SkillEditorPage() {
               <Input placeholder={t('skill.editor.descPlaceholder')} />
             </Form.Item>
 
-            <Form.Item name="code" label={t('skill.editor.fieldCode')}>
+            <Form.Item name="tags" label="标签（逗号分隔）">
+              <Input placeholder="标签1, 标签2" />
+            </Form.Item>
+
+            <Form.Item name="instruction" label="技能指令 / 代码">
               <Input.TextArea
-                rows={16}
+                rows={12}
                 className={styles.codeArea}
-                placeholder="async function run(args) {&#10;  return args;&#10;}"
+                placeholder="// 在此编写技能逻辑指令"
               />
             </Form.Item>
 
-            <Form.Item
-              name="outputType"
-              label={t('skill.editor.fieldOutputType')}
-              initialValue="string"
-            >
-              <Select
-                options={[
-                  { label: 'string', value: 'string' },
-                  { label: 'number', value: 'number' },
-                  { label: 'object', value: 'object' },
-                  { label: 'array', value: 'array' },
-                ]}
+            <Form.Item name="systemPrompt" label="System Prompt">
+              <Input.TextArea
+                rows={4}
+                className={styles.codeArea}
+                placeholder="系统提示词（可选）"
+              />
+            </Form.Item>
+
+            <Form.Item name="outputSchema" label="输出 Schema (JSON)">
+              <Input.TextArea
+                rows={4}
+                className={styles.codeArea}
+                placeholder='{"type":"object","properties":{"answer":{"type":"string"}}}'
               />
             </Form.Item>
           </Form>
 
           <div className={styles.paramsSection}>
             <div className={styles.paramsHeader}>
-              <span className={styles.paramsSectionTitle}>{t('skill.editor.paramsTitle')}</span>
-              <Button size="small" icon={<PlusOutlined />} onClick={addParam}>
+              <span className={styles.paramsSectionTitle}>输入参数 Schema</span>
+              <Button size="small" icon={<PlusOutlined />} onClick={addProperty}>
                 {t('skill.editor.addParamBtn')}
               </Button>
             </div>
             <Table
               size="small"
-              dataSource={params}
+              dataSource={schemaProperties}
               rowKey={(_, i) => String(i)}
               pagination={false}
               columns={[
                 {
                   title: t('skill.editor.colParamName'),
                   dataIndex: 'name',
-                  render: (v: string, _: SkillParam, i: number) => (
+                  render: (v: string, _: SchemaProperty, i: number) => (
                     <Input
                       size="small"
                       value={v}
-                      onChange={(e) => updateParam(i, 'name', e.target.value)}
+                      onChange={(e) => updateProperty(i, 'name', e.target.value)}
                       style={{ fontFamily: 'var(--kf-font-mono)' }}
                     />
                   ),
@@ -239,12 +288,12 @@ export default function SkillEditorPage() {
                   title: t('skill.editor.colParamType'),
                   dataIndex: 'type',
                   width: 110,
-                  render: (v: string, _: SkillParam, i: number) => (
+                  render: (v: string, _: SchemaProperty, i: number) => (
                     <Select
                       size="small"
                       value={v}
-                      options={PARAM_TYPES}
-                      onChange={(val) => updateParam(i, 'type', val)}
+                      options={SCHEMA_TYPES}
+                      onChange={(val) => updateProperty(i, 'type', val)}
                       style={{ width: '100%' }}
                     />
                   ),
@@ -253,33 +302,33 @@ export default function SkillEditorPage() {
                   title: t('skill.editor.colParamRequired'),
                   dataIndex: 'required',
                   width: 60,
-                  render: (v: boolean, _: SkillParam, i: number) => (
+                  render: (v: boolean, _: SchemaProperty, i: number) => (
                     <Switch
                       size="small"
                       checked={v}
-                      onChange={(checked) => updateParam(i, 'required', checked)}
+                      onChange={(checked) => updateProperty(i, 'required', checked)}
                     />
                   ),
                 },
                 {
                   title: t('skill.editor.colParamDesc'),
                   dataIndex: 'description',
-                  render: (v: string, _: SkillParam, i: number) => (
+                  render: (v: string, _: SchemaProperty, i: number) => (
                     <Input
                       size="small"
                       value={v}
                       placeholder={t('skill.editor.paramDescPlaceholder')}
-                      onChange={(e) => updateParam(i, 'description', e.target.value)}
+                      onChange={(e) => updateProperty(i, 'description', e.target.value)}
                     />
                   ),
                 },
                 {
                   title: '',
                   width: 40,
-                  render: (_: unknown, __: SkillParam, i: number) => (
+                  render: (_: unknown, __: SchemaProperty, i: number) => (
                     <Popconfirm
                       title={t('skill.editor.deleteParamConfirm')}
-                      onConfirm={() => removeParam(i)}
+                      onConfirm={() => removeProperty(i)}
                     >
                       <Button size="small" type="text" danger icon={<DeleteOutlined />} />
                     </Popconfirm>
@@ -315,16 +364,60 @@ export default function SkillEditorPage() {
               {t('skill.editor.testRunBtn')}
             </Button>
             {testResult && (
-              <div>
-                <div className={styles.testLabel}>{t('skill.editor.testOutputLabel')}</div>
-                <pre className={styles.testOutput}>{testResult}</pre>
-              </div>
+              <>
+                <Alert
+                  type={testResult.success ? 'success' : 'error'}
+                  message={testResult.message}
+                  style={{ padding: '6px 12px' }}
+                />
+                {testResult.validation && (
+                  <Descriptions size="small" column={1} bordered>
+                    <Descriptions.Item label="校验结果">
+                      {testResult.validation.valid ? '通过' : '未通过'}
+                    </Descriptions.Item>
+                    {testResult.validation.missingFields.length > 0 && (
+                      <Descriptions.Item label="缺失字段">
+                        {testResult.validation.missingFields.join(', ')}
+                      </Descriptions.Item>
+                    )}
+                    {testResult.validation.typeErrors.length > 0 && (
+                      <Descriptions.Item label="类型错误">
+                        {testResult.validation.typeErrors.join(', ')}
+                      </Descriptions.Item>
+                    )}
+                  </Descriptions>
+                )}
+                {testResult.executionPlan && testResult.executionPlan.length > 0 && (
+                  <div>
+                    <div className={styles.testLabel}>执行计划</div>
+                    <pre className={styles.testOutput}>{testResult.executionPlan.join('\n')}</pre>
+                  </div>
+                )}
+                {testResult.warnings && testResult.warnings.length > 0 && (
+                  <div>
+                    <div className={styles.testLabel}>警告</div>
+                    {testResult.warnings.map((w, idx) => (
+                      <Tag key={idx} color="orange" style={{ marginBottom: 4 }}>
+                        {w}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+                {testResult.mockOutput && (
+                  <div>
+                    <div className={styles.testLabel}>模拟输出</div>
+                    <pre className={styles.testOutput}>
+                      {JSON.stringify(testResult.mockOutput, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </>
             )}
-            {params.length > 0 && (
+            {schemaProperties.length > 0 && (
               <div>
                 <div className={styles.testLabel}>{t('skill.editor.testParamsLabel')}</div>
                 <div className={styles.paramHints}>
-                  {params.map((p) => (
+                  {schemaProperties.map((p) => (
                     <div key={p.name} className={styles.paramHint}>
                       <Tag color="blue" style={{ fontFamily: 'var(--kf-font-mono)' }}>
                         {p.name}

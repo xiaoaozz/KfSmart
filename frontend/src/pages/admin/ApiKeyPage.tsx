@@ -113,6 +113,7 @@ export default function ApiKeyPage() {
       width: 90,
       render: (s: ApiKey['status']) => {
         const cfg = STATUS_CFG[s]
+        if (!cfg) return <Tag>—</Tag>
         return (
           <Tag color={cfg.color} icon={cfg.icon}>
             {cfg.label}

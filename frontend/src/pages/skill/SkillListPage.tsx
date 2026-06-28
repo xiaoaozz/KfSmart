@@ -1,17 +1,5 @@
 import { useState } from 'react'
-import {
-  Button,
-  Input,
-  Tag,
-  Tabs,
-  Modal,
-  Form,
-  Select,
-  App,
-  Empty,
-  Tooltip,
-  Descriptions,
-} from 'antd'
+import { Button, Input, Tag, Tabs, Modal, Form, App, Empty, Tooltip, Descriptions } from 'antd'
 import {
   PlusOutlined,
   SearchOutlined,
@@ -28,17 +16,19 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { skillApi } from '@/api/skill'
-import type { SkillSummary } from '@/types/skill'
+import type { SkillSummary, SkillTestResult } from '@/types/skill'
 import { GradientCard } from '@/components/base'
 import { PermissionButton } from '@/components/business'
 import styles from './SkillListPage.module.css'
 
-const CATEGORY_COLORS: Record<string, string> = {
-  http: 'blue',
-  database: 'green',
-  file: 'orange',
-  ai: 'purple',
-  custom: 'default',
+const CATEGORY_COLORS = ['#1677ff', '#52c41a', '#fa8c16', '#722ed1', '#13c2c2', '#eb2f96']
+
+function categoryColor(category: string): string {
+  let hash = 0
+  for (let i = 0; i < category.length; i++) {
+    hash = (hash * 31 + category.charCodeAt(i)) | 0
+  }
+  return CATEGORY_COLORS[Math.abs(hash) % CATEGORY_COLORS.length]
 }
 
 export default function SkillListPage() {
@@ -47,23 +37,10 @@ export default function SkillListPage() {
   const { message, modal } = App.useApp()
   const { t } = useTranslation()
 
-  const CATEGORY_OPTIONS = [
-    { label: t('skill.categoryAll'), value: '' },
-    { label: t('skill.categoryHttp'), value: 'http' },
-    { label: t('skill.categoryDatabase'), value: 'database' },
-    { label: t('skill.categoryFile'), value: 'file' },
-    { label: t('skill.categoryAi'), value: 'ai' },
-    { label: t('skill.categoryCustom'), value: 'custom' },
-  ]
-
-  const STATUS_CFG = {
-    draft: { color: 'default', label: t('skill.statusDraft'), icon: <EditOutlined /> },
-    published: {
-      color: 'success',
-      label: t('skill.statusPublished'),
-      icon: <CheckCircleOutlined />,
-    },
-    disabled: { color: 'error', label: t('skill.statusDisabled'), icon: <StopOutlined /> },
+  const STATUS_CFG: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
+    草稿: { color: 'default', label: t('skill.statusDraft'), icon: <EditOutlined /> },
+    已发布: { color: 'success', label: t('skill.statusPublished'), icon: <CheckCircleOutlined /> },
+    已停用: { color: 'error', label: t('skill.statusDisabled'), icon: <StopOutlined /> },
   }
 
   const [keyword, setKeyword] = useState('')
@@ -71,13 +48,12 @@ export default function SkillListPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [testSkill, setTestSkill] = useState<SkillSummary | null>(null)
   const [testArgs, setTestArgs] = useState('')
-  const [testResult, setTestResult] = useState('')
+  const [testResult, setTestResult] = useState<SkillTestResult | null>(null)
   const [testing, setTesting] = useState(false)
   const [createForm] = Form.useForm<{
     name: string
     description?: string
     category: string
-    language: string
   }>()
 
   const { data, isLoading } = useQuery({
@@ -86,32 +62,41 @@ export default function SkillListPage() {
       skillApi.list({ size: 50, keyword: keyword || undefined, category: category || undefined }),
   })
 
+  const categoryOptions = (() => {
+    const cats = (data?.records ?? [])
+      .map((s) => s.category)
+      .filter((c, i, arr) => c && arr.indexOf(c) === i)
+      .sort()
+    return [
+      { label: t('skill.categoryAll'), value: '' },
+      ...cats.map((c) => ({ label: c, value: c })),
+    ]
+  })()
+
   const createMutation = useMutation({
-    mutationFn: (v: { name: string; description?: string; category: string; language: string }) =>
+    mutationFn: (v: { name: string; description?: string; category: string }) =>
       skillApi.create({
         ...v,
-        code: `// ${v.name}\nasync function run(args) {\n  return args;\n}`,
-        params: [],
-        outputType: 'string',
+        instruction: `// ${v.name}\n// 在此编写技能逻辑`,
       }),
     onSuccess: (sk) => {
       qc.invalidateQueries({ queryKey: ['skills'] })
       setCreateOpen(false)
       createForm.resetFields()
-      navigate(`/skills/${sk.id}/edit`)
+      navigate(`/skills/${sk.skillId}/edit`)
     },
   })
 
   const publishMutation = useMutation({
-    mutationFn: (id: number) => skillApi.publish(id),
+    mutationFn: (skillId: string) => skillApi.publish(skillId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
       message.success(t('skill.publishSuccess'))
     },
   })
 
-  const disableMutation = useMutation({
-    mutationFn: (id: number) => skillApi.disable(id),
+  const toggleMutation = useMutation({
+    mutationFn: (skillId: string) => skillApi.toggleStatus(skillId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
       message.success(t('skill.disableSuccess'))
@@ -119,7 +104,7 @@ export default function SkillListPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => skillApi.delete(id),
+    mutationFn: (skillId: string) => skillApi.delete(skillId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['skills'] })
       message.success(t('skill.deleteSuccess'))
@@ -130,27 +115,27 @@ export default function SkillListPage() {
     modal.confirm({
       title: t('skill.deleteConfirm', { name: sk.name }),
       okType: 'danger',
-      onOk: () => deleteMutation.mutateAsync(sk.id),
+      onOk: () => deleteMutation.mutateAsync(sk.skillId),
     })
   }
 
   const handleTest = async () => {
     if (!testSkill) return
     setTesting(true)
-    setTestResult('')
+    setTestResult(null)
     try {
       let args: Record<string, unknown> = {}
       if (testArgs.trim()) args = JSON.parse(testArgs)
-      const res = await skillApi.test(testSkill.id, args)
-      setTestResult(t('skill.testOutput', { output: res.output, ms: res.durationMs }))
+      const res = await skillApi.test(testSkill.skillId, args)
+      setTestResult(res)
     } catch (e) {
-      setTestResult(e instanceof Error ? e.message : t('skill.testFailed'))
+      message.error(e instanceof Error ? e.message : t('skill.testFailed'))
     } finally {
       setTesting(false)
     }
   }
 
-  const tabItems = CATEGORY_OPTIONS.map((opt) => ({ key: opt.value, label: opt.label }))
+  const tabItems = categoryOptions.map((opt) => ({ key: opt.value, label: opt.label }))
   const records = data?.records ?? []
 
   return (
@@ -198,80 +183,97 @@ export default function SkillListPage() {
         <Empty description={t('skill.empty')} />
       ) : (
         <div className={styles.grid}>
-          {records.map((sk: SkillSummary, i: number) => (
-            <motion.div
-              key={sk.id}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-            >
-              <GradientCard featured={sk.status === 'published'} className={styles.card}>
-                <div className={styles.cardHeader}>
-                  <CodeOutlined style={{ color: 'var(--kf-primary)' }} />
-                  <span className={styles.cardName}>{sk.name}</span>
-                  <Tag color={STATUS_CFG[sk.status].color} icon={STATUS_CFG[sk.status].icon}>
-                    {STATUS_CFG[sk.status].label}
-                  </Tag>
-                </div>
-                <div className={styles.cardMeta}>
-                  <Tag color={CATEGORY_COLORS[sk.category]}>{sk.category}</Tag>
-                  <Tag color="default">{sk.language}</Tag>
-                  <span className={styles.runCount}>
-                    <PlayCircleOutlined /> {sk.runCount}
-                  </span>
-                </div>
-                {sk.description && <p className={styles.cardDesc}>{sk.description}</p>}
-                <div className={styles.cardActions}>
-                  <Button
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={() => navigate(`/skills/${sk.id}/edit`)}
-                  >
-                    {t('skill.editor.saveBtn') /* reuse common edit label */}
-                  </Button>
-                  <Button
-                    size="small"
-                    icon={<PlayCircleOutlined />}
-                    onClick={() => {
-                      setTestSkill(sk)
-                      setTestArgs('')
-                      setTestResult('')
-                    }}
-                  >
-                    {t('common.test')}
-                  </Button>
-                  {sk.status !== 'published' ? (
-                    <PermissionButton permission="skill:publish">
-                      <Button
-                        size="small"
-                        type="primary"
-                        style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-                        onClick={() => publishMutation.mutate(sk.id)}
-                      >
-                        {t('common.publish')}
-                      </Button>
-                    </PermissionButton>
-                  ) : (
-                    <PermissionButton permission="skill:publish">
-                      <Button size="small" danger onClick={() => disableMutation.mutate(sk.id)}>
-                        {t('common.disable')}
-                      </Button>
-                    </PermissionButton>
-                  )}
-                  <Tooltip title={t('common.delete')}>
-                    <PermissionButton permission="skill:delete">
-                      <Button
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={() => handleDelete(sk)}
-                      />
-                    </PermissionButton>
-                  </Tooltip>
-                </div>
-              </GradientCard>
-            </motion.div>
-          ))}
+          {records.map((sk: SkillSummary, i: number) => {
+            const statusCfg = STATUS_CFG[sk.status] ?? {
+              color: 'default',
+              label: sk.status,
+              icon: <CodeOutlined />,
+            }
+            const tags = (sk.tags ?? '').split(',').filter(Boolean)
+            return (
+              <motion.div
+                key={sk.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+              >
+                <GradientCard featured={sk.status === '已发布'} className={styles.card}>
+                  <div className={styles.cardHeader}>
+                    <CodeOutlined style={{ color: 'var(--kf-primary)' }} />
+                    <span className={styles.cardName}>{sk.name}</span>
+                    <Tag color={statusCfg.color} icon={statusCfg.icon}>
+                      {statusCfg.label}
+                    </Tag>
+                  </div>
+                  <div className={styles.cardMeta}>
+                    {sk.category && <Tag color={categoryColor(sk.category)}>{sk.category}</Tag>}
+                    <Tag color="default">v{sk.version}</Tag>
+                    {tags.map((tag) => (
+                      <Tag key={tag} color="blue">
+                        {tag}
+                      </Tag>
+                    ))}
+                    <span className={styles.runCount}>
+                      <PlayCircleOutlined /> {sk.callCount}
+                    </span>
+                  </div>
+                  {sk.description && <p className={styles.cardDesc}>{sk.description}</p>}
+                  <div className={styles.cardActions}>
+                    <Button
+                      size="small"
+                      icon={<EditOutlined />}
+                      onClick={() => navigate(`/skills/${sk.skillId}/edit`)}
+                    >
+                      {t('common.edit')}
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<PlayCircleOutlined />}
+                      onClick={() => {
+                        setTestSkill(sk)
+                        setTestArgs('')
+                        setTestResult(null)
+                      }}
+                    >
+                      {t('common.test')}
+                    </Button>
+                    {sk.status !== '已发布' ? (
+                      <PermissionButton permission="skill:publish">
+                        <Button
+                          size="small"
+                          type="primary"
+                          style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
+                          onClick={() => publishMutation.mutate(sk.skillId)}
+                        >
+                          {t('common.publish')}
+                        </Button>
+                      </PermissionButton>
+                    ) : (
+                      <PermissionButton permission="skill:publish">
+                        <Button
+                          size="small"
+                          danger
+                          onClick={() => toggleMutation.mutate(sk.skillId)}
+                        >
+                          {t('common.disable')}
+                        </Button>
+                      </PermissionButton>
+                    )}
+                    <Tooltip title={t('common.delete')}>
+                      <PermissionButton permission="skill:delete">
+                        <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleDelete(sk)}
+                        />
+                      </PermissionButton>
+                    </Tooltip>
+                  </div>
+                </GradientCard>
+              </motion.div>
+            )
+          })}
         </div>
       )}
 
@@ -297,23 +299,10 @@ export default function SkillListPage() {
           <Form.Item
             name="category"
             label={t('skill.fieldCategory')}
-            initialValue="custom"
+            initialValue="通用技能"
             rules={[{ required: true }]}
           >
-            <Select options={CATEGORY_OPTIONS.slice(1)} />
-          </Form.Item>
-          <Form.Item
-            name="language"
-            label={t('skill.fieldLanguage')}
-            initialValue="javascript"
-            rules={[{ required: true }]}
-          >
-            <Select
-              options={[
-                { label: 'JavaScript', value: 'javascript' },
-                { label: 'Python', value: 'python' },
-              ]}
-            />
+            <Input placeholder={t('skill.fieldCategory')} />
           </Form.Item>
         </Form>
       </Modal>
@@ -327,6 +316,7 @@ export default function SkillListPage() {
         confirmLoading={testing}
         okText={t('common.run')}
         destroyOnClose
+        width={640}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
@@ -352,9 +342,25 @@ export default function SkillListPage() {
                     whiteSpace: 'pre-wrap',
                   }}
                 >
-                  {testResult}
+                  {testResult.message}
                 </pre>
               </Descriptions.Item>
+              {testResult.executionPlan && (
+                <Descriptions.Item label="执行计划">
+                  <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                    {testResult.executionPlan.join('\n')}
+                  </pre>
+                </Descriptions.Item>
+              )}
+              {testResult.warnings && testResult.warnings.length > 0 && (
+                <Descriptions.Item label="警告">
+                  {testResult.warnings.map((w, idx) => (
+                    <div key={idx} style={{ fontSize: 12, color: 'var(--kf-warning)' }}>
+                      {w}
+                    </div>
+                  ))}
+                </Descriptions.Item>
+              )}
             </Descriptions>
           )}
         </div>

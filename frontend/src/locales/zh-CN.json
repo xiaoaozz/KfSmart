@@ -67,6 +67,16 @@
     "roleUser": "用户"
   },
   "auth": {
+    "brand": {
+      "tagline": "AI Knowledge\nManagement",
+      "subTagline": "智能文档处理 · RAG 语义检索 · AI 对话增强",
+      "features": {
+        "kb": "企业级知识库管理",
+        "vector": "向量语义检索",
+        "chat": "流式 AI 对话",
+        "workflow": "可视化工作流编排"
+      }
+    },
     "login": {
       "title": "欢迎回来",
       "subtitle": "登录 KfSmart AI Platform",
@@ -265,6 +275,8 @@
       "deleteFailed": "删除失败，请重试",
       "resetPwTitle": "密码已重置",
       "resetPwContent": "新密码：{{password}}，请告知用户尽快登录修改。",
+      "resetPwModalTitle": "重置用户密码",
+      "resetPwModalDesc": "将把该用户的密码重置为新生成的随机密码。",
       "updateSuccess": "已更新",
       "deleteSuccess": "已删除"
     },
@@ -718,7 +730,27 @@
       "connectedTag": "已接入",
       "descContextWindow": "上下文窗口",
       "descInputPrice": "输入价格",
-      "descOutputPrice": "输出价格"
+      "descOutputPrice": "输出价格",
+      "searchPlaceholder": "搜索模型",
+      "paramTemperature": "温度",
+      "paramMaxTokens": "最大 Token",
+      "paramTopP": "Top P",
+      "providerDeepseek": "DeepSeek",
+      "providerOpenai": "OpenAI",
+      "providerQwen": "通义千问",
+      "providerZhipu": "智谱 AI",
+      "providerErnie": "文心一言",
+      "providerAnthropic": "Anthropic",
+      "providerOllama": "Ollama",
+      "providerOther": "其他",
+      "categoryEmbedding": "向量模型",
+      "categoryMultimodal": "多模态模型",
+      "categoryCode": "代码模型",
+      "categoryLocal": "本地模型",
+      "categoryChat": "对话模型",
+      "statusActive": "激活中",
+      "statusAvailable": "可用",
+      "autoDescription": "{{modelName}} 由 {{provider}} API Key 配置提供，适用于{{category}}、工作流 LLM 节点和 Agent 调用。"
     }
   },
   "workflow": {

@@ -2,12 +2,16 @@ import { Form, Input, Button, App, Progress } from 'antd'
 import { LockOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { profileApi } from '@/api/profile'
+import { useAuthStore } from '@/stores/auth'
 import styles from './Section.module.css'
 
 export default function PasswordSection() {
   const { message } = App.useApp()
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const clearTokens = useAuthStore((s) => s.clearTokens)
   const [form] = Form.useForm<{ oldPassword: string; newPassword: string; confirm: string }>()
   const newPw = Form.useWatch('newPassword', form) ?? ''
 
@@ -34,6 +38,9 @@ export default function PasswordSection() {
     onSuccess: () => {
       message.success(t('profile.password.updateSuccess'))
       form.resetFields()
+      // 清除登录态并跳转到登录页
+      clearTokens()
+      navigate('/login', { replace: true })
     },
   })
 

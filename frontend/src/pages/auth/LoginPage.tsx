@@ -6,12 +6,14 @@ import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { authApi, type LoginParams } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { useQueryClient } from '@tanstack/react-query'
 import { GradientButton } from '@/components/base'
 import styles from './LoginPage.module.css'
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const setTokens = useAuthStore((s) => s.setTokens)
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const { message } = App.useApp()
@@ -28,6 +30,8 @@ export default function LoginPage() {
     try {
       const result = await authApi.login(values)
       setTokens(result.token, result.refreshToken)
+      // 清除用户信息缓存，确保路由守卫立即获取最新角色信息
+      queryClient.invalidateQueries({ queryKey: ['users', 'me'] })
       message.success(t('auth.login.success'))
       navigate(from, { replace: true })
     } catch (err: unknown) {

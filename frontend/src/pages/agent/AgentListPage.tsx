@@ -65,7 +65,7 @@ function AgentCard({
             {t('agent.metaModel', { name: agent.model.name })}
           </span>
           <span className={styles.metaItem}>
-            {t('agent.metaKb', { count: agent.knowledgeBaseIds.length })}
+            {t('agent.metaKb', { count: (agent.knowledgeBaseIds ?? []).length })}
           </span>
           <span className={styles.metaItem}>v{agent.version}</span>
         </div>

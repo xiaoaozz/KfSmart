@@ -67,6 +67,16 @@
     "roleUser": "ユーザー"
   },
   "auth": {
+    "brand": {
+      "tagline": "AI Knowledge\nManagement",
+      "subTagline": "インテリジェントドキュメント処理 · RAG 意味検索 · AI チャット強化",
+      "features": {
+        "kb": "エンタープライズナレッジベース管理",
+        "vector": "ベクトル意味検索",
+        "chat": "ストリーミング AI チャット",
+        "workflow": "ビジュアルワークフローオーケストレーション"
+      }
+    },
     "login": {
       "title": "おかえりなさい",
       "subtitle": "KfSmart AI Platform にログイン",
@@ -240,7 +250,7 @@
   "admin": {
     "users": {
       "title": "ユーザー管理",
-      "searchPlaceholder": "ユーザー名を検索…",
+      "searchPlaceholder": "ユーザー名を検索",
       "filterAll": "すべて",
       "colUser": "ユーザー",
       "colRole": "ロール",
@@ -265,6 +275,8 @@
       "deleteFailed": "削除に失敗しました。再試行してください",
       "resetPwTitle": "パスワードをリセットしました",
       "resetPwContent": "新しいパスワード：{{password}} — ユーザーにログイン後すぐに変更するよう伝えてください。",
+      "resetPwModalTitle": "ユーザーパスワードをリセット",
+      "resetPwModalDesc": "このユーザーのパスワードを、新しく生成されたランダムパスワードにリセットします。",
       "updateSuccess": "更新しました",
       "deleteSuccess": "削除しました"
     },
@@ -733,7 +745,27 @@
       "connectedTag": "接続済み",
       "descContextWindow": "コンテキストウィンドウ",
       "descInputPrice": "入力価格",
-      "descOutputPrice": "出力価格"
+      "descOutputPrice": "出力価格",
+      "searchPlaceholder": "モデルを検索…",
+      "paramTemperature": "温度",
+      "paramMaxTokens": "最大トークン",
+      "paramTopP": "Top P",
+      "providerDeepseek": "DeepSeek",
+      "providerOpenai": "OpenAI",
+      "providerQwen": "通義千問",
+      "providerZhipu": "智譜 AI",
+      "providerErnie": "文心一言",
+      "providerAnthropic": "Anthropic",
+      "providerOllama": "Ollama",
+      "providerOther": "その他",
+      "categoryEmbedding": "埋め込みモデル",
+      "categoryMultimodal": "マルチモーダル",
+      "categoryCode": "コードモデル",
+      "categoryLocal": "ローカルモデル",
+      "categoryChat": "チャットモデル",
+      "statusActive": "アクティブ",
+      "statusAvailable": "利用可能",
+      "autoDescription": "{{modelName}} は {{provider}} API Key 設定で提供され、{{category}}、ワークフロー LLM ノード、Agent 呼び出しに適しています。"
     }
   },
   "workflow": {

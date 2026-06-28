@@ -9,7 +9,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import type { DataNode } from 'antd/es/tree'
-import { adminRoleApi, type Role, type Permission } from '@/api/admin'
+import { adminRoleApi, type Role, type Permission, type PermissionString } from '@/api/admin'
 import styles from './AdminPage.module.css'
 
 function buildPermTree(permissions: Permission[]): DataNode[] {
@@ -91,7 +91,9 @@ export default function RoleManagePage() {
   const openEdit = (r: Role) => {
     setEditRole(r)
     form.setFieldsValue({ name: r.name, description: r.description })
-    setCheckedKeys(r.permissions)
+    setCheckedKeys(
+      r.permissions?.map((p: PermissionString) => (typeof p === 'string' ? p : p.permCode)) ?? [],
+    )
     setFormOpen(true)
   }
 
@@ -143,12 +145,12 @@ export default function RoleManagePage() {
                 </div>
               )}
               <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {r.permissions.slice(0, 8).map((p) => (
-                  <Tag key={p} style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 11 }}>
-                    {p}
+                {(r.permissions ?? []).slice(0, 8).map((p: PermissionString, i: number) => (
+                  <Tag key={i} style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 11 }}>
+                    {typeof p === 'string' ? p : p.permCode}
                   </Tag>
                 ))}
-                {r.permissions.length > 8 && <Tag>+{r.permissions.length - 8}</Tag>}
+                {(r.permissions ?? []).length > 8 && <Tag>+{r.permissions.length - 8}</Tag>}
               </div>
             </div>
             <Tag color="blue">{t('common.userCount', { count: r.userCount })}</Tag>

@@ -31,10 +31,11 @@ import type { McpTool } from '@/types/skill'
 import { PermissionButton } from '@/components/business'
 import styles from './McpToolPage.module.css'
 
-const TRANSPORT_OPTIONS = [
+const TYPE_OPTIONS = [
+  { label: 'MCP', value: 'MCP' },
+  { label: 'HTTP', value: 'HTTP' },
+  { label: 'SSE', value: 'SSE' },
   { label: 'stdio', value: 'stdio' },
-  { label: 'SSE', value: 'sse' },
-  { label: 'HTTP', value: 'http' },
 ]
 
 export default function McpToolPage() {
@@ -42,23 +43,23 @@ export default function McpToolPage() {
   const { message, modal } = App.useApp()
   const { t } = useTranslation()
 
-  const STATUS_CFG = {
-    connected: {
+  const STATUS_CFG: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
+    在线: {
       color: 'success',
       label: t('skill.mcp.statusConnected'),
       icon: <CheckCircleOutlined />,
     },
-    disconnected: {
+    离线: {
       color: 'default',
       label: t('skill.mcp.statusDisconnected'),
       icon: <DisconnectOutlined />,
     },
-    error: {
+    错误: {
       color: 'error',
       label: t('skill.mcp.statusError'),
       icon: <ExclamationCircleOutlined />,
     },
-    testing: {
+    测试中: {
       color: 'processing',
       label: t('skill.mcp.statusTesting'),
       icon: <SyncOutlined spin />,
@@ -70,19 +71,27 @@ export default function McpToolPage() {
   const [form] = Form.useForm<{
     name: string
     description?: string
-    transport: string
+    type: string
     endpoint: string
     apiKey?: string
   }>()
   const [testingId, setTestingId] = useState<number | null>(null)
 
-  const { data: tools, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['mcp-tools'],
     queryFn: () => mcpApi.list(),
   })
 
+  const tools = data?.records ?? []
+
   const createMutation = useMutation({
-    mutationFn: (v: Parameters<typeof mcpApi.create>[0]) => mcpApi.create(v),
+    mutationFn: (v: {
+      name: string
+      description?: string
+      type: string
+      endpoint: string
+      apiKey?: string
+    }) => mcpApi.create(v),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mcp-tools'] })
       setFormOpen(false)
@@ -92,7 +101,13 @@ export default function McpToolPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (v: Parameters<typeof mcpApi.update>[1]) => mcpApi.update(editTarget!.id, v),
+    mutationFn: (v: {
+      name: string
+      description?: string
+      type: string
+      endpoint: string
+      apiKey?: string
+    }) => mcpApi.update(editTarget!.toolId, v),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mcp-tools'] })
       setFormOpen(false)
@@ -103,7 +118,7 @@ export default function McpToolPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => mcpApi.delete(id),
+    mutationFn: (toolId: string) => mcpApi.delete(toolId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['mcp-tools'] })
       message.success(t('skill.mcp.deleteSuccess'))
@@ -114,7 +129,7 @@ export default function McpToolPage() {
     modal.confirm({
       title: t('skill.mcp.deleteConfirm', { name: tool.name }),
       okType: 'danger',
-      onOk: () => deleteMutation.mutateAsync(tool.id),
+      onOk: () => deleteMutation.mutateAsync(tool.toolId),
     })
   }
 
@@ -129,7 +144,7 @@ export default function McpToolPage() {
     form.setFieldsValue({
       name: tool.name,
       description: tool.description,
-      transport: tool.transport,
+      type: tool.type,
       endpoint: tool.endpoint,
     })
     setFormOpen(true)
@@ -138,10 +153,10 @@ export default function McpToolPage() {
   const handleTest = async (tool: McpTool) => {
     setTestingId(tool.id)
     try {
-      const res = await mcpApi.test(tool.id)
+      const res = await mcpApi.test(tool.toolId, {})
       if (res.success) {
         qc.invalidateQueries({ queryKey: ['mcp-tools'] })
-        message.success(t('skill.mcp.testSuccess', { count: res.toolCount }))
+        message.success(t('skill.mcp.testSuccess'))
       } else {
         message.error(t('skill.mcp.testFailed', { msg: res.message }))
       }
@@ -185,12 +200,12 @@ export default function McpToolPage() {
             <div key={i} className={styles.skeleton} />
           ))}
         </div>
-      ) : !tools?.length ? (
+      ) : !tools.length ? (
         <Empty description={t('skill.mcp.empty')} />
       ) : (
         <div className={styles.list}>
           {tools.map((tool: McpTool, i: number) => {
-            const cfg = STATUS_CFG[tool.status] ?? STATUS_CFG.disconnected
+            const cfg = STATUS_CFG[tool.status] ?? STATUS_CFG['离线']
             return (
               <motion.div
                 key={tool.id}
@@ -202,9 +217,9 @@ export default function McpToolPage() {
                 <div className={styles.cardHeader}>
                   <Badge
                     status={
-                      tool.status === 'connected'
+                      tool.status === '在线'
                         ? 'success'
-                        : tool.status === 'error'
+                        : tool.status === '错误'
                           ? 'error'
                           : 'default'
                     }
@@ -213,21 +228,21 @@ export default function McpToolPage() {
                   <Tag color={cfg.color} icon={cfg.icon}>
                     {cfg.label}
                   </Tag>
-                  {tool.toolCount > 0 && (
-                    <Tag color="blue">{t('skill.mcp.toolCount', { count: tool.toolCount })}</Tag>
+                  {tool.callCount > 0 && (
+                    <Tag color="blue">{t('skill.mcp.toolCount', { count: tool.callCount })}</Tag>
                   )}
                 </div>
                 {tool.description && <div className={styles.cardDesc}>{tool.description}</div>}
                 <Descriptions size="small" column={2}>
                   <Descriptions.Item label={t('skill.mcp.descTransport')}>
-                    {tool.transport.toUpperCase()}
+                    {tool.type}
                   </Descriptions.Item>
                   <Descriptions.Item label={t('skill.mcp.descEndpoint')}>
                     <span className={styles.endpoint}>{tool.endpoint}</span>
                   </Descriptions.Item>
-                  {tool.lastTestTime && (
+                  {tool.lastTestAt && (
                     <Descriptions.Item label={t('skill.mcp.descLastTest')}>
-                      {new Date(tool.lastTestTime).toLocaleString()}
+                      {new Date(tool.lastTestAt).toLocaleString()}
                     </Descriptions.Item>
                   )}
                 </Descriptions>
@@ -290,13 +305,13 @@ export default function McpToolPage() {
           </Form.Item>
           <div style={{ display: 'flex', gap: 12 }}>
             <Form.Item
-              name="transport"
+              name="type"
               label={t('skill.mcp.fieldTransport')}
-              initialValue="sse"
+              initialValue="MCP"
               style={{ width: 120 }}
               rules={[{ required: true }]}
             >
-              <Select options={TRANSPORT_OPTIONS} />
+              <Select options={TYPE_OPTIONS} />
             </Form.Item>
             <Form.Item
               name="endpoint"

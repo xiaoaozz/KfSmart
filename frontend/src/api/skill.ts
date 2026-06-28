@@ -3,130 +3,163 @@ import { http } from './http'
 import type {
   Skill,
   SkillSummary,
-  SkillParam,
   Prompt,
   PromptSummary,
+  PromptVersion,
   McpTool,
-  ModelProvider,
+  ModelConfig,
+  SkillTestResult,
 } from '@/types/skill'
 
 interface PageResult<T> {
   records: T[]
   total: number
-  current: number
+  page: number
   size: number
+  totalPages: number
+  hasNext: boolean
+  nextCursor: string | null
 }
 
 const data = <T>(r: AxiosResponse<T>) => r.data
 
 // ---- Skill ----
 export const skillApi = {
-  list(params: { current?: number; size?: number; keyword?: string; category?: string }) {
+  list(params: {
+    page?: number
+    size?: number
+    keyword?: string
+    category?: string
+    status?: string
+  }) {
     return http.get<PageResult<SkillSummary>>('/skills', { params }).then(data)
   },
-  get(id: number) {
-    return http.get<Skill>(`/skills/${id}`).then(data)
+  get(skillId: string) {
+    return http.get<Skill>(`/skills/${skillId}`).then(data)
   },
   create(payload: {
     name: string
     description?: string
     category: string
-    language: string
-    code: string
-    params: SkillParam[]
-    outputType: string
+    instruction?: string
+    systemPrompt?: string
+    inputSchema?: string
+    outputSchema?: string
   }) {
     return http.post<Skill>('/skills', payload).then(data)
   },
   update(
-    id: number,
+    skillId: string,
     payload: Partial<{
       name: string
       description: string
-      code: string
-      params: SkillParam[]
-      outputType: string
+      category: string
+      instruction: string
+      systemPrompt: string
+      inputSchema: string
+      outputSchema: string
+      runtimeConfig: string
+      tags: string
+      promptRefs: string
+      mcpToolRefs: string
     }>,
   ) {
-    return http.put<Skill>(`/skills/${id}`, payload).then(data)
+    return http.put<Skill>(`/skills/${skillId}`, payload).then(data)
   },
-  publish(id: number) {
-    return http.post<Skill>(`/skills/${id}/publish`).then(data)
+  publish(skillId: string) {
+    return http.post<Skill>(`/skills/${skillId}/publish`).then(data)
   },
-  disable(id: number) {
-    return http.post<Skill>(`/skills/${id}/disable`).then(data)
+  toggleStatus(skillId: string) {
+    return http.put<Skill>(`/skills/${skillId}/toggle-status`).then(data)
   },
-  delete(id: number) {
-    return http.delete<Skill>(`/skills/${id}`).then(data)
+  delete(skillId: string) {
+    return http.delete<void>(`/skills/${skillId}`).then(data)
   },
-  test(id: number, args: Record<string, unknown>) {
-    return http
-      .post<{ output: string; durationMs: number }>(`/skills/${id}/test`, { args })
-      .then(data)
+  test(skillId: string, args: Record<string, unknown>) {
+    return http.post<SkillTestResult>(`/skills/${skillId}/test`, args).then(data)
   },
 }
 
 // ---- Prompt ----
 export const promptApi = {
-  list(params: { current?: number; size?: number; keyword?: string; category?: string }) {
+  list(params: { page?: number; size?: number; keyword?: string; category?: string }) {
     return http.get<PageResult<PromptSummary>>('/resources/prompts', { params }).then(data)
   },
-  get(id: number) {
-    return http.get<Prompt>(`/resources/prompts/${id}`).then(data)
+  get(templateId: string) {
+    return http.get<Prompt>(`/resources/prompts/${templateId}`).then(data)
   },
-  create(payload: { name: string; description?: string; category: string; content: string }) {
+  create(payload: {
+    name: string
+    description?: string
+    category: string
+    content: string
+    systemContent?: string
+  }) {
     return http.post<Prompt>('/resources/prompts', payload).then(data)
   },
   update(
-    id: number,
+    templateId: string,
     payload: Partial<{
       name: string
       description: string
       category: string
       content: string
-      note: string
+      systemContent: string
+      variables: string
+      tags: string
+      status: string
     }>,
   ) {
-    return http.put<Prompt>(`/resources/prompts/${id}`, payload).then(data)
+    return http.put<Prompt>(`/resources/prompts/${templateId}`, payload).then(data)
   },
-  delete(id: number) {
-    return http.delete<Prompt>(`/resources/prompts/${id}`).then(data)
+  delete(templateId: string) {
+    return http.delete<void>(`/resources/prompts/${templateId}`).then(data)
   },
-  histories(id: number) {
-    return http.get<Prompt['versions']>(`/resources/prompts/${id}/histories`).then(data)
+  histories(templateId: string) {
+    return http.get<PromptVersion[]>(`/resources/prompts/${templateId}/histories`).then(data)
+  },
+  categories() {
+    return http.get<string[]>('/resources/prompts/categories').then(data)
   },
 }
 
 // ---- MCP Tool ----
 export const mcpApi = {
-  list() {
-    return http.get<McpTool[]>('/resources/mcp-tools').then(data)
+  list(params?: { page?: number; size?: number; keyword?: string }) {
+    return http.get<PageResult<McpTool>>('/resources/mcp-tools', { params }).then(data)
   },
   create(payload: {
     name: string
     description?: string
-    transport: string
+    type?: string
     endpoint: string
+    authType?: string
+    authHeaderName?: string
     apiKey?: string
+    inputSchema?: string
   }) {
     return http.post<McpTool>('/resources/mcp-tools', payload).then(data)
   },
   update(
-    id: number,
-    payload: Partial<{ name: string; description: string; endpoint: string; apiKey: string }>,
+    toolId: string,
+    payload: Partial<{
+      name: string
+      description: string
+      endpoint: string
+      authType: string
+      authHeaderName: string
+      apiKey: string
+      inputSchema: string
+    }>,
   ) {
-    return http.put<McpTool>(`/resources/mcp-tools/${id}`, payload).then(data)
+    return http.put<McpTool>(`/resources/mcp-tools/${toolId}`, payload).then(data)
   },
-  delete(id: number) {
-    return http.delete<McpTool>(`/resources/mcp-tools/${id}`).then(data)
+  delete(toolId: string) {
+    return http.delete<void>(`/resources/mcp-tools/${toolId}`).then(data)
   },
-  test(id: number) {
+  test(toolId: string, args: Record<string, unknown>) {
     return http
-      .post<{
-        success: boolean
-        message: string
-        toolCount: number
-      }>(`/resources/mcp-tools/${id}/test`)
+      .post<{ success: boolean; message: string }>(`/resources/mcp-tools/${toolId}/test`, args)
       .then(data)
   },
 }
@@ -134,6 +167,6 @@ export const mcpApi = {
 // ---- Model Config (read-only) ----
 export const modelApi = {
   list() {
-    return http.get<ModelProvider[]>('/resources/models').then(data)
+    return http.get<ModelConfig[]>('/resources/models').then(data)
   },
 }
