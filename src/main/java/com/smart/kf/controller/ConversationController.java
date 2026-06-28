@@ -142,6 +142,31 @@ public class ConversationController {
         }
     }
 
+    @DeleteMapping("/messages")
+    public ResponseEntity<?> truncateMessages(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("conversation_id") String conversationId,
+            @RequestParam("keep_count") int keepCount) {
+        String username = null;
+        try {
+            User user = getCurrentUser(token);
+            username = user.getUsername();
+            String userId = buildPrimaryUserKey(user);
+            ensureLegacyConversationIndex(user);
+            chatHandler.truncateConversationHistory(userId, conversationId, keepCount);
+            LogUtils.logBusiness("TRUNCATE_MESSAGES", username,
+                    "截断会话历史成功, conversationId=%s, keepCount=%d", conversationId, keepCount);
+            return ResponseEntity.ok(successResponse("截断成功", null));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("TRUNCATE_MESSAGES", username, "截断会话历史异常: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "服务器内部错误: " + e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/sessions")
     public ResponseEntity<?> deleteSession(@RequestHeader("Authorization") String token,
                                            @RequestParam("conversation_id") String conversationId) {

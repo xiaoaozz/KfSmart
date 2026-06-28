@@ -59,6 +59,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             logger.info("接收到消息，用户ID: {}，会话ID: {}，消息长度: {}",
                     userId, session.getId(), payload.length());
 
+            if ("ping".equals(payload)) {
+                session.sendMessage(new TextMessage("pong"));
+                return;
+            }
+
             String messageText = payload;
             String conversationId = null;
             Long apiKeyConfigId = null;

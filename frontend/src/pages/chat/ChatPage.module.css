@@ -84,7 +84,7 @@
 
 .convActions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   opacity: 0;
   transition: opacity 0.15s;
   flex-shrink: 0;
@@ -95,17 +95,29 @@
   opacity: 1;
 }
 
+/* pinned items always show the pin icon so users know it's pinned */
+.convActions:has(.pinned) {
+  opacity: 1;
+}
+
 .convAction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   font-size: 13px;
   color: var(--kf-muted-foreground);
-  padding: 2px;
-  border-radius: 3px;
-  transition: color 0.15s;
+  border-radius: var(--kf-radius-xs);
+  transition:
+    color 0.15s,
+    background 0.15s;
   cursor: pointer;
 }
 
 .convAction:hover {
   color: var(--kf-accent);
+  background: var(--kf-muted);
 }
 
 .convAction.pinned {
@@ -114,6 +126,7 @@
 
 .convDel:hover {
   color: var(--kf-danger) !important;
+  background: color-mix(in srgb, var(--kf-danger) 12%, transparent) !important;
 }
 
 /* ------------------------------------------------------------------ Main */
@@ -290,6 +303,99 @@
   margin: 8px 0;
   padding: 4px 0 4px 12px;
   color: var(--kf-muted-foreground);
+}
+
+/* ---- Message action buttons (copy / edit) ---- */
+.userMsgWrap,
+.aiMsgWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msgActions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.userMsgWrap .msgActions {
+  justify-content: flex-end;
+}
+
+.aiMsgWrap .msgActions {
+  justify-content: flex-start;
+}
+
+.bubble:hover .msgActions {
+  opacity: 1;
+}
+
+.msgActionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--kf-muted-foreground);
+  border-radius: var(--kf-radius-xs);
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.msgActionBtn:hover:not(:disabled) {
+  color: var(--kf-accent);
+  background: var(--kf-muted);
+}
+
+.msgActionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Inline edit area ---- */
+.editArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editTextarea {
+  border-radius: var(--kf-radius-sm) !important;
+  resize: none !important;
+}
+
+.editBtns {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Citation reference chip */
+.citationRef {
+  display: inline-block;
+  background: color-mix(in srgb, var(--kf-accent) 12%, transparent);
+  color: var(--kf-accent);
+  border: 1px solid color-mix(in srgb, var(--kf-accent) 30%, transparent);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background 0.15s;
+  vertical-align: baseline;
+}
+
+.citationRef:hover {
+  background: color-mix(in srgb, var(--kf-accent) 22%, transparent);
 }
 
 /* Streaming cursor */
