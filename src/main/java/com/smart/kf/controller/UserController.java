@@ -11,6 +11,7 @@ import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.LoginRecordRepository;
 import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
+import com.smart.kf.service.AvatarService;
 import com.smart.kf.service.EmailService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.UserService;
@@ -26,9 +27,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -47,8 +46,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/users")
 public class UserController {
 
-    private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
-    private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
+    @Autowired
+    private AvatarService avatarService;
 
     @Autowired
     private UserService userService;
@@ -407,16 +406,9 @@ public class UserController {
             User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
 
-            validateAvatarFile(file);
+            avatarService.validateAvatarFile(file);
 
-            String extension = getAvatarExtension(file.getContentType());
-            Path avatarDir = Path.of("data", "avatars");
-            Files.createDirectories(avatarDir);
-            String fileName = "user-" + user.getId() + extension;
-            Path target = avatarDir.resolve(fileName);
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-
-            String avatarUrl = "/avatars/" + fileName;
+            String avatarUrl = avatarService.saveAvatarFile(file, user.getId(), Path.of("data", "avatars"));
             user.setAvatarUrl(avatarUrl);
             userRepository.save(user);
 
@@ -848,31 +840,6 @@ public class UserController {
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
-
-    private void validateAvatarFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new CustomException("头像文件不能为空", HttpStatus.BAD_REQUEST);
-        }
-        if (file.getSize() > MAX_AVATAR_SIZE) {
-            throw new CustomException("头像文件不能超过2MB", HttpStatus.BAD_REQUEST);
-        }
-        String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_AVATAR_TYPES.contains(contentType.toLowerCase())) {
-            throw new CustomException("仅支持 JPG、PNG、WebP、GIF 格式头像", HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    private String getAvatarExtension(String contentType) {
-        if (contentType == null) {
-            return ".png";
-        }
-        return switch (contentType.toLowerCase()) {
-            case "image/jpeg" -> ".jpg";
-            case "image/webp" -> ".webp";
-            case "image/gif" -> ".gif";
-            default -> ".png";
-        };
-    }
 
     private Map<String, Object> buildUsageStatistics(User user, int days) {
         LocalDate today = LocalDate.now();

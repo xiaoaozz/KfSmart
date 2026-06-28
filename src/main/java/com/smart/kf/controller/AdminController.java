@@ -8,12 +8,15 @@ import com.smart.kf.exception.CustomException;
 import com.smart.kf.model.*;
 import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.repository.PermissionRepository;
 import com.smart.kf.repository.RoleRepository;
+import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.DocumentService;
 import com.smart.kf.service.FileTypeValidationService;
+import com.smart.kf.service.I18nTranslationService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.SystemActivityService;
 import com.smart.kf.service.UserService;
@@ -73,7 +76,10 @@ public class AdminController {
 
     @Autowired
     private UserService userService;
-    
+
+    @Autowired
+    private I18nTranslationService i18nTranslationService;
+
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
     
@@ -110,6 +116,12 @@ public class AdminController {
 
     @Autowired
     private SystemActivityService systemActivityService;
+
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+
+    @Autowired
+    private UserFavoriteRepository userFavoriteRepository;
 
     /**
      * 获取所有用户列表
@@ -197,6 +209,22 @@ public class AdminController {
             if (user.getRole() == User.Role.ADMIN) {
                 throw new CustomException("不能删除管理员账号", HttpStatus.FORBIDDEN);
             }
+            User admin = userRepository.findByUsername(adminUsername)
+                    .orElseThrow(() -> new CustomException("管理员账号不存在", HttpStatus.NOT_FOUND));
+
+            // 删除用户私有数据
+            userFavoriteRepository.deleteAll(userFavoriteRepository.findByUserOrderByUpdatedAtDesc(user));
+            conversationRepository.deleteAll(conversationRepository.findByUserId(userId));
+
+            // 将该用户创建的共享资源转让给执行删除的管理员
+            List<OrganizationTag> ownedTags = organizationTagRepository.findByCreatedBy(user);
+            ownedTags.forEach(tag -> tag.setCreatedBy(admin));
+            organizationTagRepository.saveAll(ownedTags);
+
+            List<KnowledgeBase> ownedKbs = knowledgeBaseRepository.findByCreatedBy(user);
+            ownedKbs.forEach(kb -> kb.setCreatedBy(admin));
+            knowledgeBaseRepository.saveAll(ownedKbs);
+
             userRepository.delete(user);
             LogUtils.logUserOperation(adminUsername, "ADMIN_DELETE_USER", "user:" + userId, "SUCCESS");
             return ResponseEntity.ok(Map.of("code", 200, "message", "用户删除成功"));
@@ -1015,7 +1043,43 @@ public class AdminController {
                     .body(Map.of("code", 500, "message", "删除组织标签失败: " + e.getMessage()));
         }
     }
-    
+
+    /**
+     * 获取指定组织标签的所有翻译
+     */
+    @GetMapping("/org-tags/{tagId}/i18n")
+    public ResponseEntity<?> getOrgTagI18n(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String tagId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        validateAdmin(adminUsername);
+        try {
+            return ResponseEntity.ok(Map.of("code", 200, "message", "ok", "data", userService.getOrganizationTagI18n(tagId)));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取翻译失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 保存或更新组织标签的某一语言翻译
+     */
+    @PutMapping("/org-tags/{tagId}/i18n")
+    public ResponseEntity<?> upsertOrgTagI18n(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String tagId,
+            @RequestBody OrgTagI18nRequest request) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        validateAdmin(adminUsername);
+        try {
+            var saved = userService.upsertOrganizationTagI18n(tagId, request.lang(), request.name(), request.description());
+            return ResponseEntity.ok(Map.of("code", 200, "message", "翻译已保存", "data", saved));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "保存翻译失败: " + e.getMessage()));
+        }
+    }
+
     /**
      * 获取用户列表
      */
@@ -1646,6 +1710,9 @@ public class AdminController {
     /** 组织标签更新请求记录类 */
     public record OrgTagUpdateRequest(String name, String description, String parentTag) {}
 
+    /** 组织标签 i18n 写入请求体 */
+    public record OrgTagI18nRequest(String lang, String name, String description) {}
+
     private long getRedisLong(String key) {
         try {
             String value = redisTemplate.opsForValue().get(key);
@@ -1696,5 +1763,16 @@ public class AdminController {
             LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", "system", "统计热门问题失败", e);
         }
         return questions;
+    }
+
+    /**
+     * Trigger background translation of all KB / Agent / OrgTag entries that
+     * have no i18n record yet.  Returns immediately; translation happens async.
+     */
+    @PostMapping("/i18n/sync")
+    @PreAuthorize("hasAuthority('system:admin')")
+    public ResponseEntity<?> syncI18n() {
+        i18nTranslationService.syncAllI18n();
+        return ResponseEntity.ok(Map.of("code", 200, "message", "i18n sync started in background"));
     }
 }

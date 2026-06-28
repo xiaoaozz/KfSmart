@@ -1,12 +1,16 @@
 package com.smart.kf.service;
 
+import com.smart.kf.config.LocaleContext;
 import com.smart.kf.exception.CustomException;
+import com.smart.kf.service.I18nTranslationService;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.LoginRecord;
 import com.smart.kf.model.OrganizationTag;
+import com.smart.kf.model.OrganizationTagI18n;
 import com.smart.kf.model.User;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.LoginRecordRepository;
+import com.smart.kf.repository.OrganizationTagI18nRepository;
 import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.utils.pagination.PageQuery;
@@ -54,6 +58,9 @@ public class UserService {
     
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
+
+    @Autowired
+    private OrganizationTagI18nRepository organizationTagI18nRepository;
     
     @Autowired
     private FileUploadRepository fileUploadRepository;
@@ -63,6 +70,9 @@ public class UserService {
 
     @Autowired
     private LoginRecordRepository loginRecordRepository;
+
+    @Autowired
+    private I18nTranslationService i18nTranslationService;
 
     /*
      *
@@ -340,10 +350,8 @@ public class UserService {
         tag.setCreatedBy(creator);
         
         OrganizationTag savedTag = organizationTagRepository.save(tag);
-        
-        // 清除标签缓存，因为层级关系可能变化
+        i18nTranslationService.translateOrgTagAsync(tagId, name, description);
         orgTagCacheService.invalidateAllEffectiveTagsCache();
-        
         return savedTag;
     }
     
@@ -557,25 +565,54 @@ public class UserService {
      */
     private List<Map<String, Object>> buildTagTreeRecursive(List<OrganizationTag> tags) {
         List<Map<String, Object>> result = new ArrayList<>();
-        
+        String lang = LocaleContext.get();
+
         for (OrganizationTag tag : tags) {
             Map<String, Object> node = new HashMap<>();
             node.put("tagId", tag.getTagId());
-            node.put("name", tag.getName());
-            node.put("description", tag.getDescription());
-            node.put("parentTag", tag.getParentTag()); // 添加父标签字段
-            
-            // 获取子标签
+            node.put("parentTag", tag.getParentTag());
+
+            String name = tag.getName();
+            String description = tag.getDescription();
+            if (lang != null && !lang.equals("zh-CN")) {
+                var i18nOpt = organizationTagI18nRepository.findByTagIdAndLang(tag.getTagId(), lang);
+                if (i18nOpt.isPresent()) {
+                    OrganizationTagI18n i18n = i18nOpt.get();
+                    if (i18n.getName() != null && !i18n.getName().isBlank()) name = i18n.getName();
+                    if (i18n.getDescription() != null && !i18n.getDescription().isBlank()) description = i18n.getDescription();
+                }
+            }
+            node.put("name", name);
+            node.put("description", description);
+
             List<OrganizationTag> children = organizationTagRepository.findByParentTag(tag.getTagId());
             if (!children.isEmpty()) {
                 node.put("children", buildTagTreeRecursive(children));
             }
-            // 如果没有子节点，不添加children字段，而不是添加空数组
-            
+
             result.add(node);
         }
-        
+
         return result;
+    }
+
+    @Transactional
+    public OrganizationTagI18n upsertOrganizationTagI18n(String tagId, String lang, String name, String description) {
+        OrganizationTagI18n i18n = organizationTagI18nRepository
+            .findByTagIdAndLang(tagId, lang)
+            .orElseGet(() -> {
+                OrganizationTagI18n newI18n = new OrganizationTagI18n();
+                newI18n.setTagId(tagId);
+                newI18n.setLang(lang);
+                return newI18n;
+            });
+        if (name != null) i18n.setName(name);
+        if (description != null) i18n.setDescription(description);
+        return organizationTagI18nRepository.save(i18n);
+    }
+
+    public List<OrganizationTagI18n> getOrganizationTagI18n(String tagId) {
+        return organizationTagI18nRepository.findByTagId(tagId);
     }
     
     /**
@@ -632,10 +669,8 @@ public class UserService {
         tag.setParentTag(parentTag);
         
         OrganizationTag updatedTag = organizationTagRepository.save(tag);
-        
-        // 清除所有标签缓存，因为层级关系可能变化
+        i18nTranslationService.retranslateOrgTagAsync(tagId, updatedTag.getName(), updatedTag.getDescription());
         orgTagCacheService.invalidateAllEffectiveTagsCache();
-        
         return updatedTag;
     }
     
