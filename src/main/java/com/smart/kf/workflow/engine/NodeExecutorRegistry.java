@@ -19,6 +19,20 @@ public class NodeExecutorRegistry {
 
     private static final Logger logger = LoggerFactory.getLogger(NodeExecutorRegistry.class);
 
+    private static final Map<String, String> ALIASES = Map.ofEntries(
+        Map.entry("start", "开始"),
+        Map.entry("end", "结束"),
+        Map.entry("llm", "LLM"),
+        Map.entry("kb", "知识库检索"),
+        Map.entry("code", "代码执行"),
+        Map.entry("condition", "条件判断"),
+        Map.entry("http", "HTTP请求"),
+        Map.entry("loop", "循环"),
+        Map.entry("variable", "变量"),
+        Map.entry("agent_call", "Agent调用"),
+        Map.entry("delay", "延迟")
+    );
+
     private final Map<String, NodeExecutor> executors = new HashMap<>();
 
     public NodeExecutorRegistry(List<NodeExecutor> executorList) {
@@ -43,6 +57,13 @@ public class NodeExecutorRegistry {
         NodeExecutor exact = executors.get(nodeType);
         if (exact != null) {
             return exact;
+        }
+        String alias = ALIASES.get(nodeType);
+        if (alias != null) {
+            NodeExecutor mapped = executors.get(alias);
+            if (mapped != null) {
+                return mapped;
+            }
         }
         for (Map.Entry<String, NodeExecutor> entry : executors.entrySet()) {
             if (nodeType.contains(entry.getKey()) || entry.getKey().contains(nodeType)) {

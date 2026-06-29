@@ -286,6 +286,11 @@ svg {
   fill: none !important;
 }
 
+.react-flow .react-flow__edges svg {
+  max-width: none !important;
+  max-height: none !important;
+}
+
 .react-flow {
   --xy-edge-stroke-default: var(--kf-accent, #6366f1);
   --xy-edge-stroke-width-default: 2;

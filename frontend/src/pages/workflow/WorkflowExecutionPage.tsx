@@ -19,8 +19,12 @@ import styles from './WorkflowExecutionPage.module.css'
 
 interface NodeProgress {
   nodeId: string
+  nodeType?: string
+  nodeName?: string
   status: 'running' | 'success' | 'error'
   output?: string
+  durationMs?: number
+  errorMessage?: string
 }
 
 function formatMs(ms: number) {
@@ -128,21 +132,26 @@ export default function WorkflowExecutionPage() {
     const ws = new WebSocket(`${wsBase}/ws/workflow/${executionId}?token=${token}`)
     wsRef.current = ws
 
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', executionId }))
+    }
+
     ws.onmessage = (event) => {
       try {
-        const frame = JSON.parse(event.data) as NodeProgress & { type: string }
-        if (frame.type === 'node_progress') {
+        const frame = JSON.parse(event.data) as Record<string, unknown> & { type: string }
+        if (frame.type === 'node_completed' || frame.type === 'node_progress') {
+          const node = (frame.node ?? frame) as NodeProgress
           setNodeProgress((prev) => {
-            const idx = prev.findIndex((p) => p.nodeId === frame.nodeId)
+            const idx = prev.findIndex((p) => p.nodeId === node.nodeId)
             if (idx >= 0) {
               const next = [...prev]
-              next[idx] = { nodeId: frame.nodeId, status: frame.status, output: frame.output }
+              next[idx] = { nodeId: node.nodeId, status: node.status, output: node.output }
               return next
             }
-            return [...prev, { nodeId: frame.nodeId, status: frame.status, output: frame.output }]
+            return [...prev, { nodeId: node.nodeId, status: node.status, output: node.output }]
           })
         }
-        if (frame.type === 'completed' || frame.status === 'success' || frame.status === 'error') {
+        if (frame.type === 'execution_completed' || frame.type === 'execution_failed') {
           qc.invalidateQueries({ queryKey: ['workflow-executions', id] })
         }
       } catch {

@@ -158,6 +158,23 @@ public class GraphBuilder {
         public Integer y;
         public String description;
         public Map<String, Object> config;
+
+        @com.fasterxml.jackson.annotation.JsonProperty("position")
+        private void unpackPosition(Map<String, Object> pos) {
+            if (pos != null) {
+                Object xVal = pos.get("x");
+                Object yVal = pos.get("y");
+                if (xVal instanceof Number xn && x == null) x = xn.intValue();
+                if (yVal instanceof Number yn && y == null) y = yn.intValue();
+            }
+        }
+
+        @com.fasterxml.jackson.annotation.JsonProperty("data")
+        private void unpackData(Map<String, Object> data) {
+            if (config == null && data != null) {
+                config = data;
+            }
+        }
     }
 
     private static class RawEdge {
@@ -167,5 +184,12 @@ public class GraphBuilder {
         public String sourcePort;
         public String label;
         public String condition;
+
+        @com.fasterxml.jackson.annotation.JsonProperty("sourceHandle")
+        private void unpackSourceHandle(String handle) {
+            if (sourcePort == null && handle != null) {
+                sourcePort = handle;
+            }
+        }
     }
 }

@@ -93,6 +93,10 @@ export default function WorkflowDebugPanel({
       const ws = new WebSocket(`${wsBase}/ws/workflow/${executionId}?token=${token}`)
       wsRef.current = ws
 
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'subscribe', executionId }))
+      }
+
       ws.onmessage = (event) => {
         try {
           const frame = JSON.parse(event.data as string) as Record<string, unknown>

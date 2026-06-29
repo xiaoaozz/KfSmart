@@ -6,6 +6,8 @@ import com.smart.kf.repository.workflow.WorkflowRepository;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.pagination.PageResult;
 import com.smart.kf.workflow.engine.ExecutionContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,8 @@ import java.util.UUID;
 
 @Service
 public class WorkflowService {
+
+    private static final Logger logger = LoggerFactory.getLogger(WorkflowService.class);
 
     private final WorkflowRepository workflowRepository;
     private final WorkflowExecutionService executionService;
@@ -69,8 +73,35 @@ public class WorkflowService {
         return stats;
     }
 
-    public Workflow getWorkflow(String workflowId) {
-        // Support both numeric DB id (frontend uses Long id) and UUID string
+    public Map<String, Object> getWorkflow(String workflowId) {
+        Workflow workflow = resolveWorkflow(workflowId);
+        return toWorkflowDto(workflow);
+    }
+
+    private Map<String, Object> toWorkflowDto(Workflow workflow) {
+        Map<String, Object> result = objectMapper.convertValue(workflow, new com.fasterxml.jackson.core.type.TypeReference<>() {
+        });
+        result.put("nodes", parseJsonArray(workflow.getNodesJson()));
+        result.put("edges", parseJsonArray(workflow.getEdgesJson()));
+        result.remove("nodesJson");
+        result.remove("edgesJson");
+        return result;
+    }
+
+    private List<Object> parseJsonArray(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<>() {
+            });
+        } catch (Exception e) {
+            logger.warn("解析 JSON 数组失败: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private Workflow resolveWorkflow(String workflowId) {
         try {
             Long numId = Long.parseLong(workflowId);
             return workflowRepository.findById(numId)
@@ -82,7 +113,7 @@ public class WorkflowService {
 
     @Transactional
     public Workflow saveGraph(String workflowId, Map<String, Object> body) {
-        Workflow workflow = getWorkflow(workflowId);
+        Workflow workflow = resolveWorkflow(workflowId);
         try {
             workflow.setNodesJson(objectMapper.writeValueAsString(body.get("nodes")));
             workflow.setEdgesJson(objectMapper.writeValueAsString(body.get("edges")));
@@ -111,7 +142,7 @@ public class WorkflowService {
 
     @Transactional
     public Workflow copyWorkflow(String workflowId) {
-        Workflow source = getWorkflow(workflowId);
+        Workflow source = resolveWorkflow(workflowId);
         Workflow copy = new Workflow();
         applyWorkflow(copy, source);
         copy.setWorkflowId("wf_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
@@ -128,7 +159,7 @@ public class WorkflowService {
 
     @Transactional
     public Workflow publishWorkflow(String workflowId) {
-        Workflow workflow = getWorkflow(workflowId);
+        Workflow workflow = resolveWorkflow(workflowId);
         workflow.setStatus("published");
         workflow.setPublishedAt(LocalDateTime.now());
         return workflowRepository.save(workflow);
@@ -136,19 +167,19 @@ public class WorkflowService {
 
     @Transactional
     public Workflow disableWorkflow(String workflowId) {
-        Workflow workflow = getWorkflow(workflowId);
+        Workflow workflow = resolveWorkflow(workflowId);
         workflow.setStatus("disabled");
         return workflowRepository.save(workflow);
     }
 
     @Transactional
     public void deleteWorkflow(String workflowId) {
-        workflowRepository.delete(getWorkflow(workflowId));
+        workflowRepository.delete(resolveWorkflow(workflowId));
     }
 
     @Transactional
     public Map<String, Object> debugWorkflow(String workflowId, Map<String, Object> input, String username) {
-        Workflow workflow = getWorkflow(workflowId);
+        Workflow workflow = resolveWorkflow(workflowId);
 
         ExecutionContext.ExecutionResult execResult = executionService.execute(
             workflow.getNodesJson(),
