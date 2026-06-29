@@ -3,7 +3,6 @@ import {
   Button,
   Input,
   Tag,
-  Tabs,
   Drawer,
   Modal,
   Form,
@@ -12,6 +11,9 @@ import {
   Empty,
   Timeline,
   Divider,
+  Tooltip,
+  Spin,
+  Descriptions,
 } from 'antd'
 import {
   PlusOutlined,
@@ -20,14 +22,17 @@ import {
   DeleteOutlined,
   HistoryOutlined,
   CopyOutlined,
+  EyeOutlined,
   FileTextOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { promptApi } from '@/api/skill'
 import type { PromptSummary, Prompt } from '@/types/skill'
-import { PermissionButton } from '@/components/business'
+import { GradientButton, GradientCard } from '@/components/base'
+import { PermissionButton, FavoriteButton, PageBar, EmptyState } from '@/components/business'
 import styles from './PromptListPage.module.css'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -37,6 +42,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   code: 'purple',
   analysis: 'orange',
   custom: 'default',
+}
+
+// Solid accent color per category, used for the colored category pill
+const CATEGORY_ACCENT: Record<string, string> = {
+  chat: '#1677ff',
+  summary: '#13c2c2',
+  translation: '#52c41a',
+  code: '#722ed1',
+  analysis: '#fa8c16',
+  custom: '#8c8c8c',
 }
 
 export default function PromptListPage() {
@@ -54,9 +69,23 @@ export default function PromptListPage() {
     { key: 'custom', label: t('skill.prompt.categoryCustom') },
   ]
 
+  // Select options require { label, value } — using key as value
+  const CATEGORY_SELECT_OPTIONS = CATEGORY_TABS.slice(1).map((tab) => ({
+    label: tab.label,
+    value: tab.key,
+  }))
+  const CATEGORY_FILTER_OPTIONS = CATEGORY_TABS.map((tab) => ({
+    label: tab.label,
+    value: tab.key,
+  }))
+
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState('')
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [editPrompt, setEditPrompt] = useState<Prompt | null>(null)
+  const [viewPrompt, setViewPrompt] = useState<Prompt | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
   const [historyPromptId, setHistoryPromptId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm] = Form.useForm<{
@@ -73,10 +102,16 @@ export default function PromptListPage() {
     note?: string
   }>()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['prompts', category, keyword],
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['prompts', category, keyword, current, pageSize],
     queryFn: () =>
-      promptApi.list({ size: 50, keyword: keyword || undefined, category: category || undefined }),
+      promptApi.list({
+        page: current,
+        size: pageSize,
+        keyword: keyword || undefined,
+        category: category || undefined,
+      }),
+    staleTime: 0,
   })
 
   const { data: versions, isLoading: versionsLoading } = useQuery({
@@ -85,11 +120,14 @@ export default function PromptListPage() {
     enabled: !!historyPromptId,
   })
 
+  const invalidatePrompts = () =>
+    qc.invalidateQueries({ queryKey: ['prompts'], refetchType: 'active' })
+
   const createMutation = useMutation({
     mutationFn: (v: { name: string; description?: string; category: string; content: string }) =>
       promptApi.create(v),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['prompts'] })
+      invalidatePrompts()
       setCreateOpen(false)
       createForm.resetFields()
       message.success(t('skill.prompt.createSuccess'))
@@ -103,9 +141,9 @@ export default function PromptListPage() {
       category: string
       content: string
       note?: string
-    }) => promptApi.update(editPrompt!.templateId, v),
+    }) => promptApi.update(editPrompt!.templateId, { ...v, changeDescription: v.note }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['prompts'] })
+      invalidatePrompts()
       setEditPrompt(null)
       editForm.resetFields()
       message.success(t('skill.prompt.updateSuccess'))
@@ -115,7 +153,7 @@ export default function PromptListPage() {
   const deleteMutation = useMutation({
     mutationFn: (templateId: string) => promptApi.delete(templateId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['prompts'] })
+      invalidatePrompts()
       message.success(t('skill.prompt.deleteSuccess'))
     },
   })
@@ -140,6 +178,16 @@ export default function PromptListPage() {
     })
   }
 
+  const handleViewOpen = (p: PromptSummary) => {
+    setViewLoading(true)
+    setViewPrompt(null)
+    promptApi
+      .get(p.templateId)
+      .then((full) => setViewPrompt(full))
+      .catch(() => message.error(t('skill.prompt.loadError')))
+      .finally(() => setViewLoading(false))
+  }
+
   const copyContent = (templateId: string) => {
     promptApi.get(templateId).then((p) => {
       navigator.clipboard
@@ -152,96 +200,177 @@ export default function PromptListPage() {
 
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <FileTextOutlined /> {t('skill.prompt.title')}
-        </h2>
-        <div className={styles.actions}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('skill.prompt.searchPlaceholder')}
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
-            allowClear
-          />
+      <div className={styles.pageHeader}>
+        <div className={styles.topBar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('skill.prompt.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              style={{ width: 220 }}
+              allowClear
+            />
+            <Select
+              placeholder={t('skill.prompt.fieldCategory')}
+              allowClear
+              value={category || undefined}
+              onChange={(v) => {
+                setCategory(v ?? '')
+                setCurrent(1)
+              }}
+              style={{ width: 160 }}
+              options={CATEGORY_FILTER_OPTIONS}
+            />
+          </div>
           <PermissionButton permission="prompt:create">
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-              onClick={() => setCreateOpen(true)}
-            >
+            <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               {t('skill.prompt.createBtn')}
-            </Button>
+            </GradientButton>
           </PermissionButton>
         </div>
       </div>
 
-      <Tabs
-        activeKey={category}
-        onChange={setCategory}
-        items={CATEGORY_TABS}
-        style={{ marginBottom: 16 }}
-      />
+      <div className={styles.body}>
+        {isLoading ? (
+          <div className={styles.grid}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={styles.skeleton} />
+            ))}
+          </div>
+        ) : isError ? (
+          <EmptyState title={t('skill.prompt.loadError')} />
+        ) : !records.length ? (
+          <EmptyState
+            title={t('skill.prompt.empty')}
+            description={t('skill.prompt.searchPlaceholder')}
+            action={
+              <PermissionButton permission="prompt:create">
+                <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  {t('skill.prompt.createBtn')}
+                </GradientButton>
+              </PermissionButton>
+            }
+          />
+        ) : (
+          <div className={styles.grid}>
+            {records.map((p: PromptSummary, i: number) => {
+              const accent = CATEGORY_ACCENT[p.category] ?? '#8c8c8c'
+              return (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <GradientCard className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardIconWrap}>
+                        <FileTextOutlined />
+                      </div>
+                      <Tag color={CATEGORY_COLORS[p.category]} style={{ fontSize: 12 }}>
+                        {p.category}
+                      </Tag>
+                    </div>
 
-      {isLoading ? (
-        <div className={styles.listSkeleton}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
-        </div>
-      ) : !records.length ? (
-        <Empty description={t('skill.prompt.empty')} />
-      ) : (
-        <div className={styles.list}>
-          {records.map((p: PromptSummary, i: number) => (
-            <motion.div
-              key={p.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className={styles.row}
-            >
-              <div className={styles.rowLeft}>
-                <div className={styles.rowName}>{p.name}</div>
-                <div className={styles.rowMeta}>
-                  <Tag color={CATEGORY_COLORS[p.category]}>{p.category}</Tag>
-                  {p.description && <span className={styles.rowDesc}>{p.description}</span>}
-                  <span className={styles.rowUsage}>
-                    {t('skill.prompt.usageCount', { count: p.useCount })}
-                  </span>
-                </div>
-              </div>
-              <div className={styles.rowActions}>
-                <Button
-                  size="small"
-                  icon={<CopyOutlined />}
-                  onClick={() => copyContent(p.templateId)}
-                >
-                  {t('skill.prompt.copyBtn')}
-                </Button>
-                <Button size="small" icon={<EditOutlined />} onClick={() => handleEditOpen(p)}>
-                  {t('skill.prompt.editBtn')}
-                </Button>
-                <Button
-                  size="small"
-                  icon={<HistoryOutlined />}
-                  onClick={() => setHistoryPromptId(p.templateId)}
-                >
-                  {t('skill.prompt.historyBtn')}
-                </Button>
-                <PermissionButton permission="prompt:delete">
-                  <Button
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDelete(p)}
-                  />
-                </PermissionButton>
-              </div>
-            </motion.div>
-          ))}
+                    <h4 className={styles.cardName}>{p.name}</h4>
+                    {p.description && <p className={styles.cardDesc}>{p.description}</p>}
+
+                    <div className={styles.cardMeta}>
+                      <span
+                        className={styles.metaItem}
+                        style={{ color: accent, background: `${accent}1a` }}
+                      >
+                        v{p.version}
+                      </span>
+                      <span className={styles.metaItem}>
+                        <ThunderboltOutlined />{' '}
+                        {t('skill.prompt.usageCount', { count: p.useCount ?? 0 })}
+                      </span>
+                    </div>
+
+                    <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+                      <FavoriteButton
+                        type="prompt"
+                        targetId={p.templateId}
+                        title={p.name}
+                        description={p.description}
+                        className={styles.btnGold}
+                      />
+                      <Tooltip title={t('skill.prompt.viewBtn')}>
+                        <Button
+                          size="small"
+                          icon={<EyeOutlined />}
+                          className={styles.btnTeal}
+                          onClick={() => handleViewOpen(p)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('skill.prompt.copyBtn')}>
+                        <Button
+                          size="small"
+                          icon={<CopyOutlined />}
+                          className={styles.btnBlue}
+                          onClick={() => copyContent(p.templateId)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('skill.prompt.editBtn')}>
+                        <Button
+                          size="small"
+                          icon={<EditOutlined />}
+                          className={styles.btnGray}
+                          onClick={() => handleEditOpen(p)}
+                        />
+                      </Tooltip>
+                      <Tooltip title={t('skill.prompt.historyBtn')}>
+                        <Button
+                          size="small"
+                          icon={<HistoryOutlined />}
+                          className={styles.btnPurple}
+                          onClick={() => setHistoryPromptId(p.templateId)}
+                        />
+                      </Tooltip>
+                      <PermissionButton permission="prompt:delete" mode="hide">
+                        <Tooltip title={t('common.delete')}>
+                          <Button
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            className={styles.btnRed}
+                            onClick={() => handleDelete(p)}
+                          />
+                        </Tooltip>
+                      </PermissionButton>
+                    </div>
+                  </GradientCard>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
         </div>
       )}
 
@@ -274,7 +403,7 @@ export default function PromptListPage() {
               initialValue="custom"
               style={{ width: 130 }}
             >
-              <Select options={CATEGORY_TABS.slice(1)} />
+              <Select options={CATEGORY_SELECT_OPTIONS} />
             </Form.Item>
           </div>
           <Form.Item name="description" label={t('skill.prompt.fieldDesc')}>
@@ -322,7 +451,7 @@ export default function PromptListPage() {
               label={t('skill.prompt.fieldCategory')}
               style={{ width: 130 }}
             >
-              <Select options={CATEGORY_TABS.slice(1)} />
+              <Select options={CATEGORY_SELECT_OPTIONS} />
             </Form.Item>
           </div>
           <Form.Item name="description" label={t('skill.prompt.fieldDesc')}>
@@ -339,6 +468,79 @@ export default function PromptListPage() {
             <Input placeholder={t('skill.prompt.notePlaceholder')} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* View Modal (read-only) */}
+      <Modal
+        title={t('skill.prompt.viewModalTitle', { name: viewPrompt?.name ?? '' })}
+        open={viewLoading || !!viewPrompt}
+        onCancel={() => {
+          setViewPrompt(null)
+          setViewLoading(false)
+        }}
+        footer={[
+          <Button
+            key="copy"
+            icon={<CopyOutlined />}
+            disabled={!viewPrompt}
+            onClick={() =>
+              viewPrompt &&
+              navigator.clipboard
+                .writeText(viewPrompt.content)
+                .then(() => message.success(t('skill.prompt.copySuccess')))
+            }
+          >
+            {t('skill.prompt.copyBtn')}
+          </Button>,
+          <Button key="close" onClick={() => setViewPrompt(null)}>
+            {t('common.back')}
+          </Button>,
+        ]}
+        destroyOnClose
+        width={720}
+      >
+        {viewLoading || !viewPrompt ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <Spin />
+          </div>
+        ) : (
+          <div className={styles.viewBody}>
+            <div className={styles.viewHeader}>
+              {viewPrompt.category && (
+                <Tag color={CATEGORY_COLORS[viewPrompt.category]}>{viewPrompt.category}</Tag>
+              )}
+              {viewPrompt.description && (
+                <span className={styles.viewDesc}>{viewPrompt.description}</span>
+              )}
+            </div>
+            <Descriptions size="small" column={2} className={styles.viewMeta}>
+              <Descriptions.Item label={t('skill.prompt.viewFieldUsage')}>
+                {viewPrompt.useCount ?? 0}
+              </Descriptions.Item>
+              {viewPrompt.variables && (
+                <Descriptions.Item label={t('skill.prompt.viewFieldVars')}>
+                  {viewPrompt.variables}
+                </Descriptions.Item>
+              )}
+              {viewPrompt.tags && (
+                <Descriptions.Item label={t('skill.prompt.viewFieldTags')}>
+                  {viewPrompt.tags}
+                </Descriptions.Item>
+              )}
+              <Descriptions.Item label={t('skill.prompt.viewFieldCreated')}>
+                {new Date(viewPrompt.createdAt).toLocaleString()}
+              </Descriptions.Item>
+              <Descriptions.Item label={t('skill.prompt.viewFieldUpdated')}>
+                {new Date(viewPrompt.updatedAt).toLocaleString()}
+              </Descriptions.Item>
+            </Descriptions>
+            <Divider style={{ margin: '8px 0' }} />
+            <div className={styles.viewContentLabel}>{t('skill.prompt.fieldContent')}</div>
+            <pre className={styles.viewContent}>
+              {viewPrompt.content || t('skill.prompt.viewEmptyContent')}
+            </pre>
+          </div>
+        )}
       </Modal>
 
       {/* History Drawer */}

@@ -31,7 +31,6 @@ public interface PermissionRepository extends JpaRepository<Permission, Long> {
      * 通过用户ID查询其所有权限编码（跨 user_roles 和 role_permissions 联表）
      */
     @SuppressWarnings("unused")
-    @Query("SELECT DISTINCT p.permCode FROM Permission p JOIN p.roles r JOIN r.permissions p2 "
-         + "WHERE r IN (SELECT ur FROM com.smart.kf.model.Role ur JOIN ur.permissions WHERE :userId MEMBER OF ur.permissions)")
+    @Query("SELECT DISTINCT p.permCode FROM com.smart.kf.model.User u JOIN u.roles r JOIN r.permissions p WHERE u.id = :userId")
     Set<String> findPermCodesByUserId(@Param("userId") Long userId);
 }

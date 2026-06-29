@@ -1,5 +1,6 @@
 package com.smart.kf.service.workflow;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.kf.model.workflow.Workflow;
 import com.smart.kf.repository.workflow.WorkflowRepository;
 import com.smart.kf.utils.pagination.PageQuery;
@@ -22,21 +23,27 @@ public class WorkflowService {
     private final WorkflowRepository workflowRepository;
     private final WorkflowExecutionService executionService;
     private final WorkflowVersionService versionService;
+    private final ObjectMapper objectMapper;
 
     public WorkflowService(
         WorkflowRepository workflowRepository,
         WorkflowExecutionService executionService,
-        WorkflowVersionService versionService
+        WorkflowVersionService versionService,
+        ObjectMapper objectMapper
     ) {
         this.workflowRepository = workflowRepository;
         this.executionService = executionService;
         this.versionService = versionService;
+        this.objectMapper = objectMapper;
     }
 
-    public PageResult<Workflow> listWorkflows(String keyword, PageQuery query) {
+    public PageResult<Workflow> listWorkflows(String keyword, String status, PageQuery query) {
         List<Workflow> source = isBlank(keyword)
             ? workflowRepository.findAll()
             : workflowRepository.findByNameContainingIgnoreCase(keyword);
+        if (!isBlank(status)) {
+            source = source.stream().filter(w -> status.equals(w.getStatus())).collect(java.util.stream.Collectors.toList());
+        }
         source.sort(Comparator.comparing(Workflow::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
         return PageResult.fromList(source, query);
     }
@@ -44,9 +51,13 @@ public class WorkflowService {
     public Map<String, Object> workflowStats() {
         List<Workflow> workflows = workflowRepository.findAll();
         long workflowCount = workflows.size();
-        long calls = workflows.stream().mapToLong(Workflow::getCallCount).sum();
-        long success = workflows.stream().mapToLong(Workflow::getSuccessCount).sum();
-        long duration = workflows.stream().mapToLong(w -> w.getAvgDurationMs() * Math.max(1, w.getCallCount())).sum();
+        long calls = workflows.stream().mapToLong(w -> w.getCallCount() != null ? w.getCallCount() : 0L).sum();
+        long success = workflows.stream().mapToLong(w -> w.getSuccessCount() != null ? w.getSuccessCount() : 0L).sum();
+        long duration = workflows.stream().mapToLong(w -> {
+            long avg = w.getAvgDurationMs() != null ? w.getAvgDurationMs() : 0L;
+            long cnt = w.getCallCount() != null ? w.getCallCount() : 0L;
+            return avg * Math.max(1L, cnt);
+        }).sum();
         long successRate = calls == 0 ? 100 : Math.round(success * 100.0 / calls);
         long avgDurationMs = calls == 0 ? 0 : Math.round(duration * 1.0 / calls);
 
@@ -59,8 +70,26 @@ public class WorkflowService {
     }
 
     public Workflow getWorkflow(String workflowId) {
+        // Support both numeric DB id (frontend uses Long id) and UUID string
+        try {
+            Long numId = Long.parseLong(workflowId);
+            return workflowRepository.findById(numId)
+                .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+        } catch (NumberFormatException ignored) {}
         return workflowRepository.findByWorkflowId(workflowId)
             .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+    }
+
+    @Transactional
+    public Workflow saveGraph(String workflowId, Map<String, Object> body) {
+        Workflow workflow = getWorkflow(workflowId);
+        try {
+            workflow.setNodesJson(objectMapper.writeValueAsString(body.get("nodes")));
+            workflow.setEdgesJson(objectMapper.writeValueAsString(body.get("edges")));
+        } catch (Exception e) {
+            throw new IllegalArgumentException("图结构序列化失败: " + e.getMessage());
+        }
+        return workflowRepository.save(workflow);
     }
 
     @Transactional
@@ -87,10 +116,10 @@ public class WorkflowService {
         applyWorkflow(copy, source);
         copy.setWorkflowId("wf_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         copy.setName(source.getName() + " 副本");
-        copy.setStatus("草稿");
-        copy.setCallCount(0);
-        copy.setSuccessCount(0);
-        copy.setFailureCount(0);
+        copy.setStatus("draft");
+        copy.setCallCount(0L);
+        copy.setSuccessCount(0L);
+        copy.setFailureCount(0L);
         copy.setPublishedAt(null);
         source.setInstallCount(safeLong(source.getInstallCount()) + 1);
         workflowRepository.save(source);
@@ -100,8 +129,15 @@ public class WorkflowService {
     @Transactional
     public Workflow publishWorkflow(String workflowId) {
         Workflow workflow = getWorkflow(workflowId);
-        workflow.setStatus("运行中");
+        workflow.setStatus("published");
         workflow.setPublishedAt(LocalDateTime.now());
+        return workflowRepository.save(workflow);
+    }
+
+    @Transactional
+    public Workflow disableWorkflow(String workflowId) {
+        Workflow workflow = getWorkflow(workflowId);
+        workflow.setStatus("disabled");
         return workflowRepository.save(workflow);
     }
 
@@ -170,7 +206,7 @@ public class WorkflowService {
     private void applyWorkflow(Workflow target, Workflow source) {
         target.setName(source.getName());
         target.setDescription(source.getDescription());
-        target.setStatus(isBlank(source.getStatus()) ? "草稿" : source.getStatus());
+        target.setStatus(isBlank(source.getStatus()) ? "draft" : source.getStatus());
         target.setOwnerName(source.getOwnerName());
         target.setTags(source.getTags());
         target.setPermissionScope(isBlank(source.getPermissionScope()) ? "组织内" : source.getPermissionScope());

@@ -3,8 +3,6 @@ package com.smart.kf.model;
 import jakarta.persistence.*;
 import lombok.Data;
 
-import java.sql.Blob;
-
 /**
  * 文档向量实体类
  * 用于存储文本分块和相关元数据
@@ -30,10 +28,17 @@ public class DocumentVector {
     private String modelVersion;
     
     /**
-     * 上传用户ID
+     * @deprecated 遗留字段：存储用户 ID 字符串形式，改用 {@link #ownerId}
      */
+    @Deprecated
     @Column(nullable = false, name = "user_id", length = 64)
     private String userId;
+
+    /**
+     * 上传用户 FK，替代 userId 字段
+     */
+    @Column(name = "owner_id")
+    private Long ownerId;
     
     /**
      * 文件所属组织标签

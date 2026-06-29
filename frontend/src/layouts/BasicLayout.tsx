@@ -10,6 +10,7 @@ import {
   ApartmentOutlined,
   BookOutlined,
   UserOutlined,
+  TeamOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   LogoutOutlined,
@@ -18,6 +19,7 @@ import {
   KeyOutlined,
   SafetyCertificateOutlined,
   DashboardFilled,
+  CompassOutlined,
 } from '@ant-design/icons'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
@@ -47,6 +49,7 @@ function useNavItems() {
       icon: <ApartmentOutlined />,
       label: t('nav.workflows'),
     },
+    { key: '/explore', icon: <CompassOutlined />, label: t('nav.explore') },
     {
       key: 'skill-group',
       icon: <BookOutlined />,
@@ -67,7 +70,7 @@ function useNavItems() {
   }>
 
   const adminItems = [
-    { key: '/admin/users', icon: <UserOutlined />, label: t('nav.admin.users') },
+    { key: '/admin/users', icon: <TeamOutlined />, label: t('nav.admin.users') },
     { key: '/admin/roles', icon: <SafetyCertificateOutlined />, label: t('nav.admin.roles') },
     { key: '/admin/orgs', icon: <ApartmentOutlined />, label: t('nav.admin.orgs') },
     { key: '/admin/api-keys', icon: <KeyOutlined />, label: t('nav.admin.apiKeys') },
@@ -129,7 +132,7 @@ export default function BasicLayout() {
   const location = useLocation()
   const { data: user } = useCurrentUser()
   const { t } = useTranslation()
-  const { navItems } = useNavItems()
+  const { navItems, adminItems } = useNavItems()
 
   // Lazy initializer reads matchMedia once — no synchronous setState in effect
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches)
@@ -251,7 +254,15 @@ export default function BasicLayout() {
             className={styles.breadcrumb}
             items={[
               { title: 'KfSmart' },
-              { title: navItems.find((i) => location.pathname.startsWith(i.key))?.label ?? '' },
+              {
+                title: (() => {
+                  const allLeaf = [
+                    ...navItems.flatMap((i) => (i.children ? i.children : [i])),
+                    ...adminItems,
+                  ]
+                  return allLeaf.find((i) => location.pathname.startsWith(i.key))?.label ?? ''
+                })(),
+              },
             ]}
           />
 

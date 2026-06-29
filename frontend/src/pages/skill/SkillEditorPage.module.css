@@ -1,8 +1,13 @@
 .root {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - 56px - 48px);
+  border-radius: var(--kf-radius-md);
+  border: 1px solid var(--kf-border);
+  background: var(--kf-card);
+  box-shadow: var(--kf-shadow-sm);
   overflow: hidden;
+  padding: 16px 20px;
 }
 
 .topBar {

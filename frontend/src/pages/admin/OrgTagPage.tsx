@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Tree, Button, Modal, Form, Input, App, Space, Tooltip, Empty } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, ApartmentOutlined } from '@ant-design/icons'
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import type { DataNode } from 'antd/es/tree'
@@ -8,8 +8,8 @@ import { adminOrgApi, type OrgTag } from '@/api/admin'
 import styles from './AdminPage.module.css'
 
 interface OrgTagFormValues {
+  tagId: string
   name: string
-  code: string
   description?: string
 }
 
@@ -18,17 +18,27 @@ function toTreeData(
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): DataNode[] {
   return nodes.map((n) => ({
-    key: n.id,
+    key: n.tagId,
     title: (
       <span>
         {n.name}
         <span style={{ fontSize: 12, color: 'var(--kf-muted-foreground)', marginLeft: 6 }}>
-          ({n.code}) · {t('common.userCount', { count: n.userCount })}
+          ({n.tagId})
         </span>
       </span>
     ),
     children: n.children ? toTreeData(n.children, t) : undefined,
   }))
+}
+
+function findOrg(nodes: OrgTag[], tagId: string): OrgTag | undefined {
+  for (const n of nodes) {
+    if (n.tagId === tagId) return n
+    if (n.children) {
+      const found = findOrg(n.children, tagId)
+      if (found) return found
+    }
+  }
 }
 
 export default function OrgTagPage() {
@@ -37,7 +47,7 @@ export default function OrgTagPage() {
   const { t } = useTranslation()
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<OrgTag | null>(null)
-  const [parentId, setParentId] = useState<number | undefined>()
+  const [parentTagId, setParentTagId] = useState<string | undefined>()
   const [form] = Form.useForm<OrgTagFormValues>()
 
   const { data: tree } = useQuery({
@@ -47,7 +57,12 @@ export default function OrgTagPage() {
 
   const createMutation = useMutation({
     mutationFn: (v: OrgTagFormValues) =>
-      adminOrgApi.create({ name: v.name, code: v.code, description: v.description, parentId }),
+      adminOrgApi.create({
+        tagId: v.tagId.trim(),
+        name: v.name,
+        description: v.description,
+        parentTag: parentTagId,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
       setFormOpen(false)
@@ -58,10 +73,10 @@ export default function OrgTagPage() {
 
   const updateMutation = useMutation({
     mutationFn: (v: OrgTagFormValues) =>
-      adminOrgApi.update(editTarget!.id, {
+      adminOrgApi.update(editTarget!.tagId, {
         name: v.name,
-        code: v.code,
         description: v.description,
+        parentTag: editTarget!.parentTag ?? null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
@@ -72,40 +87,29 @@ export default function OrgTagPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => adminOrgApi.delete(id),
+    mutationFn: (tagId: string) => adminOrgApi.delete(tagId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-org-tree'] })
       message.success(t('admin.orgTag.deleteSuccess'))
     },
   })
 
-  const openCreate = (pid?: number) => {
+  const openCreate = (pid?: string) => {
     setEditTarget(null)
-    setParentId(pid)
+    setParentTagId(pid)
     form.resetFields()
     setFormOpen(true)
   }
 
   const openEdit = (org: OrgTag) => {
     setEditTarget(org)
-    form.setFieldsValue({ name: org.name, code: org.code, description: org.description })
+    form.setFieldsValue({ tagId: org.tagId, name: org.name, description: org.description })
     setFormOpen(true)
   }
 
-  const findOrg = (nodes: OrgTag[], id: number): OrgTag | undefined => {
-    for (const n of nodes) {
-      if (n.id === id) return n
-      if (n.children) {
-        const found = findOrg(n.children, id)
-        if (found) return found
-      }
-    }
-  }
-
   const handleDelete = (key: React.Key) => {
-    const org = findOrg(tree ?? [], Number(key))
-    if (!org) return
-    deleteMutation.mutate(org.id)
+    const tagId = String(key)
+    deleteMutation.mutate(tagId)
   }
 
   const treeData = toTreeData(tree ?? [], t)
@@ -113,9 +117,6 @@ export default function OrgTagPage() {
   return (
     <div className={styles.root}>
       <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <ApartmentOutlined /> {t('admin.orgTag.title')}
-        </h2>
         <Space>
           <Button
             type="primary"
@@ -145,7 +146,7 @@ export default function OrgTagPage() {
                     icon={<PlusOutlined />}
                     onClick={(e) => {
                       e.stopPropagation()
-                      openCreate(Number(node.key))
+                      openCreate(String(node.key))
                     }}
                   />
                 </Tooltip>
@@ -156,7 +157,7 @@ export default function OrgTagPage() {
                     icon={<EditOutlined />}
                     onClick={(e) => {
                       e.stopPropagation()
-                      const org = findOrg(tree ?? [], Number(node.key))
+                      const org = findOrg(tree ?? [], String(node.key))
                       if (org) openEdit(org)
                     }}
                   />
@@ -200,11 +201,8 @@ export default function OrgTagPage() {
           layout="vertical"
           onFinish={(v) => (editTarget ? updateMutation.mutate(v) : createMutation.mutate(v))}
         >
-          <Form.Item name="name" label={t('admin.orgTag.fieldName')} rules={[{ required: true }]}>
-            <Input placeholder={t('admin.orgTag.namePlaceholder')} />
-          </Form.Item>
           <Form.Item
-            name="code"
+            name="tagId"
             label={t('admin.orgTag.fieldCode')}
             rules={[
               {
@@ -216,8 +214,12 @@ export default function OrgTagPage() {
           >
             <Input
               placeholder={t('admin.orgTag.codePlaceholder')}
+              disabled={!!editTarget}
               style={{ fontFamily: 'var(--kf-font-mono)' }}
             />
+          </Form.Item>
+          <Form.Item name="name" label={t('admin.orgTag.fieldName')} rules={[{ required: true }]}>
+            <Input placeholder={t('admin.orgTag.namePlaceholder')} />
           </Form.Item>
           <Form.Item name="description" label={t('admin.orgTag.fieldDescription')}>
             <Input placeholder={t('admin.orgTag.descriptionPlaceholder')} />

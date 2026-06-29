@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { Button, Input, Tag, Tabs, Modal, Form, App, Empty, Tooltip, Descriptions } from 'antd'
+import { Button, Input, Tag, Select, Modal, Form, App, Tooltip, Descriptions } from 'antd'
 import {
   PlusOutlined,
   SearchOutlined,
   EditOutlined,
   DeleteOutlined,
   PlayCircleOutlined,
-  ThunderboltOutlined,
   CheckCircleOutlined,
   StopOutlined,
   CodeOutlined,
@@ -17,8 +16,8 @@ import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { skillApi } from '@/api/skill'
 import type { SkillSummary, SkillTestResult } from '@/types/skill'
-import { GradientCard } from '@/components/base'
-import { PermissionButton } from '@/components/business'
+import { GradientCard, GradientButton } from '@/components/base'
+import { PermissionButton, PageBar, EmptyState, FavoriteButton } from '@/components/business'
 import styles from './SkillListPage.module.css'
 
 const CATEGORY_COLORS = ['#1677ff', '#52c41a', '#fa8c16', '#722ed1', '#13c2c2', '#eb2f96']
@@ -45,6 +44,8 @@ export default function SkillListPage() {
 
   const [keyword, setKeyword] = useState('')
   const [category, setCategory] = useState('')
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [createOpen, setCreateOpen] = useState(false)
   const [testSkill, setTestSkill] = useState<SkillSummary | null>(null)
   const [testArgs, setTestArgs] = useState('')
@@ -57,9 +58,14 @@ export default function SkillListPage() {
   }>()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['skills', category, keyword],
+    queryKey: ['skills', category, keyword, current, pageSize],
     queryFn: () =>
-      skillApi.list({ size: 50, keyword: keyword || undefined, category: category || undefined }),
+      skillApi.list({
+        page: current,
+        size: pageSize,
+        keyword: keyword || undefined,
+        category: category || undefined,
+      }),
   })
 
   const categoryOptions = (() => {
@@ -135,145 +141,203 @@ export default function SkillListPage() {
     }
   }
 
-  const tabItems = categoryOptions.map((opt) => ({ key: opt.value, label: opt.label }))
   const records = data?.records ?? []
 
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <ThunderboltOutlined /> {t('skill.title')}
-        </h2>
-        <div className={styles.actions}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('skill.searchPlaceholder')}
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
-            allowClear
-          />
+      <div className={styles.pageHeader}>
+        <div className={styles.topBar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('skill.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              style={{ width: 220 }}
+              allowClear
+            />
+            <Select
+              placeholder={t('skill.fieldCategory')}
+              allowClear
+              value={category || undefined}
+              onChange={(v) => {
+                setCategory(v ?? '')
+                setCurrent(1)
+              }}
+              style={{ width: 160 }}
+              options={categoryOptions}
+            />
+          </div>
           <PermissionButton permission="skill:create">
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-              onClick={() => setCreateOpen(true)}
-            >
+            <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               {t('skill.createBtn')}
-            </Button>
+            </GradientButton>
           </PermissionButton>
         </div>
       </div>
 
-      <Tabs
-        activeKey={category}
-        onChange={setCategory}
-        items={tabItems}
-        style={{ marginBottom: 16 }}
-      />
-
-      {isLoading ? (
-        <div className={styles.skeletonGrid}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
-        </div>
-      ) : !records.length ? (
-        <Empty description={t('skill.empty')} />
-      ) : (
-        <div className={styles.grid}>
-          {records.map((sk: SkillSummary, i: number) => {
-            const statusCfg = STATUS_CFG[sk.status] ?? {
-              color: 'default',
-              label: sk.status,
-              icon: <CodeOutlined />,
+      <div className={styles.body}>
+        {isLoading ? (
+          <div className={styles.skeletonGrid}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={styles.skeleton} />
+            ))}
+          </div>
+        ) : !records.length ? (
+          <EmptyState
+            title={t('skill.empty')}
+            description={t('skill.searchPlaceholder')}
+            action={
+              <PermissionButton permission="skill:create">
+                <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  {t('skill.createBtn')}
+                </GradientButton>
+              </PermissionButton>
             }
-            const tags = (sk.tags ?? '').split(',').filter(Boolean)
-            return (
-              <motion.div
-                key={sk.id}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <GradientCard featured={sk.status === '已发布'} className={styles.card}>
-                  <div className={styles.cardHeader}>
-                    <CodeOutlined style={{ color: 'var(--kf-primary)' }} />
-                    <span className={styles.cardName}>{sk.name}</span>
-                    <Tag color={statusCfg.color} icon={statusCfg.icon}>
-                      {statusCfg.label}
-                    </Tag>
-                  </div>
-                  <div className={styles.cardMeta}>
-                    {sk.category && <Tag color={categoryColor(sk.category)}>{sk.category}</Tag>}
-                    <Tag color="default">v{sk.version}</Tag>
-                    {tags.map((tag) => (
-                      <Tag key={tag} color="blue">
-                        {tag}
+          />
+        ) : (
+          <div className={styles.grid}>
+            {records.map((sk: SkillSummary, i: number) => {
+              const statusCfg = STATUS_CFG[sk.status] ?? {
+                color: 'default',
+                label: sk.status,
+                icon: <CodeOutlined />,
+              }
+              const tags = (sk.tags ?? '').split(',').filter(Boolean)
+              const catColor = sk.category ? categoryColor(sk.category) : ''
+              return (
+                <motion.div
+                  key={sk.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <GradientCard featured={sk.status === '已发布'} className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardIconWrap}>
+                        <CodeOutlined />
+                      </div>
+                      <Tag color={statusCfg.color} icon={statusCfg.icon} style={{ fontSize: 12 }}>
+                        {statusCfg.label}
                       </Tag>
-                    ))}
-                    <span className={styles.runCount}>
-                      <PlayCircleOutlined /> {sk.callCount}
-                    </span>
-                  </div>
-                  {sk.description && <p className={styles.cardDesc}>{sk.description}</p>}
-                  <div className={styles.cardActions}>
-                    <Button
-                      size="small"
-                      icon={<EditOutlined />}
-                      onClick={() => navigate(`/skills/${sk.skillId}/edit`)}
-                    >
-                      {t('common.edit')}
-                    </Button>
-                    <Button
-                      size="small"
-                      icon={<PlayCircleOutlined />}
-                      onClick={() => {
-                        setTestSkill(sk)
-                        setTestArgs('')
-                        setTestResult(null)
-                      }}
-                    >
-                      {t('common.test')}
-                    </Button>
-                    {sk.status !== '已发布' ? (
-                      <PermissionButton permission="skill:publish">
-                        <Button
-                          size="small"
-                          type="primary"
-                          style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-                          onClick={() => publishMutation.mutate(sk.skillId)}
+                    </div>
+
+                    <h4 className={styles.cardName}>{sk.name}</h4>
+                    {sk.description && <p className={styles.cardDesc}>{sk.description}</p>}
+
+                    <div className={styles.cardMeta}>
+                      {sk.category && (
+                        <span
+                          className={styles.metaItem}
+                          style={{ color: catColor, background: `${catColor}1a` }}
                         >
-                          {t('common.publish')}
-                        </Button>
-                      </PermissionButton>
-                    ) : (
-                      <PermissionButton permission="skill:publish">
+                          {sk.category}
+                        </span>
+                      )}
+                      <span className={styles.metaItem}>v{sk.version}</span>
+                      {tags.map((tag) => (
+                        <span key={tag} className={styles.metaItem}>
+                          #{tag}
+                        </span>
+                      ))}
+                      <span className={styles.metaItem}>
+                        <PlayCircleOutlined /> {sk.callCount}
+                      </span>
+                    </div>
+
+                    <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title={t('common.test')}>
                         <Button
                           size="small"
-                          danger
-                          onClick={() => toggleMutation.mutate(sk.skillId)}
-                        >
-                          {t('common.disable')}
-                        </Button>
-                      </PermissionButton>
-                    )}
-                    <Tooltip title={t('common.delete')}>
-                      <PermissionButton permission="skill:delete">
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleDelete(sk)}
+                          icon={<PlayCircleOutlined />}
+                          className={styles.btnBlue}
+                          onClick={() => {
+                            setTestSkill(sk)
+                            setTestArgs('')
+                            setTestResult(null)
+                          }}
                         />
+                      </Tooltip>
+                      <Tooltip title={t('common.edit')}>
+                        <Button
+                          size="small"
+                          icon={<EditOutlined />}
+                          className={styles.btnGray}
+                          onClick={() => navigate(`/skills/${sk.skillId}/edit`)}
+                        />
+                      </Tooltip>
+                      {sk.status !== '已发布' ? (
+                        <PermissionButton permission="skill:publish" mode="hide">
+                          <Tooltip title={t('common.publish')}>
+                            <Button
+                              size="small"
+                              icon={<CheckCircleOutlined />}
+                              className={styles.btnGreen}
+                              onClick={() => publishMutation.mutate(sk.skillId)}
+                            />
+                          </Tooltip>
+                        </PermissionButton>
+                      ) : (
+                        <PermissionButton permission="skill:publish" mode="hide">
+                          <Tooltip title={t('common.disable')}>
+                            <Button
+                              size="small"
+                              icon={<StopOutlined />}
+                              className={styles.btnOrange}
+                              onClick={() => toggleMutation.mutate(sk.skillId)}
+                            />
+                          </Tooltip>
+                        </PermissionButton>
+                      )}
+                      <PermissionButton permission="skill:delete" mode="hide">
+                        <Tooltip title={t('common.delete')}>
+                          <Button
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            className={styles.btnRed}
+                            onClick={() => handleDelete(sk)}
+                          />
+                        </Tooltip>
                       </PermissionButton>
-                    </Tooltip>
-                  </div>
-                </GradientCard>
-              </motion.div>
-            )
-          })}
+                      <FavoriteButton
+                        type="skill"
+                        targetId={sk.skillId}
+                        title={sk.name}
+                        description={sk.description}
+                        className={styles.btnGold}
+                      />
+                    </div>
+                  </GradientCard>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
         </div>
       )}
 

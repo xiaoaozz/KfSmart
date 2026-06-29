@@ -5,6 +5,7 @@ import com.smart.kf.model.workflow.Workflow;
 import com.smart.kf.model.workflow.WorkflowExecutionLog;
 import com.smart.kf.repository.workflow.WorkflowExecutionLogRepository;
 import com.smart.kf.repository.workflow.WorkflowRepository;
+import com.smart.kf.utils.pagination.PageResult;
 import com.smart.kf.workflow.engine.ExecutionContext;
 import com.smart.kf.workflow.engine.WorkflowExecutionEngine;
 import org.slf4j.Logger;
@@ -44,10 +45,19 @@ public class WorkflowExecutionService {
         this.broadcaster = broadcaster;
     }
 
+    private Workflow resolveWorkflow(String workflowId) {
+        try {
+            Long numId = Long.parseLong(workflowId);
+            return workflowRepository.findById(numId)
+                .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+        } catch (NumberFormatException ignored) {}
+        return workflowRepository.findByWorkflowId(workflowId)
+            .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+    }
+
     @Transactional
     public Map<String, Object> executeSync(String workflowId, Map<String, Object> input, String username) {
-        Workflow workflow = workflowRepository.findByWorkflowId(workflowId)
-            .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+        Workflow workflow = resolveWorkflow(workflowId);
 
         ExecutionContext.ExecutionResult result = executionEngine.execute(
             workflow.getNodesJson(),
@@ -58,20 +68,19 @@ public class WorkflowExecutionService {
         );
 
         updateWorkflowStats(workflow, result);
-        saveExecutionLog(result, workflowId, username, "sync_debug", input);
+        saveExecutionLog(result, workflow.getWorkflowId(), username, "sync_debug", input);
 
         return buildResponse(result);
     }
 
     public String executeAsync(String workflowId, Map<String, Object> input, String username) {
-        Workflow workflow = workflowRepository.findByWorkflowId(workflowId)
-            .orElseThrow(() -> new IllegalArgumentException("工作流不存在"));
+        Workflow workflow = resolveWorkflow(workflowId);
 
         String executionId = "exec_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
 
         WorkflowExecutionLog log = new WorkflowExecutionLog();
         log.setExecutionId(executionId);
-        log.setWorkflowId(workflowId);
+        log.setWorkflowId(workflow.getWorkflowId());
         log.setTriggerType("async_run");
         log.setStatus("running");
         log.setStartedBy(username);
@@ -120,11 +129,13 @@ public class WorkflowExecutionService {
         return logRepository.findByExecutionId(executionId).orElse(null);
     }
 
-    public Page<WorkflowExecutionLog> listExecutionLogs(String workflowId, int page, int size) {
-        return logRepository.findByWorkflowIdOrderByStartedAtDesc(
-            workflowId,
+    public PageResult<WorkflowExecutionLog> listExecutionLogs(String workflowId, int page, int size) {
+        String resolvedId = resolveWorkflow(workflowId).getWorkflowId();
+        Page<WorkflowExecutionLog> result = logRepository.findByWorkflowIdOrderByStartedAtDesc(
+            resolvedId,
             PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startedAt"))
         );
+        return PageResult.fromPage(result);
     }
 
     public ExecutionContext.ExecutionResult execute(

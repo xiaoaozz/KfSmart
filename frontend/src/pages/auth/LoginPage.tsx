@@ -29,7 +29,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const result = await authApi.login(values)
-      setTokens(result.token, result.refreshToken)
+      setTokens(result.token, result.refreshToken, values.remember)
       // 清除用户信息缓存，确保路由守卫立即获取最新角色信息
       queryClient.invalidateQueries({ queryKey: ['users', 'me'] })
       message.success(t('auth.login.success'))

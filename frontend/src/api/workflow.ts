@@ -24,7 +24,12 @@ interface WorkflowGraphPayload {
 const data = <T>(r: AxiosResponse<T>) => r.data
 
 export const workflowApi = {
-  list(params: { current?: number; size?: number; keyword?: string }) {
+  list(params: {
+    current?: number
+    size?: number
+    keyword?: string
+    status?: 'draft' | 'published' | 'disabled'
+  }) {
     return http.get<PageResult<WorkflowSummary>>('/workflows', { params }).then(data)
   },
 
@@ -57,7 +62,9 @@ export const workflowApi = {
   },
 
   run(id: number, input: string) {
-    return http.post<WorkflowRun>(`/workflows/${id}/execute`, { input }).then(data)
+    return http
+      .post<{ executionId: string }>(`/workflows/${id}/execute-async`, { input })
+      .then(data)
   },
 
   listRuns(id: number, params: { current?: number; size?: number }) {

@@ -4,6 +4,12 @@ import axios, {
   type AxiosResponse,
 } from 'axios'
 import i18n from '../i18n'
+import {
+  getStoredRefreshToken,
+  updateStoredToken,
+  clearAuthStorage,
+  getStoredToken,
+} from '../stores/auth'
 
 // ------------------------------------------------------------------ camelCase
 function toCamel(s: string): string {
@@ -37,9 +43,7 @@ function drainQueue(token: string) {
 }
 
 async function doRefresh(): Promise<string> {
-  const raw = localStorage.getItem('kf-auth')
-  const stored = raw ? JSON.parse(raw) : null
-  const refreshToken: string | undefined = stored?.state?.refreshToken
+  const refreshToken = getStoredRefreshToken()
   if (!refreshToken) throw new Error('no_refresh_token')
 
   const res = await axios.post<{ data: { token: string } }>(
@@ -47,20 +51,13 @@ async function doRefresh(): Promise<string> {
     { refreshToken },
   )
   const newToken = res.data.data.token
-
-  // Persist updated token via the auth store's persist layer
-  if (raw) {
-    const parsed = JSON.parse(raw)
-    parsed.state = { ...parsed.state, token: newToken }
-    localStorage.setItem('kf-auth', JSON.stringify(parsed))
-  }
+  updateStoredToken(newToken)
   return newToken
 }
 
 // ------------------------------------------------------------------ request interceptor
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const raw = localStorage.getItem('kf-auth')
-  const token: string | undefined = raw ? JSON.parse(raw)?.state?.token : undefined
+  const token = getStoredToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
 
   const localeRaw = localStorage.getItem('kf-locale')
@@ -105,7 +102,7 @@ http.interceptors.response.use(
       } catch {
         isRefreshing = false
         refreshQueue = []
-        localStorage.removeItem('kf-auth')
+        clearAuthStorage()
         window.location.href = '/login'
         return Promise.reject(error)
       }

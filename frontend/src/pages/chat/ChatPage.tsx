@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import { chatApi } from '@/api/chat'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useCurrentUser } from '@/hooks/usePermission'
+import { FavoriteButton } from '@/components/business'
 import type { Message, Conversation, Citation } from '@/types/chat'
 import { injectCitationLinks } from '@/utils/citationHelpers'
 import styles from './ChatPage.module.css'
@@ -154,6 +155,7 @@ function ChatSidebar({
           >
             <span className={styles.convTitle}>{c.title || t('chat.untitled')}</span>
             <div className={styles.convActions} onClick={(e) => e.stopPropagation()}>
+              <FavoriteButton type="chat" targetId={c.id} title={c.title || t('chat.untitled')} />
               <Tooltip title={c.pinned ? t('chat.unpin') : t('chat.pin')}>
                 <PushpinOutlined
                   className={[styles.convAction, c.pinned ? styles.pinned : ''].join(' ')}

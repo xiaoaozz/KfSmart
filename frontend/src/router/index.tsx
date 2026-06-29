@@ -20,12 +20,15 @@ const AgentEditorPage = lazy(() => import('@/pages/agent/AgentEditorPage'))
 const AgentExecutionPage = lazy(() => import('@/pages/agent/AgentExecutionPage'))
 const WorkflowListPage = lazy(() => import('@/pages/workflow/WorkflowListPage'))
 const WorkflowEditorPage = lazy(() => import('@/pages/workflow/WorkflowEditorPage'))
+const WorkflowExecutionPage = lazy(() => import('@/pages/workflow/WorkflowExecutionPage'))
 const SkillListPage = lazy(() => import('@/pages/skill/SkillListPage'))
 const SkillEditorPage = lazy(() => import('@/pages/skill/SkillEditorPage'))
 const PromptListPage = lazy(() => import('@/pages/skill/PromptListPage'))
 const McpToolPage = lazy(() => import('@/pages/skill/McpToolPage'))
 const ModelConfigPage = lazy(() => import('@/pages/skill/ModelConfigPage'))
 const ProfilePage = lazy(() => import('@/pages/profile/ProfilePage'))
+const ExplorePage = lazy(() => import('@/pages/explore/ExplorePage'))
+const ExploreChatPage = lazy(() => import('@/pages/explore/ExploreChatPage'))
 // Admin
 const AdminUsersPage = lazy(() => import('@/pages/admin/UserManagePage'))
 const AdminRolesPage = lazy(() => import('@/pages/admin/RoleManagePage'))
@@ -137,12 +140,15 @@ export const router = createBrowserRouter([
           { path: '/agents/:id/executions', element: <AgentExecutionPage /> },
           { path: '/workflows', element: <WorkflowListPage /> },
           { path: '/workflows/:id/edit', element: <WorkflowEditorPage /> },
+          { path: '/workflows/:id/executions', element: <WorkflowExecutionPage /> },
           { path: '/skills', element: <SkillListPage /> },
           { path: '/skills/:id/edit', element: <SkillEditorPage /> },
           { path: '/prompts', element: <PromptListPage /> },
           { path: '/mcp-tools', element: <McpToolPage /> },
           { path: '/models', element: <ModelConfigPage /> },
           { path: '/profile', element: <ProfilePage /> },
+          { path: '/explore', element: <ExplorePage /> },
+          { path: '/explore/:type/:id', element: <ExploreChatPage /> },
 
           // Admin sub-tree
           {

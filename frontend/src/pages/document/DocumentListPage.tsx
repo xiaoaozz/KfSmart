@@ -20,7 +20,7 @@ import type { Document, DocStatus } from '@/types/document'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
 import ChunkedUploader from '@/components/business/ChunkedUploader'
 import DocPreviewDrawer from '@/components/business/DocPreviewDrawer'
-import { PermissionButton } from '@/components/business'
+import { PermissionButton, FavoriteButton, PageBar } from '@/components/business'
 import styles from './DocumentListPage.module.css'
 
 function FileIcon({ type }: { type: string }) {
@@ -140,6 +140,7 @@ export default function DocumentListPage() {
       width: 120,
       render: (_: unknown, row) => (
         <div style={{ display: 'flex', gap: 4 }}>
+          <FavoriteButton type="document" targetId={row.fileMd5} title={row.fileName} />
           <Tooltip title={t('doc.previewTooltip')}>
             <Button
               type="text"
@@ -182,56 +183,75 @@ export default function DocumentListPage() {
 
   return (
     <div className={styles.root}>
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.filters}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('doc.searchPlaceholder')}
-            value={keyword}
-            onChange={(e) => {
-              setKeyword(e.target.value)
-              setCurrent(1)
-            }}
-            allowClear
-            style={{ width: 240 }}
-          />
-          <Select
-            placeholder={t('doc.statusPlaceholder')}
-            allowClear
-            value={status}
-            onChange={(v) => {
-              setStatus(v)
-              setCurrent(1)
-            }}
-            style={{ width: 130 }}
-            options={Object.entries(STATUS_CFG).map(([k, v]) => ({ label: v.label, value: k }))}
-          />
+      <div className={styles.pageHeader}>
+        <div className={styles.toolbar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('doc.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              allowClear
+              style={{ width: 240 }}
+            />
+            <Select
+              placeholder={t('doc.statusPlaceholder')}
+              allowClear
+              value={status}
+              onChange={(v) => {
+                setStatus(v)
+                setCurrent(1)
+              }}
+              style={{ width: 130 }}
+              options={Object.entries(STATUS_CFG).map(([k, v]) => ({ label: v.label, value: k }))}
+            />
+          </div>
+          <PermissionButton permission="doc:write" mode="hide">
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
+              onClick={() => setUploadOpen(true)}
+            >
+              {t('doc.uploadBtn')}
+            </Button>
+          </PermissionButton>
         </div>
-        <PermissionButton permission="doc:write" mode="hide">
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-            onClick={() => setUploadOpen(true)}
-          >
-            {t('doc.uploadBtn')}
-          </Button>
-        </PermissionButton>
       </div>
 
-      <PageTable<Document>
-        columns={columns}
-        dataSource={data?.records}
-        loading={isLoading}
-        total={data?.total}
-        current={current}
-        pageSize={pageSize}
-        onPageChange={(p, s) => {
-          setCurrent(p)
-          setPageSize(s)
-        }}
-      />
+      <div className={styles.body}>
+        <PageTable<Document>
+          columns={columns}
+          dataSource={data?.records}
+          loading={isLoading}
+          showPagination={false}
+        />
+      </div>
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
+        </div>
+      )}
 
       {/* Upload Modal */}
       <Modal

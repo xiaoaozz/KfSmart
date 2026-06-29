@@ -11,7 +11,7 @@ const flag = (key: string, defaultValue = false): boolean => {
 
 export const features = {
   /** Dify-style visual workflow editor (Phase 4) */
-  workflowEditor: flag('WORKFLOW_EDITOR'),
+  workflowEditor: flag('WORKFLOW_EDITOR', true),
 
   /** AI-powered document chat widget */
   docChat: flag('DOC_CHAT', true),

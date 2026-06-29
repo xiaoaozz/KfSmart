@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Tag, Modal, Form, App, Empty, Tooltip } from 'antd'
+import { Button, Input, Tag, Modal, Form, App, Row, Col, Skeleton, Tooltip, Popconfirm } from 'antd'
 import {
   PlusOutlined,
   SearchOutlined,
@@ -9,6 +9,7 @@ import {
   ApiOutlined,
   CheckCircleOutlined,
   StopOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -16,21 +17,137 @@ import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { workflowApi } from '@/api/workflow'
 import type { WorkflowSummary } from '@/types/workflow'
-import { GradientCard } from '@/components/base'
-import { PermissionButton } from '@/components/business'
+import { GradientCard, GradientButton } from '@/components/base'
+import { EmptyState, PermissionButton, PageBar } from '@/components/business'
 import styles from './WorkflowListPage.module.css'
+
+type WorkflowStatus = 'draft' | 'published' | 'disabled'
+type StatusCfg = Record<WorkflowStatus, { color: string; label: string; icon: React.ReactNode }>
+
+interface WorkflowCardProps {
+  wf: WorkflowSummary
+  statusCfg: StatusCfg
+  onEdit: () => void
+  onPublish: () => void
+  onDisable: () => void
+  onDelete: () => void
+  onHistory: () => void
+}
+
+function WorkflowCard({
+  wf,
+  statusCfg,
+  onEdit,
+  onPublish,
+  onDisable,
+  onDelete,
+  onHistory,
+}: WorkflowCardProps) {
+  const { t } = useTranslation()
+  const cfg = statusCfg[wf.status as WorkflowStatus] ?? {
+    color: 'default' as const,
+    label: wf.status,
+    icon: null,
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <GradientCard className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardIconWrap}>
+            <ApiOutlined />
+          </div>
+          <Tag color={cfg.color} icon={cfg.icon} style={{ fontSize: 12 }}>
+            {cfg.label}
+          </Tag>
+        </div>
+
+        <h4 className={styles.cardName}>{wf.name}</h4>
+        {wf.description && <p className={styles.cardDesc}>{wf.description}</p>}
+
+        <div className={styles.cardMeta}>
+          {(wf.callCount ?? 0) > 0 && (
+            <span className={styles.metaItem}>
+              <PlayCircleOutlined /> {t('workflow.runCount', { count: wf.callCount })}
+            </span>
+          )}
+          {wf.updatedAt && !Number.isNaN(new Date(wf.updatedAt).getTime()) && (
+            <span className={styles.metaItem}>{new Date(wf.updatedAt).toLocaleDateString()}</span>
+          )}
+        </div>
+
+        <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+          <Tooltip title={t('workflow.executions.historyBtn')}>
+            <Button
+              size="small"
+              icon={<HistoryOutlined />}
+              className={styles.btnBlue}
+              onClick={onHistory}
+            />
+          </Tooltip>
+          <Tooltip title={t('common.edit')}>
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              className={styles.btnGray}
+              onClick={onEdit}
+            />
+          </Tooltip>
+          {wf.status !== 'published' ? (
+            <PermissionButton permission="workflow:publish">
+              <Tooltip title={t('common.publish')}>
+                <Button
+                  size="small"
+                  icon={<CheckCircleOutlined />}
+                  className={styles.btnGreen}
+                  onClick={onPublish}
+                />
+              </Tooltip>
+            </PermissionButton>
+          ) : (
+            <PermissionButton permission="workflow:publish">
+              <Tooltip title={t('common.disable')}>
+                <Button
+                  size="small"
+                  icon={<StopOutlined />}
+                  className={styles.btnOrange}
+                  onClick={onDisable}
+                />
+              </Tooltip>
+            </PermissionButton>
+          )}
+          <PermissionButton permission="workflow:delete">
+            <Tooltip title={t('common.delete')}>
+              <Popconfirm
+                title={t('workflow.deleteConfirm', { name: wf.name })}
+                description={t('workflow.deleteContent')}
+                onConfirm={onDelete}
+                okText={t('common.delete')}
+                okButtonProps={{ danger: true }}
+                cancelText={t('common.cancel')}
+              >
+                <Button size="small" icon={<DeleteOutlined />} className={styles.btnRed} />
+              </Popconfirm>
+            </Tooltip>
+          </PermissionButton>
+        </div>
+      </GradientCard>
+    </motion.div>
+  )
+}
 
 export default function WorkflowListPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { message, modal } = App.useApp()
+  const { message } = App.useApp()
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [form] = Form.useForm<{ name: string; description?: string }>()
   const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
-  const STATUS_CFG = {
+  const STATUS_CFG: StatusCfg = {
     draft: { color: 'default', label: t('workflow.statusDraft'), icon: <EditOutlined /> },
     published: {
       color: 'success',
@@ -41,8 +158,8 @@ export default function WorkflowListPage() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['workflows', current, keyword],
-    queryFn: () => workflowApi.list({ current, size: 12, keyword: keyword || undefined }),
+    queryKey: ['workflows', current, pageSize, keyword],
+    queryFn: () => workflowApi.list({ current, size: pageSize, keyword: keyword || undefined }),
   })
 
   const createMutation = useMutation({
@@ -79,87 +196,90 @@ export default function WorkflowListPage() {
     },
   })
 
-  const handleDelete = (wf: WorkflowSummary) => {
-    modal.confirm({
-      title: t('workflow.deleteConfirm', { name: wf.name }),
-      content: t('workflow.deleteContent'),
-      okType: 'danger',
-      onOk: () => deleteMutation.mutateAsync(wf.id),
-    })
-  }
-
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <ApiOutlined /> {t('workflow.title')}
-        </h2>
-        <div className={styles.actions}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('workflow.searchPlaceholder')}
-            value={keyword}
-            onChange={(e) => {
-              setKeyword(e.target.value)
-              setCurrent(1)
-            }}
-            style={{ width: 220 }}
-            allowClear
-          />
+      <div className={styles.pageHeader}>
+        <div className={styles.toolbar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('workflow.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              allowClear
+              style={{ width: 240 }}
+            />
+          </div>
           <PermissionButton permission="workflow:create">
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-              onClick={() => setCreateOpen(true)}
-            >
+            <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
               {t('workflow.createBtn')}
-            </Button>
+            </GradientButton>
           </PermissionButton>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className={styles.skeletonGrid}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
-        </div>
-      ) : !data?.records.length ? (
-        <Empty description={t('workflow.empty')} />
-      ) : (
-        <div className={styles.grid}>
-          {data.records.map((wf: WorkflowSummary, i: number) => (
-            <motion.div
-              key={wf.id}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-            >
-              <WorkflowCard
-                wf={wf}
-                statusCfg={STATUS_CFG}
-                onEdit={() => navigate(`/workflows/${wf.id}/edit`)}
-                onPublish={() => publishMutation.mutate(wf.id)}
-                onDisable={() => disableMutation.mutate(wf.id)}
-                onDelete={() => handleDelete(wf)}
-              />
-            </motion.div>
-          ))}
-        </div>
-      )}
+      <div className={styles.body}>
+        {isLoading ? (
+          <Row gutter={[16, 16]}>
+            {[1, 2, 3].map((i) => (
+              <Col key={i} xs={24} sm={12} lg={8}>
+                <Skeleton active />
+              </Col>
+            ))}
+          </Row>
+        ) : !data?.records.length ? (
+          <EmptyState
+            title={t('workflow.empty')}
+            action={
+              <PermissionButton permission="workflow:create">
+                <GradientButton icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                  {t('workflow.createBtn')}
+                </GradientButton>
+              </PermissionButton>
+            }
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {data.records.map((wf: WorkflowSummary) => (
+              <Col key={wf.id} xs={24} sm={12} lg={8}>
+                <WorkflowCard
+                  wf={wf}
+                  statusCfg={STATUS_CFG}
+                  onEdit={() => navigate(`/workflows/${wf.id}/edit`)}
+                  onPublish={() => publishMutation.mutate(wf.id)}
+                  onDisable={() => disableMutation.mutate(wf.id)}
+                  onDelete={() => deleteMutation.mutate(wf.id)}
+                  onHistory={() => navigate(`/workflows/${wf.id}/executions`)}
+                />
+              </Col>
+            ))}
+          </Row>
+        )}
+      </div>
 
-      {data && data.total > 12 && (
-        <div className={styles.pagination}>
-          {Array.from({ length: Math.ceil(data.total / 12) }).map((_, i) => (
-            <button
-              key={i}
-              className={`${styles.pageBtn} ${current === i + 1 ? styles.pageBtnActive : ''}`}
-              onClick={() => setCurrent(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))}
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
         </div>
       )}
 
@@ -188,75 +308,5 @@ export default function WorkflowListPage() {
         </Form>
       </Modal>
     </div>
-  )
-}
-
-type StatusCfg = Record<string, { color: string; label: string; icon: React.ReactNode }>
-
-interface WorkflowCardProps {
-  wf: WorkflowSummary
-  statusCfg: StatusCfg
-  onEdit: () => void
-  onPublish: () => void
-  onDisable: () => void
-  onDelete: () => void
-}
-
-function WorkflowCard({
-  wf,
-  statusCfg,
-  onEdit,
-  onPublish,
-  onDisable,
-  onDelete,
-}: WorkflowCardProps) {
-  const { t } = useTranslation()
-  const isPublished = wf.status === 'published'
-  const cfg = statusCfg[wf.status]
-
-  return (
-    <GradientCard featured={isPublished} className={styles.card}>
-      <div className={styles.cardHeader}>
-        <span className={styles.cardName}>{wf.name}</span>
-        <Tag color={cfg.color} icon={cfg.icon}>
-          {cfg.label}
-        </Tag>
-      </div>
-      {wf.description && <p className={styles.cardDesc}>{wf.description}</p>}
-      <div className={styles.cardMeta}>
-        <span>
-          <PlayCircleOutlined /> {t('workflow.runCount', { count: wf.runCount })}
-        </span>
-        <span>{new Date(wf.updateTime).toLocaleDateString()}</span>
-      </div>
-      <div className={styles.cardActions}>
-        <Button size="small" icon={<EditOutlined />} onClick={onEdit}>
-          {t('common.edit')}
-        </Button>
-        {wf.status !== 'published' ? (
-          <PermissionButton permission="workflow:publish">
-            <Button
-              size="small"
-              type="primary"
-              onClick={onPublish}
-              style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-            >
-              {t('common.publish')}
-            </Button>
-          </PermissionButton>
-        ) : (
-          <PermissionButton permission="workflow:publish">
-            <Button size="small" danger onClick={onDisable}>
-              {t('common.disable')}
-            </Button>
-          </PermissionButton>
-        )}
-        <Tooltip title={t('common.delete')}>
-          <PermissionButton permission="workflow:delete">
-            <Button size="small" danger icon={<DeleteOutlined />} onClick={onDelete} />
-          </PermissionButton>
-        </Tooltip>
-      </div>
-    </GradientCard>
   )
 }

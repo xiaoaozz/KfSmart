@@ -45,11 +45,17 @@ public class FileUpload {
     private int status; // 0-上传中 1-已完成
 
     /**
-     * 上传文件的用户的标识符
-     * 用于记录哪个用户上传了文件
+     * @deprecated 遗留字段：存储用户 ID 字符串形式，改用 {@link #ownerId}
      */
+    @Deprecated
     @Column(name = "user_id", length = 64, nullable = false)
     private String userId;
+
+    /**
+     * 上传用户 FK，替代 userId 字段
+     */
+    @Column(name = "owner_id")
+    private Long ownerId;
     
     /**
      * 文件所属组织标签

@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -50,9 +51,13 @@ public class AgentService {
     public Map<String, Object> agentStats() {
         List<Agent> agents = agentRepository.findAll();
         long agentCount = agents.size();
-        long calls = agents.stream().mapToLong(Agent::getCallCount).sum();
-        long success = agents.stream().mapToLong(Agent::getSuccessCount).sum();
-        long duration = agents.stream().mapToLong(a -> a.getAvgDurationMs() * Math.max(1, a.getCallCount())).sum();
+        long calls = agents.stream().mapToLong(a -> a.getCallCount() != null ? a.getCallCount() : 0L).sum();
+        long success = agents.stream().mapToLong(a -> a.getSuccessCount() != null ? a.getSuccessCount() : 0L).sum();
+        long duration = agents.stream().mapToLong(a -> {
+            long avg = a.getAvgDurationMs() != null ? a.getAvgDurationMs() : 0L;
+            long cnt = a.getCallCount() != null ? a.getCallCount() : 0L;
+            return avg * Math.max(1L, cnt);
+        }).sum();
         long successRate = calls == 0 ? 100 : Math.round(success * 100.0 / calls);
         long avgDurationMs = calls == 0 ? 0 : Math.round(duration * 1.0 / calls);
 
@@ -65,17 +70,25 @@ public class AgentService {
     }
 
     public Agent getAgent(String agentId) {
-        Agent agent = agentRepository.findByAgentId(agentId)
+        Agent agent = resolveAgent(agentId)
             .orElseThrow(() -> new IllegalArgumentException("Agent不存在"));
         applyI18n(agent);
         return agent;
+    }
+
+    /** Looks up by numeric primary key if agentId is all-digits, otherwise by the agentId string. */
+    private Optional<Agent> resolveAgent(String agentId) {
+        if (agentId != null && agentId.matches("\\d+")) {
+            return agentRepository.findById(Long.parseLong(agentId));
+        }
+        return agentRepository.findByAgentId(agentId);
     }
 
     @Transactional
     public Agent saveAgent(Agent request) {
         Agent agent = isBlank(request.getAgentId())
             ? new Agent()
-            : agentRepository.findByAgentId(request.getAgentId()).orElse(new Agent());
+            : resolveAgent(request.getAgentId()).orElse(new Agent());
         boolean isNew = isBlank(agent.getAgentId());
         if (isNew) {
             agent.setAgentId("agt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
@@ -99,9 +112,9 @@ public class AgentService {
         copy.setAgentId("agt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         copy.setName(source.getName() + " 副本");
         copy.setStatus("draft");
-        copy.setCallCount(0);
-        copy.setSuccessCount(0);
-        copy.setFailureCount(0);
+        copy.setCallCount(0L);
+        copy.setSuccessCount(0L);
+        copy.setFailureCount(0L);
         copy.setPublishedAt(null);
         source.setInstallCount(safeLong(source.getInstallCount()) + 1);
         agentRepository.save(source);

@@ -2,7 +2,6 @@ package com.smart.kf.service;
 
 import com.smart.kf.config.LocaleContext;
 import com.smart.kf.exception.CustomException;
-import com.smart.kf.service.I18nTranslationService;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.LoginRecord;
 import com.smart.kf.model.OrganizationTag;
@@ -28,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,8 +50,9 @@ public class UserService {
     private static final String DEFAULT_ORG_NAME = "默认组织";
     private static final String DEFAULT_ORG_DESCRIPTION = "系统默认组织标签，自动分配给所有新用户";
     private static final String PRIVATE_TAG_PREFIX = "PRIVATE_";
-    private static final String PRIVATE_ORG_NAME_SUFFIX = "的私人空间";
-    private static final String PRIVATE_ORG_DESCRIPTION = "用户的私人组织标签，仅用户本人可访问";
+    private static final String PENDING_ORG_TAG = "new-users";
+    private static final String PENDING_ORG_NAME = "新注册用户";
+    private static final String PENDING_ORG_DESCRIPTION = "新注册用户的待分配组织，管理员可将用户分配到具体部门";
 
     @Autowired
     private UserRepository userRepository;
@@ -103,58 +104,49 @@ public class UserService {
             }
         }
 
-        // 确保默认组织标签存在（系统内部使用）
+        // 确保默认组织标签和新注册用户组织存在
         ensureDefaultOrgTagExists();
+        ensurePendingOrgExists();
 
         User user = new User();
         user.setUsername(username);
-        // 对密码进行加密处理并设置到 User 对象中
         user.setPassword(PasswordUtil.encode(password));
-        // 设置用户角色为普通用户
         user.setRole(User.Role.USER);
         if (email != null && !email.isBlank()) {
             user.setEmail(email.trim().toLowerCase());
         }
-        
-        // 保存用户以生成ID
+
+        // 将新用户放入"新注册用户"待分配组织，管理员后续分配具体部门
+        user.setOrgTags(PENDING_ORG_TAG);
+        user.setPrimaryOrg(PENDING_ORG_TAG);
+
         userRepository.save(user);
-        
-        // 创建用户的私人组织标签
-        String privateTagId = PRIVATE_TAG_PREFIX + username;
-        createPrivateOrgTag(privateTagId, username, user);
-        
-        // 只分配私人组织标签
-        user.setOrgTags(privateTagId);
-        
-        // 设置私人组织标签为主组织标签
-        user.setPrimaryOrg(privateTagId);
-        
-        userRepository.save(user);
-        
+
         // 缓存组织标签信息
-        orgTagCacheService.cacheUserOrgTags(username, List.of(privateTagId));
-        orgTagCacheService.cacheUserPrimaryOrg(username, privateTagId);
-        
-        logger.info("User registered successfully with private organization tag: {}", username);
+        orgTagCacheService.cacheUserOrgTags(username, List.of(PENDING_ORG_TAG));
+        orgTagCacheService.cacheUserPrimaryOrg(username, PENDING_ORG_TAG);
+
+        logger.info("User registered successfully, placed in pending org '{}': {}", PENDING_ORG_TAG, username);
     }
     
     /**
-     * 创建用户的私人组织标签
+     * 确保"新注册用户"待分配组织标签存在
      */
-    private void createPrivateOrgTag(String privateTagId, String username, User owner) {
-        // 检查私人标签是否已存在
-        if (!organizationTagRepository.existsByTagId(privateTagId)) {
-            logger.info("Creating private organization tag for user: {}", username);
-            
-            // 创建私人组织标签
-            OrganizationTag privateTag = new OrganizationTag();
-            privateTag.setTagId(privateTagId);
-            privateTag.setName(username + PRIVATE_ORG_NAME_SUFFIX);
-            privateTag.setDescription(PRIVATE_ORG_DESCRIPTION);
-            privateTag.setCreatedBy(owner);
-            
-            organizationTagRepository.save(privateTag);
-            logger.info("Private organization tag created successfully for user: {}", username);
+    private void ensurePendingOrgExists() {
+        if (!organizationTagRepository.existsByTagId(PENDING_ORG_TAG)) {
+            logger.info("Creating pending org tag '{}'", PENDING_ORG_TAG);
+            Optional<User> adminUser = userRepository.findAll().stream()
+                    .filter(u -> User.Role.ADMIN.equals(u.getRole()))
+                    .findFirst();
+            User creator = adminUser.orElseGet(this::createSystemAdminIfNotExists);
+
+            OrganizationTag pendingTag = new OrganizationTag();
+            pendingTag.setTagId(PENDING_ORG_TAG);
+            pendingTag.setName(PENDING_ORG_NAME);
+            pendingTag.setDescription(PENDING_ORG_DESCRIPTION);
+            pendingTag.setCreatedBy(creator);
+            organizationTagRepository.save(pendingTag);
+            logger.info("Pending org tag '{}' created successfully", PENDING_ORG_TAG);
         }
     }
 
@@ -321,8 +313,16 @@ public class UserService {
      * @param creatorUsername 创建者用户名（必须是管理员）
      */
     @Transactional
-    public OrganizationTag createOrganizationTag(String tagId, String name, String description, 
+    public OrganizationTag createOrganizationTag(String tagId, String name, String description,
                                                 String parentTag, String creatorUsername) {
+        // 参数基础校验
+        if (tagId == null || tagId.isBlank()) {
+            throw new CustomException("Tag ID is required", HttpStatus.BAD_REQUEST);
+        }
+        if (name == null || name.isBlank()) {
+            throw new CustomException("Tag name is required", HttpStatus.BAD_REQUEST);
+        }
+
         // 验证创建者是否为管理员
         User creator = userRepository.findByUsername(creatorUsername)
                 .orElseThrow(() -> new CustomException("Creator not found", HttpStatus.NOT_FOUND));
@@ -383,41 +383,23 @@ public class UserService {
             }
         }
         
-        // 获取用户的现有组织标签
-        Set<String> existingTags = new HashSet<>();
-        if (user.getOrgTags() != null && !user.getOrgTags().isEmpty()) {
-            existingTags = Arrays.stream(user.getOrgTags().split(",")).collect(Collectors.toSet());
-        }
-        
-        // 找出并保留用户的私人组织标签
-        String privateTagId = PRIVATE_TAG_PREFIX + user.getUsername();
-        boolean hasPrivateTag = existingTags.contains(privateTagId);
-        
-        // 确保用户的私人组织标签不会被删除
+        // 将 admin 提供的标签列表作为用户的完整组织标签（替换而非追加）
         Set<String> finalTags = new HashSet<>(orgTags);
-        finalTags.add(privateTagId);
-        
-        // 将标签列表转换为逗号分隔的字符串
         String orgTagsStr = String.join(",", finalTags);
         user.setOrgTags(orgTagsStr);
-        
-        // 如果用户没有主组织标签且有组织标签，则优先使用私人标签作为主组织
-        if ((user.getPrimaryOrg() == null || user.getPrimaryOrg().isEmpty()) && !finalTags.isEmpty()) {
-            if (hasPrivateTag) {
-                user.setPrimaryOrg(privateTagId);
-            } else {
-                user.setPrimaryOrg(new ArrayList<>(finalTags).get(0));
-            }
+
+        // 以 admin 指定的第一个标签作为主组织；若清空则保留原值
+        if (!orgTags.isEmpty()) {
+            user.setPrimaryOrg(orgTags.get(0));
         }
-        
+
         userRepository.save(user);
-        
+
         // 更新缓存
         orgTagCacheService.deleteUserOrgTagsCache(user.getUsername());
         orgTagCacheService.cacheUserOrgTags(user.getUsername(), new ArrayList<>(finalTags));
-        // 同时清除有效标签缓存
         orgTagCacheService.deleteUserEffectiveTagsCache(user.getUsername());
-        
+
         if (user.getPrimaryOrg() != null && !user.getPrimaryOrg().isEmpty()) {
             orgTagCacheService.cacheUserPrimaryOrg(user.getUsername(), user.getPrimaryOrg());
         }
@@ -439,7 +421,10 @@ public class UserService {
         
         // 如果缓存中没有，则从数据库获取
         if (orgTags == null || orgTags.isEmpty()) {
-            orgTags = Arrays.asList(user.getOrgTags().split(","));
+            String rawTags = user.getOrgTags();
+            orgTags = (rawTags != null && !rawTags.isBlank())
+                    ? Arrays.asList(rawTags.split(","))
+                    : java.util.Collections.emptyList();
             // 更新缓存
             orgTagCacheService.cacheUserOrgTags(username, orgTags);
         }
@@ -483,7 +468,10 @@ public class UserService {
                 .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
         
         // 检查该组织标签是否已分配给用户
-        Set<String> userTags = Arrays.stream(user.getOrgTags().split(",")).collect(Collectors.toSet());
+        String rawTags = user.getOrgTags();
+        Set<String> userTags = (rawTags != null && !rawTags.isBlank())
+                ? Arrays.stream(rawTags.split(",")).collect(Collectors.toSet())
+                : new java.util.HashSet<>();
         if (!userTags.contains(primaryOrg)) {
             throw new CustomException("Organization tag not assigned to user", HttpStatus.BAD_REQUEST);
         }
@@ -525,7 +513,8 @@ public class UserService {
             
             // 如果用户没有设置主组织标签，则尝试使用第一个分配的组织标签
             if (primaryOrg == null || primaryOrg.isEmpty()) {
-                String[] tags = user.getOrgTags().split(",");
+                String rawOrgTags = user.getOrgTags();
+                String[] tags = (rawOrgTags != null && !rawOrgTags.isBlank()) ? rawOrgTags.split(",") : new String[0];
                 if (tags.length > 0) {
                     primaryOrg = tags[0];
                     // 更新用户的主组织标签
@@ -568,6 +557,10 @@ public class UserService {
         String lang = LocaleContext.get();
 
         for (OrganizationTag tag : tags) {
+            // 跳过历史遗留的私人空间标签（PRIVATE_ 前缀），不在管理 UI 中展示
+            if (tag.getTagId().startsWith(PRIVATE_TAG_PREFIX)) {
+                continue;
+            }
             Map<String, Object> node = new HashMap<>();
             node.put("tagId", tag.getTagId());
             node.put("parentTag", tag.getParentTag());
@@ -661,12 +654,13 @@ public class UserService {
         if (name != null && !name.isEmpty()) {
             tag.setName(name);
         }
-        
+
         if (description != null) {
             tag.setDescription(description);
         }
-        
-        tag.setParentTag(parentTag);
+
+        // 空字符串统一转为 null，保持 findByParentTag(null) 能正确检索根节点
+        tag.setParentTag((parentTag == null || parentTag.isBlank()) ? null : parentTag);
         
         OrganizationTag updatedTag = organizationTagRepository.save(tag);
         i18nTranslationService.retranslateOrgTagAsync(tagId, updatedTag.getName(), updatedTag.getDescription());
@@ -726,17 +720,15 @@ public class UserService {
         OrganizationTag tag = organizationTagRepository.findByTagId(tagId)
                 .orElseThrow(() -> new CustomException("Organization tag not found", HttpStatus.NOT_FOUND));
         
-        // 检查是否是系统保护标签（default 和 admin 不可删除）
+        // 系统内置标签不可删除
         if (DEFAULT_ORG_TAG.equals(tagId)) {
-            throw new CustomException("默认组织标签是系统内置标签，所有新用户都会自动分配，无法删除", HttpStatus.BAD_REQUEST);
+            throw new CustomException("默认组织标签是系统内置标签，无法删除", HttpStatus.BAD_REQUEST);
         }
         if (ADMIN_ORG_TAG.equals(tagId)) {
-            throw new CustomException("管理员组织标签是系统内置标签，用于管理员权限控制，无法删除", HttpStatus.BAD_REQUEST);
+            throw new CustomException("管理员组织标签是系统内置标签，无法删除", HttpStatus.BAD_REQUEST);
         }
-        
-        // 检查是否是私人标签（PRIVATE_ 前缀的标签不可删除）
-        if (tagId.startsWith(PRIVATE_TAG_PREFIX)) {
-            throw new CustomException("私人空间标签是用户个人专属标签，仅用户本人可访问，无法删除", HttpStatus.BAD_REQUEST);
+        if (PENDING_ORG_TAG.equals(tagId)) {
+            throw new CustomException("新注册用户组织是系统内置标签，无法删除", HttpStatus.BAD_REQUEST);
         }
         
         // 检查是否有子标签 - 自动将子标签重新分配到被删除标签的父标签
@@ -882,6 +874,17 @@ public class UserService {
                     userMap.put("createdAt", user.getCreatedAt());
                     userMap.put("createTime", user.getCreatedAt());
                     userMap.put("updatedAt", user.getUpdatedAt());
+
+                    // RBAC 角色列表
+                    List<Map<String, Object>> rolesList = user.getRoles().stream()
+                            .map(r -> {
+                                Map<String, Object> rm = new LinkedHashMap<>();
+                                rm.put("roleCode", r.getRoleCode());
+                                rm.put("roleName", r.getRoleName());
+                                return rm;
+                            })
+                            .toList();
+                    userMap.put("roles", rolesList);
                     
                     return userMap;
                 })

@@ -1,23 +1,61 @@
 import { useState } from 'react'
-import { Button, Input, Select, Tag, Drawer, Form, App, Space, Tooltip } from 'antd'
+import {
+  Button,
+  Input,
+  Select,
+  Tag,
+  Drawer,
+  Form,
+  App,
+  Space,
+  Tooltip,
+  TreeSelect,
+  Spin,
+} from 'antd'
 import {
   SearchOutlined,
   EditOutlined,
   DeleteOutlined,
   ReloadOutlined,
   KeyOutlined,
-  TeamOutlined,
+  BankOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { adminUserApi, type AdminUser } from '@/api/admin'
+import { adminUserApi, adminRoleApi, adminOrgApi, type AdminUser, type OrgTag } from '@/api/admin'
 import PageTable, { type TableColumnType } from '@/components/business/PageTable'
+import { PageBar } from '@/components/business'
 import UserAvatar from '@/components/UserAvatar'
 import styles from './AdminPage.module.css'
 
-function roleFromStatus(status?: number): 'ADMIN' | 'USER' {
-  return status === 0 ? 'ADMIN' : 'USER'
+// ---- helpers ----
+
+function toTreeSelectData(
+  nodes: OrgTag[],
+): { value: string; label: string; children?: ReturnType<typeof toTreeSelectData> }[] {
+  return nodes.map((n) => ({
+    value: n.tagId,
+    label: n.name,
+    children: n.children?.length ? toTreeSelectData(n.children) : undefined,
+  }))
 }
+
+/** Derive primary org name from the orgTags list */
+function resolvePrimaryOrgName(u: AdminUser): string | null {
+  if (!u.primaryOrg) return null
+  const found = (u.orgTags ?? []).find((t) => t.tagId === u.primaryOrg)
+  return found?.name ?? u.primaryOrg
+}
+
+/** Role tag colors by roleCode prefix */
+function roleColor(roleCode: string): string {
+  if (roleCode === 'ROLE_ADMIN') return 'red'
+  if (roleCode === 'ROLE_KB_MANAGER') return 'orange'
+  if (roleCode === 'ROLE_VIEWER') return 'default'
+  return 'blue'
+}
+
+// ---- component ----
 
 export default function UserManagePage() {
   const qc = useQueryClient()
@@ -28,7 +66,7 @@ export default function UserManagePage() {
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
-  const [editForm] = Form.useForm<{ role: string; orgTags: string[] }>()
+  const [editForm] = Form.useForm<{ primaryOrg: string; roleCodes: string[] }>()
 
   const ROLE_FILTER_OPTIONS = [
     { label: t('admin.users.filterAll'), value: '' },
@@ -36,10 +74,7 @@ export default function UserManagePage() {
     { label: t('admin.users.tagUser'), value: 1 },
   ]
 
-  const ROLE_EDIT_OPTIONS = [
-    { label: t('admin.users.tagAdmin'), value: 'ADMIN' },
-    { label: t('admin.users.tagUser'), value: 'USER' },
-  ]
+  // ---- queries ----
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', current, pageSize, keyword, statusFilter],
@@ -52,23 +87,68 @@ export default function UserManagePage() {
       }),
   })
 
+  const { data: allRoles } = useQuery({
+    queryKey: ['admin-roles'],
+    queryFn: () => adminRoleApi.list(),
+  })
+
+  const { data: orgTree } = useQuery({
+    queryKey: ['admin-org-tree'],
+    queryFn: () => adminOrgApi.tree(),
+  })
+
+  // Fetch the current user's assigned RBAC roles when drawer opens
+  const { data: userRoles, isLoading: userRolesLoading } = useQuery({
+    queryKey: ['admin-user-roles', editUser?.id],
+    queryFn: () => adminUserApi.getRoles(editUser!.id),
+    enabled: !!editUser,
+  })
+
+  const orgTreeData = toTreeSelectData(orgTree ?? [])
+  const roleOptions = (allRoles ?? []).map((r) => ({
+    label: r.roleName,
+    value: r.roleCode,
+  }))
+
+  // Sync form roleCodes once userRoles loads
+  const drawerOpen = !!editUser
+  if (drawerOpen && userRoles && !userRolesLoading) {
+    const cur = editForm.getFieldValue('roleCodes') as string[] | undefined
+    const fetched = userRoles.map((r) => r.roleCode)
+    if (JSON.stringify(cur?.slice().sort()) !== JSON.stringify(fetched.slice().sort())) {
+      editForm.setFieldValue('roleCodes', fetched)
+    }
+  }
+
+  // ---- mutations ----
+
   const updateMutation = useMutation({
-    mutationFn: async (v: { role: string; orgTags: string[] }) => {
-      const roleChanged = roleFromStatus(editUser!.status) !== v.role
-      const originalTagIds = (editUser!.orgTags ?? []).map((t) => t.tagId)
-      const tagsChanged =
-        originalTagIds.length !== v.orgTags.length ||
-        originalTagIds.some((id, i) => id !== v.orgTags[i])
+    mutationFn: async (v: { primaryOrg: string; roleCodes: string[] }) => {
+      const originalOrg = editUser!.primaryOrg ?? ''
+      const originalRoleCodes = (userRoles ?? []).map((r) => r.roleCode)
+
+      const orgChanged = originalOrg !== (v.primaryOrg ?? '')
+      const rolesChanged =
+        originalRoleCodes.length !== v.roleCodes.length ||
+        originalRoleCodes.some((c) => !v.roleCodes.includes(c))
+
       const tasks: Promise<unknown>[] = []
-      if (roleChanged) tasks.push(adminUserApi.update(editUser!.id, { role: v.role }))
-      if (tagsChanged) tasks.push(adminUserApi.assignOrgTags(editUser!.id, v.orgTags))
-      if (!tasks.length) return Promise.resolve()
-      await Promise.all(tasks)
+      if (orgChanged) {
+        tasks.push(adminUserApi.assignOrgTags(editUser!.id, v.primaryOrg ? [v.primaryOrg] : []))
+      }
+      if (rolesChanged) {
+        tasks.push(adminUserApi.assignRoles(editUser!.id, v.roleCodes))
+      }
+      if (tasks.length) await Promise.all(tasks)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.invalidateQueries({ queryKey: ['admin-user-roles', editUser?.id] })
       setEditUser(null)
       message.success(t('admin.users.updateSuccess'))
+    },
+    onError: () => {
+      message.error(t('common.requestFailed'))
     },
   })
 
@@ -93,11 +173,47 @@ export default function UserManagePage() {
     },
   })
 
-  const handleDelete = (u: AdminUser) => {
+  // ---- countdown modal helpers ----
+
+  const makeCountdown = (opts: {
+    title: string
+    content: React.ReactNode
+    okType?: 'danger' | 'primary'
+    onOk: () => Promise<unknown>
+  }) => {
     let count = 5
     let timerId: number | null = null
 
     const instance = modal.confirm({
+      title: opts.title,
+      content: opts.content,
+      okText: t('admin.users.deleteConfirmCountdown', { n: count }),
+      okType: opts.okType ?? 'danger',
+      okButtonProps: { disabled: true },
+      cancelText: t('common.cancel'),
+      onOk: opts.onOk,
+      afterClose: () => {
+        if (timerId !== null) window.clearInterval(timerId)
+      },
+    })
+
+    timerId = window.setInterval(() => {
+      count -= 1
+      if (count <= 0) {
+        window.clearInterval(timerId!)
+        timerId = null
+        instance.update({
+          okText: t('admin.users.deleteConfirmReady'),
+          okButtonProps: { disabled: false },
+        })
+      } else {
+        instance.update({ okText: t('admin.users.deleteConfirmCountdown', { n: count }) })
+      }
+    }, 1000)
+  }
+
+  const handleDelete = (u: AdminUser) =>
+    makeCountdown({
       title: t('admin.users.deleteModalTitle'),
       content: (
         <div>
@@ -120,38 +236,11 @@ export default function UserManagePage() {
           </div>
         </div>
       ),
-      okText: t('admin.users.deleteConfirmCountdown', { n: count }),
-      okType: 'danger',
-      okButtonProps: { disabled: true },
-      cancelText: t('common.cancel'),
       onOk: () => deleteMutation.mutateAsync(u.id),
-      afterClose: () => {
-        if (timerId !== null) window.clearInterval(timerId)
-      },
     })
 
-    timerId = window.setInterval(() => {
-      count -= 1
-      if (count <= 0) {
-        window.clearInterval(timerId!)
-        timerId = null
-        instance.update({
-          okText: t('admin.users.deleteConfirmReady'),
-          okButtonProps: { disabled: false },
-        })
-      } else {
-        instance.update({
-          okText: t('admin.users.deleteConfirmCountdown', { n: count }),
-        })
-      }
-    }, 1000)
-  }
-
-  const handleResetPw = (u: AdminUser) => {
-    let count = 5
-    let timerId: number | null = null
-
-    const instance = modal.confirm({
+  const handleResetPw = (u: AdminUser) =>
+    makeCountdown({
       title: t('admin.users.resetPwModalTitle'),
       content: (
         <div>
@@ -174,40 +263,19 @@ export default function UserManagePage() {
           </div>
         </div>
       ),
-      okText: t('admin.users.deleteConfirmCountdown', { n: count }),
       okType: 'primary',
-      okButtonProps: { disabled: true },
-      cancelText: t('common.cancel'),
       onOk: () => resetPwMutation.mutateAsync(u.id),
-      afterClose: () => {
-        if (timerId !== null) window.clearInterval(timerId)
-      },
     })
-
-    timerId = window.setInterval(() => {
-      count -= 1
-      if (count <= 0) {
-        window.clearInterval(timerId!)
-        timerId = null
-        instance.update({
-          okText: t('admin.users.deleteConfirmReady'),
-          okButtonProps: { disabled: false },
-        })
-      } else {
-        instance.update({
-          okText: t('admin.users.deleteConfirmCountdown', { n: count }),
-        })
-      }
-    }, 1000)
-  }
 
   const openEdit = (u: AdminUser) => {
     setEditUser(u)
     editForm.setFieldsValue({
-      role: roleFromStatus(u.status),
-      orgTags: (u.orgTags ?? []).map((t) => t.tagId),
+      primaryOrg: u.primaryOrg ?? undefined,
+      roleCodes: [], // will be overwritten once userRoles query resolves
     })
   }
+
+  // ---- table columns ----
 
   const columns: TableColumnType<AdminUser>[] = [
     {
@@ -227,10 +295,24 @@ export default function UserManagePage() {
     },
     {
       title: t('admin.users.colRole'),
-      dataIndex: 'status',
-      width: 90,
-      render: (s?: number) => {
-        const isAdmin = s === 0
+      dataIndex: 'roles',
+      width: 180,
+      render: (_: unknown, u: AdminUser) => {
+        const rbac = u.roles ?? []
+        if (rbac.length > 0) {
+          return (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {rbac.slice(0, 3).map((r) => (
+                <Tag key={r.roleCode} color={roleColor(r.roleCode)} style={{ fontSize: 11 }}>
+                  {r.roleName}
+                </Tag>
+              ))}
+              {rbac.length > 3 && <Tag style={{ fontSize: 11 }}>+{rbac.length - 3}</Tag>}
+            </div>
+          )
+        }
+        // Fallback to legacy status
+        const isAdmin = u.status === 0
         return (
           <Tag color={isAdmin ? 'red' : 'blue'}>
             {isAdmin ? t('admin.users.tagAdmin') : t('admin.users.tagUser')}
@@ -240,13 +322,18 @@ export default function UserManagePage() {
     },
     {
       title: t('admin.users.colOrg'),
-      dataIndex: 'orgTags',
-      render: (tags?: AdminUser['orgTags']) =>
-        tags && tags.length ? (
-          tags.map((t) => <Tag key={t.tagId}>{t.name}</Tag>)
+      dataIndex: 'primaryOrg',
+      width: 130,
+      render: (_: unknown, u: AdminUser) => {
+        const name = resolvePrimaryOrgName(u)
+        return name ? (
+          <Tag icon={<BankOutlined />} style={{ fontSize: 11 }}>
+            {name}
+          </Tag>
         ) : (
           <span style={{ color: 'var(--kf-muted-foreground)' }}>—</span>
-        ),
+        )
+      },
     },
     {
       title: t('admin.users.colCreatedAt'),
@@ -273,12 +360,11 @@ export default function UserManagePage() {
     },
   ]
 
+  // ---- render ----
+
   return (
     <div className={styles.root}>
       <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <TeamOutlined /> {t('admin.users.title')}
-        </h2>
         <div className={styles.filters}>
           <Input
             prefix={<SearchOutlined />}
@@ -312,20 +398,42 @@ export default function UserManagePage() {
         columns={columns}
         dataSource={data?.records}
         loading={isLoading}
-        total={data?.total}
-        current={current}
-        pageSize={pageSize}
-        onPageChange={(p, s) => {
-          setCurrent(p)
-          setPageSize(s)
-        }}
+        showPagination={false}
       />
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(p, s) => {
+              setCurrent(p)
+              setPageSize(s)
+            }}
+          />
+        </div>
+      )}
 
+      {/* Edit drawer */}
       <Drawer
-        title={t('admin.users.editDrawer')}
-        open={!!editUser}
+        title={
+          editUser
+            ? `${t('admin.users.editDrawer')} — ${editUser.username}`
+            : t('admin.users.editDrawer')
+        }
+        open={drawerOpen}
         onClose={() => setEditUser(null)}
-        width={400}
+        width={440}
+        destroyOnClose
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button onClick={() => setEditUser(null)}>{t('common.cancel')}</Button>
@@ -340,14 +448,73 @@ export default function UserManagePage() {
           </div>
         }
       >
-        <Form form={editForm} layout="vertical" onFinish={(v) => updateMutation.mutate(v)}>
-          <Form.Item name="role" label={t('admin.users.fieldRole')}>
-            <Select options={ROLE_EDIT_OPTIONS} />
-          </Form.Item>
-          <Form.Item name="orgTags" label={t('admin.users.fieldOrgTags')}>
-            <Select mode="tags" placeholder={t('admin.users.orgTagPlaceholder')} />
-          </Form.Item>
-        </Form>
+        <Spin spinning={userRolesLoading}>
+          {/* User info header */}
+          {editUser && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                marginBottom: 24,
+                padding: '12px 16px',
+                background: 'var(--kf-muted)',
+                borderRadius: 'var(--kf-radius-md)',
+              }}
+            >
+              <UserAvatar size={40} avatar={editUser.avatar} username={editUser.username} />
+              <div>
+                <div style={{ fontWeight: 600 }}>{editUser.username}</div>
+                {editUser.email && (
+                  <div style={{ fontSize: 12, color: 'var(--kf-muted-foreground)' }}>
+                    {editUser.email}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <Form form={editForm} layout="vertical" onFinish={(v) => updateMutation.mutate(v)}>
+            {/* Organization — single TreeSelect */}
+            <Form.Item
+              name="primaryOrg"
+              label={t('admin.users.fieldPrimaryOrg')}
+              extra={
+                <span style={{ fontSize: 11, color: 'var(--kf-muted-foreground)' }}>
+                  {t('admin.users.primaryOrgHint')}
+                </span>
+              }
+            >
+              <TreeSelect
+                treeData={orgTreeData}
+                placeholder={t('admin.users.primaryOrgPlaceholder')}
+                allowClear
+                showSearch
+                treeNodeFilterProp="label"
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+
+            {/* RBAC Roles — multi select */}
+            <Form.Item
+              name="roleCodes"
+              label={t('admin.users.fieldAssignedRoles')}
+              extra={
+                <span style={{ fontSize: 11, color: 'var(--kf-muted-foreground)' }}>
+                  {t('admin.users.rolesHint')}
+                </span>
+              }
+            >
+              <Select
+                mode="multiple"
+                options={roleOptions}
+                placeholder={t('admin.users.rolesPlaceholder')}
+                optionFilterProp="label"
+                allowClear
+              />
+            </Form.Item>
+          </Form>
+        </Spin>
       </Drawer>
     </div>
   )

@@ -26,11 +26,12 @@ public class WorkflowController {
     @PreAuthorize("hasAuthority('agent:read')")
     public ResponseEntity<?> listWorkflows(
         @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) String status,
         @RequestParam(required = false) Integer page,
         @RequestParam(required = false) Integer size,
         @RequestParam(required = false) String cursor
     ) {
-        return ok("获取工作流列表成功", workflowService.listWorkflows(keyword, PageQuery.of(page, size, cursor)));
+        return ok("获取工作流列表成功", workflowService.listWorkflows(keyword, status, PageQuery.of(page, size, cursor)));
     }
 
     @GetMapping("/stats")
@@ -56,6 +57,15 @@ public class WorkflowController {
         return ok("保存工作流成功", workflowService.saveWorkflow(request));
     }
 
+    @PutMapping("/{workflowId}/graph")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> saveGraph(
+        @PathVariable String workflowId,
+        @RequestBody java.util.Map<String, Object> body
+    ) {
+        return ok("保存图结构成功", workflowService.saveGraph(workflowId, body));
+    }
+
     @PostMapping("/{workflowId}/copy")
     public ResponseEntity<?> copyWorkflow(@PathVariable String workflowId) {
         return ok("复制工作流成功", workflowService.copyWorkflow(workflowId));
@@ -65,6 +75,12 @@ public class WorkflowController {
     @PreAuthorize("hasAuthority('agent:write')")
     public ResponseEntity<?> publishWorkflow(@PathVariable String workflowId) {
         return ok("发布工作流成功", workflowService.publishWorkflow(workflowId));
+    }
+
+    @PostMapping("/{workflowId}/disable")
+    @PreAuthorize("hasAuthority('agent:write')")
+    public ResponseEntity<?> disableWorkflow(@PathVariable String workflowId) {
+        return ok("停用工作流成功", workflowService.disableWorkflow(workflowId));
     }
 
     @DeleteMapping("/{workflowId}")

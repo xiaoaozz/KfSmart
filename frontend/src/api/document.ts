@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { Document, DocListParams } from '@/types/document'
+import type { Document, DocListParams, DocPreview } from '@/types/document'
 import type { PageResult } from '@/types/api'
 
 export const docApi = {
@@ -17,5 +17,11 @@ export const docApi = {
         params: { fileName },
         responseType: 'blob',
       })
+      .then((r) => r.data),
+
+  // Text files: first 10KB of parsed content; binary files: an "unsupported" notice string
+  preview: (fileName: string, fileMd5?: string) =>
+    http
+      .get<DocPreview>('/documents/preview', { params: { fileName, fileMd5 } })
       .then((r) => r.data),
 }

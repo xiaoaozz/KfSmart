@@ -8,6 +8,7 @@ interface PageTableProps<T extends object> extends Omit<TableProps<T>, 'paginati
   current?: number
   pageSize?: number
   onPageChange?: (page: number, size: number) => void
+  showPagination?: boolean
 }
 
 export default function PageTable<T extends object>({
@@ -16,6 +17,7 @@ export default function PageTable<T extends object>({
   pageSize = 20,
   onPageChange,
   rowKey,
+  showPagination = true,
   ...rest
 }: PageTableProps<T>) {
   return (
@@ -23,7 +25,7 @@ export default function PageTable<T extends object>({
       rowKey={(rowKey as ((record: T) => Key) | undefined) ?? 'id'}
       size="middle"
       pagination={
-        total > 0
+        showPagination && total > 0
           ? {
               total,
               current,
@@ -32,7 +34,7 @@ export default function PageTable<T extends object>({
               showQuickJumper: true,
               showTotal: (n) => `共 ${n} 条`,
               onChange: onPageChange,
-              pageSizeOptions: ['10', '20', '50', '100'],
+              pageSizeOptions: ['5', '10', '20', '50', '100'],
             }
           : false
       }

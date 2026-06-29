@@ -1,0 +1,321 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px - 48px);
+  border-radius: var(--kf-radius-md);
+  border: 1px solid var(--kf-border);
+  background: var(--kf-card);
+  box-shadow: var(--kf-shadow-sm);
+  overflow: hidden;
+}
+
+.pageHeader {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--kf-border);
+  flex-shrink: 0;
+}
+
+.headerContent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pageTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--kf-foreground);
+  margin: 0;
+  background: var(--kf-accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.pageSubtitle {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin: 0;
+}
+
+.tabs {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs :global(.ant-tabs-nav) {
+  padding: 0 24px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.tabs :global(.ant-tabs-content-holder) {
+  flex: 1;
+  overflow: hidden;
+}
+
+.tabs :global(.ant-tabs-content) {
+  height: 100%;
+}
+
+.tabs :global(.ant-tabs-tabpane) {
+  height: 100%;
+}
+
+.tabBody {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.searchBar {
+  padding: 12px 24px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--kf-border);
+}
+
+/* reuse agent list card pattern */
+.card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 180px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cardIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--kf-radius-sm);
+  background: var(--kf-accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.cardName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  flex: 1;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metaItem {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  background: var(--kf-muted);
+  padding: 2px 8px;
+  border-radius: var(--kf-radius-full);
+  display: flex;
+  align-items: center;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kf-border);
+  margin-top: auto;
+}
+
+/* grid body */
+.gridBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+}
+
+/* ------ Agent Run Modal ------ */
+.chatWrap {
+  display: flex;
+  flex-direction: column;
+  height: 440px;
+}
+
+.chatMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chatEmpty {
+  color: var(--kf-muted-foreground);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 60px;
+}
+
+.userBubble {
+  align-self: flex-end;
+  max-width: 76%;
+  background: var(--kf-accent-gradient);
+  border-radius: 12px 12px 2px 12px;
+  padding: 10px 14px;
+  color: #fff;
+}
+
+.agentBubble {
+  align-self: flex-start;
+  max-width: 76%;
+  background: var(--kf-muted);
+  border-radius: 12px 12px 12px 2px;
+  padding: 10px 14px;
+  color: var(--kf-foreground);
+}
+
+.bubbleRole {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.bubbleText {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.executionLink {
+  margin-top: 6px;
+}
+
+.chatInput {
+  border-top: 1px solid var(--kf-border);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ------ Workflow Run Modal ------ */
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progressHeader {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.progressStatus {
+  display: flex;
+  align-items: center;
+  color: var(--kf-foreground);
+}
+
+.nodeList {
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-sm);
+  overflow: hidden;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.nodeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--kf-border);
+  font-size: 13px;
+}
+
+.nodeRow:last-child {
+  border-bottom: none;
+}
+
+.nodeIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.nodeId {
+  flex: 1;
+  color: var(--kf-muted-foreground);
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+}
+
+.outputBlock {
+  border-radius: var(--kf-radius-sm);
+  background: var(--kf-muted);
+  padding: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.outputLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kf-muted-foreground);
+  margin-bottom: 6px;
+}
+
+.outputContent {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: var(--kf-foreground);
+}
+
+/* tab content overflow scroll */
+.tabs :global(.ant-tabs-tabpane-active) {
+  overflow-y: auto;
+  padding: 0 !important;
+}
+
+.scrollArea {
+  overflow-y: auto;
+  flex: 1;
+  padding: 16px 24px;
+}

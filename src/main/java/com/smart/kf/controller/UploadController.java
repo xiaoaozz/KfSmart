@@ -241,10 +241,12 @@ public class UploadController {
                         return new RuntimeException("文件记录不存在");
                     });
                     
-            // 确保用户有权限操作该文件
-            if (!fileUpload.getUserId().equals(userId)) {
+            // 确保用户有权限操作该文件（兼容旧 userId String 和新 ownerId Long）
+            boolean isOwner = userId.equals(fileUpload.getUserId())
+                    || (fileUpload.getOwnerId() != null && fileUpload.getOwnerId().toString().equals(userId));
+            if (!isOwner) {
                 LogUtils.logUserOperation(userId, "MERGE_FILE", request.fileMd5(), "FAILED_PERMISSION_DENIED");
-                LogUtils.logBusiness("MERGE_FILE", userId, "权限验证失败: 尝试合并不属于自己的文件, fileMd5=%s, fileName=%s, 实际所有者=%s", 
+                LogUtils.logBusiness("MERGE_FILE", userId, "权限验证失败: 尝试合并不属于自己的文件, fileMd5=%s, fileName=%s, 实际所有者=%s",
                         request.fileMd5(), request.fileName(), fileUpload.getUserId());
                 monitor.end("合并失败：权限不足");
                 Map<String, Object> errorResponse = new HashMap<>();

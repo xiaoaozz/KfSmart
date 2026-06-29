@@ -270,3 +270,25 @@ svg {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   ReactFlow — Edge & Connection Line Overrides
+   ============================================================ */
+.react-flow__edge-path {
+  stroke: var(--kf-accent, #6366f1) !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+}
+
+.react-flow__connection-path {
+  stroke: var(--kf-accent, #6366f1) !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+}
+
+.react-flow {
+  --xy-edge-stroke-default: var(--kf-accent, #6366f1);
+  --xy-edge-stroke-width-default: 2;
+  --xy-connectionline-stroke-default: var(--kf-accent, #6366f1);
+  --xy-connectionline-stroke-width-default: 2;
+}

@@ -7,12 +7,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
-import { useThemeStore } from '@/stores/theme'
+import { useThemeStore, DARK_THEMES } from '@/stores/theme'
+import type { ThemeId } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import { getAntdTheme } from '@/theme/antd'
 import { router } from '@/router'
 import LoadingOverlay from '@/components/business/LoadingOverlay'
 
+import '@xyflow/react/dist/style.css'
 import '@/styles/variables.css'
 import '@/styles/global.css'
 import '@/styles/antd-override.css'
@@ -27,7 +29,7 @@ const queryClient = new QueryClient({
 })
 
 function ThemeSync() {
-  const isDark = useThemeStore((s) => s.isDark)
+  const themeId = useThemeStore((s) => s.themeId)
   const setDark = useThemeStore((s) => s.setDark)
 
   useEffect(() => {
@@ -45,9 +47,9 @@ function ThemeSync() {
   }, [setDark])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = isDark ? 'dark' : 'light'
-    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
-  }, [isDark])
+    document.documentElement.dataset.theme = themeId
+    document.documentElement.style.colorScheme = DARK_THEMES.has(themeId) ? 'dark' : 'light'
+  }, [themeId])
 
   return null
 }
@@ -70,12 +72,12 @@ interface AppProps {
 }
 
 export default function App({ children }: AppProps) {
-  const isDark = useThemeStore((s) => s.isDark)
+  const themeId = useThemeStore((s) => s.themeId) as ThemeId
   const locale = useLocaleStore((s) => s.locale)
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider theme={getAntdTheme(isDark)} locale={ANTD_LOCALES[locale]}>
+      <ConfigProvider theme={getAntdTheme(themeId)} locale={ANTD_LOCALES[locale]}>
         <AntdApp>
           <ThemeSync />
           <LocaleSync />

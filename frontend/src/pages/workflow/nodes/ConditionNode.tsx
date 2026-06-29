@@ -7,10 +7,12 @@ import styles from './BaseNode.module.css'
 export default function ConditionNode({ id, selected, data }: NodeProps) {
   const d = data as unknown as ConditionNodeData
   return (
-    <BaseNode id={id} type="condition" selected={selected} hasSource={false}>
-      <div>
-        {d?.variable ?? 'input'} {d?.operator ?? 'eq'} {d?.value ?? ''}
-      </div>
+    <>
+      <BaseNode id={id} type="condition" selected={selected} hasSource={false}>
+        <div>
+          {d?.variable ?? 'input'} {d?.operator ?? 'eq'} {d?.value ?? ''}
+        </div>
+      </BaseNode>
       <Handle
         type="source"
         position={Position.Bottom}
@@ -25,6 +27,6 @@ export default function ConditionNode({ id, selected, data }: NodeProps) {
         style={{ left: '70%' }}
         className={styles.handle}
       />
-    </BaseNode>
+    </>
   )
 }

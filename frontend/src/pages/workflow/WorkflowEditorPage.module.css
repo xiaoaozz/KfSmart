@@ -17,7 +17,7 @@
 }
 
 .wfName {
-  font-family: var(--kf-font-display);
+  font-family: var(--kf-font-ui);
   font-size: 16px;
   font-weight: 600;
   color: var(--kf-foreground);
@@ -32,6 +32,7 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  position: relative;
 }
 
 .palette {
@@ -85,7 +86,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--node-color, var(--kf-primary));
+  background: var(--node-color, var(--kf-accent));
   flex-shrink: 0;
 }
 
@@ -101,18 +102,14 @@
 .flow {
   flex: 1;
   min-width: 0;
-  background: var(--kf-background);
+  height: 100%;
+  background: var(--kf-bg);
 }
 
 /* Override React Flow handles z-index when in dark mode */
 :global(.react-flow__handle) {
   z-index: 5;
 }
-
-:global(.react-flow__edge-path) {
-  stroke: var(--kf-primary);
-}
-
 :global(.react-flow__controls) {
   background: var(--kf-card);
   border: 1px solid var(--kf-border);
@@ -128,4 +125,22 @@
 
 :global(.react-flow__controls-button:hover) {
   background: var(--kf-muted);
+}
+
+.zoomPct {
+  width: 36px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-family: var(--kf-font-mono);
+  color: var(--kf-foreground);
+  cursor: default;
+  user-select: none;
+}
+
+/* Handle hover glow — do NOT override transform; ReactFlow uses it for handle positioning */
+:global(.react-flow__handle:hover) {
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--kf-accent, #6366f1) 35%, transparent);
 }

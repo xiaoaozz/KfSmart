@@ -37,7 +37,7 @@ public class ApiKeyConfig {
     private String apiKey;
 
     /** 模型名称，如 deepseek-chat、gpt-4o、qwen-max 等 */
-    @Column(nullable = false, length = 100)
+    @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
     /** 是否为当前激活的配置（全局唯一激活） */
@@ -53,7 +53,7 @@ public class ApiKeyConfig {
     private Integer maxTokens = 2000;
 
     /** nucleus top-p */
-    @Column
+    @Column(name = "top_p")
     private Double topP = 0.9;
 
     /**

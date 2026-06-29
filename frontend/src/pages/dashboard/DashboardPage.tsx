@@ -3,9 +3,14 @@ import {
   DatabaseOutlined,
   FileTextOutlined,
   MessageOutlined,
-  StarOutlined,
   PlusOutlined,
   ArrowRightOutlined,
+  RobotOutlined,
+  ApartmentOutlined,
+  ThunderboltOutlined,
+  FileSearchOutlined,
+  ToolOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
@@ -13,6 +18,9 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { http } from '@/api/http'
 import { profileApi, type UsageStats, type ActivityLog } from '@/api/profile'
+import { agentApi } from '@/api/agent'
+import { workflowApi } from '@/api/workflow'
+import { skillApi, promptApi, mcpApi } from '@/api/skill'
 import { GradientText, GradientCard } from '@/components/base'
 import { useCurrentUser } from '@/hooks/usePermission'
 import styles from './DashboardPage.module.css'
@@ -23,7 +31,6 @@ interface RecentChat {
   updatedAt: string
 }
 
-// 后端 operation-records 字段 → 时间轴展示
 function toTimelineItem(a: ActivityLog) {
   const colorByType: Record<string, string> = {
     login: 'green',
@@ -39,29 +46,40 @@ function toTimelineItem(a: ActivityLog) {
   }
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  delay,
-}: {
+interface ModuleCardProps {
   icon: React.ReactNode
   label: string
-  value: number | undefined
+  desc: string
+  count: number | undefined
+  path: string
+  accentColor?: string
   delay: number
-}) {
+}
+
+function ModuleCard({ icon, label, desc, count, path, delay }: ModuleCardProps) {
+  const navigate = useNavigate()
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay }}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.35, delay }}
     >
-      <GradientCard hoverable className={styles.statCard}>
-        <div className={styles.statIcon}>{icon}</div>
-        <div className={styles.statValue}>
-          {value === undefined ? <Skeleton.Input size="small" active /> : value.toLocaleString()}
+      <GradientCard hoverable className={styles.moduleCard} onClick={() => navigate(path)}>
+        <div className={styles.moduleCardHeader}>
+          <div className={styles.moduleIcon}>{icon}</div>
+          <div className={styles.moduleCount}>
+            {count === undefined ? (
+              <Skeleton.Input size="small" active style={{ width: 40 }} />
+            ) : (
+              count
+            )}
+          </div>
         </div>
-        <div className={styles.statLabel}>{label}</div>
+        <div className={styles.moduleLabel}>{label}</div>
+        <div className={styles.moduleDesc}>{desc}</div>
+        <div className={styles.moduleArrow}>
+          <ArrowRightOutlined />
+        </div>
       </GradientCard>
     </motion.div>
   )
@@ -90,31 +108,100 @@ export default function DashboardPage() {
     retry: false,
   })
 
-  // 后端 usage-stats 返回：knowledgeBaseCount / totalDocuments / totalConversations / favoriteCount
-  const STATS = [
+  const { data: agentPage } = useQuery({
+    queryKey: ['agents', 'count'],
+    queryFn: () => agentApi.list({ size: 1 }),
+    retry: false,
+  })
+
+  const { data: workflowPage } = useQuery({
+    queryKey: ['workflows', 'count'],
+    queryFn: () => workflowApi.list({ current: 1, size: 1 }),
+    retry: false,
+  })
+
+  const { data: skillPage } = useQuery({
+    queryKey: ['skills', 'count'],
+    queryFn: () => skillApi.list({ size: 1 }),
+    retry: false,
+  })
+
+  const { data: promptPage } = useQuery({
+    queryKey: ['prompts', 'count'],
+    queryFn: () => promptApi.list({ size: 1 }),
+    retry: false,
+  })
+
+  const { data: mcpPage } = useQuery({
+    queryKey: ['mcp-tools', 'count'],
+    queryFn: () => mcpApi.list({ size: 1 }),
+    retry: false,
+  })
+
+  const MODULES = [
     {
       icon: <DatabaseOutlined />,
-      label: t('dashboard.stats.knowledgeBase'),
-      key: 'knowledgeBaseCount' as keyof UsageStats,
+      label: t('nav.knowledgeBase', '知识库'),
+      desc: t('dashboard.actions.newKbDesc'),
+      count: stats?.knowledgeBaseCount,
+      path: '/knowledge-bases',
       delay: 0.05,
     },
     {
       icon: <FileTextOutlined />,
-      label: t('dashboard.stats.documents'),
-      key: 'totalDocuments' as keyof UsageStats,
+      label: t('nav.documents', '文档'),
+      desc: t('dashboard.actions.uploadDocDesc'),
+      count: stats?.totalDocuments,
+      path: '/documents',
       delay: 0.1,
     },
     {
-      icon: <MessageOutlined />,
-      label: t('dashboard.stats.conversations'),
-      key: 'totalConversations' as keyof UsageStats,
+      icon: <RobotOutlined />,
+      label: t('nav.agents', '智能体'),
+      desc: t('dashboard.actions.newAgentDesc'),
+      count: agentPage?.total,
+      path: '/agents',
       delay: 0.15,
     },
     {
-      icon: <StarOutlined />,
-      label: t('dashboard.stats.favorites'),
-      key: 'favoriteCount' as keyof UsageStats,
+      icon: <ApartmentOutlined />,
+      label: t('nav.workflows', '工作流'),
+      desc: t('dashboard.actions.newWorkflowDesc'),
+      count: workflowPage?.total,
+      path: '/workflows',
       delay: 0.2,
+    },
+    {
+      icon: <ThunderboltOutlined />,
+      label: t('nav.skills', '技能'),
+      desc: t('dashboard.actions.newSkillDesc'),
+      count: skillPage?.total,
+      path: '/skills',
+      delay: 0.25,
+    },
+    {
+      icon: <FileSearchOutlined />,
+      label: t('nav.prompts', '提示词'),
+      desc: t('dashboard.actions.newKbDesc'),
+      count: promptPage?.total,
+      path: '/skills/prompts',
+      delay: 0.3,
+    },
+    {
+      icon: <ToolOutlined />,
+      label: t('nav.mcpTools', 'MCP 工具'),
+      desc: 'MCP Tool integrations',
+      count: mcpPage?.total,
+      path: '/skills/mcp',
+      delay: 0.35,
+    },
+    {
+      icon: <MessageOutlined />,
+      label: t('nav.chat', '对话'),
+      desc: t('dashboard.actions.startChatDesc'),
+      count: stats?.totalConversations,
+      path: '/chat',
+      delay: 0.4,
     },
   ]
 
@@ -124,27 +211,42 @@ export default function DashboardPage() {
       label: t('dashboard.actions.newKb'),
       desc: t('dashboard.actions.newKbDesc'),
       path: '/knowledge-bases',
-      accent: false,
     },
     {
       icon: <MessageOutlined />,
       label: t('dashboard.actions.startChat'),
       desc: t('dashboard.actions.startChatDesc'),
       path: '/chat',
-      accent: false,
     },
     {
       icon: <PlusOutlined />,
       label: t('dashboard.actions.uploadDoc'),
       desc: t('dashboard.actions.uploadDocDesc'),
       path: '/documents',
-      accent: false,
+    },
+    {
+      icon: <RobotOutlined />,
+      label: t('dashboard.actions.newAgent'),
+      desc: t('dashboard.actions.newAgentDesc'),
+      path: '/agents',
+    },
+    {
+      icon: <ApartmentOutlined />,
+      label: t('dashboard.actions.newWorkflow'),
+      desc: t('dashboard.actions.newWorkflowDesc'),
+      path: '/workflows',
+    },
+    {
+      icon: <ThunderboltOutlined />,
+      label: t('dashboard.actions.newSkill'),
+      desc: t('dashboard.actions.newSkillDesc'),
+      path: '/skills',
     },
   ]
 
   return (
     <div className={styles.root}>
-      {/* Welcome heading */}
+      {/* Welcome */}
       <motion.div
         className={styles.welcome}
         initial={{ opacity: 0, y: 16 }}
@@ -158,21 +260,27 @@ export default function DashboardPage() {
         <p className={styles.welcomeSub}>{t('dashboard.subtitle')}</p>
       </motion.div>
 
-      {/* Stats */}
-      <Row gutter={[16, 16]} className={styles.statsRow}>
-        {STATS.map((s) => (
-          <Col key={s.key} xs={12} sm={12} md={6}>
-            <StatCard
-              icon={s.icon}
-              label={s.label}
-              value={stats?.[s.key] as number | undefined}
-              delay={s.delay}
-            />
-          </Col>
-        ))}
-      </Row>
+      {/* Platform modules overview */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+        style={{ marginTop: 24 }}
+      >
+        <div className={styles.sectionHeader}>
+          <AppstoreOutlined className={styles.sectionIcon} />
+          <span className={styles.panelTitle}>{t('dashboard.modules')}</span>
+        </div>
+        <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+          {MODULES.map((m) => (
+            <Col key={m.path} xs={12} sm={8} md={6} lg={3}>
+              <ModuleCard {...m} />
+            </Col>
+          ))}
+        </Row>
+      </motion.div>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} style={{ marginTop: 24 }}>
         {/* Recent chats */}
         <Col xs={24} md={14}>
           <motion.div
@@ -258,19 +366,15 @@ export default function DashboardPage() {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.35 }}
-        style={{ marginTop: 16 }}
+        style={{ marginTop: 24 }}
       >
         <div className={styles.panelTitle} style={{ marginBottom: 12 }}>
           {t('dashboard.quickActions')}
         </div>
-        <Row gutter={[16, 16]}>
+        <Row gutter={[12, 12]}>
           {QUICK_ACTIONS.map((a) => (
-            <Col key={a.label} xs={24} sm={8}>
-              <GradientCard
-                featured={a.accent}
-                className={styles.actionCard}
-                onClick={() => navigate(a.path)}
-              >
+            <Col key={a.label} xs={12} sm={8} md={4}>
+              <GradientCard className={styles.actionCard} onClick={() => navigate(a.path)}>
                 <div className={styles.actionIcon}>{a.icon}</div>
                 <div className={styles.actionLabel}>{a.label}</div>
                 <div className={styles.actionDesc}>{a.desc}</div>

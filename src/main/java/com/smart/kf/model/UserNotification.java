@@ -21,16 +21,28 @@ public class UserNotification {
     private Long id;
 
     /**
-     * 通知接收者（目标用户）用户名
+     * 通知接收者（目标用户）用户名（历史审计保留，新代码请使用 recipientId）
      */
     @Column(name = "recipient_username", nullable = false)
     private String recipientUsername;
 
     /**
-     * 操作执行者（admin）用户名
+     * 操作执行者（admin）用户名（历史审计保留，新代码请使用 operatorId）
      */
     @Column(name = "operator_username", nullable = false)
     private String operatorUsername;
+
+    /**
+     * 接收者 FK（替代 recipientUsername，Phase 2 新增）
+     */
+    @Column(name = "recipient_id")
+    private Long recipientId;
+
+    /**
+     * 操作者 FK（替代 operatorUsername，Phase 2 新增）
+     */
+    @Column(name = "operator_id")
+    private Long operatorId;
 
     /**
      * 操作类型：UPDATE_KB / DELETE_KB / UPDATE_DOCUMENT / DELETE_DOCUMENT

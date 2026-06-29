@@ -2,6 +2,7 @@ package com.smart.kf.service;
 
 import com.smart.kf.model.UserNotification;
 import com.smart.kf.repository.UserNotificationRepository;
+import com.smart.kf.repository.UserRepository;
 import com.smart.kf.utils.LogUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,9 @@ public class NotificationService {
 
     @Autowired
     private UserNotificationRepository notificationRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     /**
      * 发送通知：admin 操作他人知识库时调用
@@ -38,6 +42,9 @@ public class NotificationService {
         UserNotification notification = new UserNotification();
         notification.setRecipientUsername(recipientUsername);
         notification.setOperatorUsername(operatorUsername);
+        // 同时写入 FK 字段，已有 username 列保留用于历史审计
+        userRepository.findByUsername(recipientUsername).ifPresent(u -> notification.setRecipientId(u.getId()));
+        userRepository.findByUsername(operatorUsername).ifPresent(u -> notification.setOperatorId(u.getId()));
         notification.setActionType(actionType);
         notification.setResourceId(resourceId);
         notification.setResourceName(resourceName);

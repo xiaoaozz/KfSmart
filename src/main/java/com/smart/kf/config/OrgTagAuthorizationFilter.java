@@ -5,8 +5,10 @@ import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.utils.JwtUtils;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,80 +43,96 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain filterChain) {
+                                    @NonNull FilterChain filterChain) throws ServletException, IOException {
+        String path = request.getRequestURI();
+
+        // ===== 第一类：仅需注入 userId 的 API，不做资源权限校验 =====
+        if (isUserIdOnlyPath(path, request)) {
+            try {
+                injectUserAttributesOnly(request);
+            } catch (Exception e) {
+                logger.warn("userId 注入失败，忽略: {}", e.getMessage());
+            }
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // ===== 提取资源ID + 权限校验（仅 filter 自身逻辑在 try-catch 内）=====
+        boolean shouldProceed;
         try {
-            String path = request.getRequestURI();
-
-            // ===== 第一类：仅需注入 userId 的 API，不做资源权限校验 =====
-            if (isUserIdOnlyPath(path, request)) {
-                injectUserAttributesFromToken(request, response, filterChain);
-                return;
-            }
-
-            // ===== 提取资源ID =====
-            String resourceId = extractResourceIdFromPath(request);
-            if (resourceId == null) {
-                // URL 不含资源ID，直接放行（方法级 @PreAuthorize 会做进一步控制）
-                logger.debug("未找到资源ID，直接放行: {}", path);
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            // ===== 查询资源基础信息 =====
-            ResourceInfo resourceInfo = getResourceInfo(resourceId);
-            if (resourceInfo == null) {
-                logger.debug("资源未找到: {}", resourceId);
-                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                return;
-            }
-
-            // ===== 公开资源直接放行（read 类操作）=====
-            if (resourceInfo.isPublic()) {
-                logger.debug("公开资源，直接放行: {}", resourceId);
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            // ===== 委托 RbacService 做统一权限判断 =====
-            String token = extractToken(request);
-            if (token == null) {
-                logger.debug("未找到 Token，返回 401");
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return;
-            }
-
-            String username = jwtUtils.extractUsernameFromToken(token);
-            String requiredPerm = httpMethodToPermission(request.getMethod());
-
-            boolean allowed = rbacService.hasResourcePermission(
-                username,
-                "doc",          // 当前过滤器主要处理文件/文档资源
-                resourceId,
-                requiredPerm,
-                resourceInfo.getOwner(),
-                resourceInfo.getOrgTag(),
-                resourceInfo.isPublic()
-            );
-
-            if (allowed) {
-                // 注入请求属性供后续 Controller 使用
-                String userId = jwtUtils.extractUserIdFromToken(token);
-                String role = jwtUtils.extractRoleFromToken(token);
-                if (userId != null) {
-                    request.setAttribute("userId", userId);
-                    request.setAttribute("username", username);
-                    request.setAttribute("role", role);
-                }
-                filterChain.doFilter(request, response);
-            } else {
-                logger.debug("用户 {} 无权访问资源 {} (requiredPerm={})", username, resourceId, requiredPerm);
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-            }
-
+            shouldProceed = checkAuthorization(request, response);
         } catch (Exception e) {
             logger.error("资源授权过滤器错误: {}", e.getMessage(), e);
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            if (!response.isCommitted()) {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            }
+            return;
         }
+
+        // filterChain.doFilter 在 try-catch 外，下游异常正常向上传播
+        if (shouldProceed) {
+            filterChain.doFilter(request, response);
+        }
+    }
+
+    /**
+     * 执行资源级权限校验，返回是否放行。
+     * 此方法内可抛出 RuntimeException（过滤器自身错误），但不调用 filterChain.doFilter。
+     */
+    private boolean checkAuthorization(HttpServletRequest request, HttpServletResponse response) {
+        String path = request.getRequestURI();
+
+        String resourceId = extractResourceIdFromPath(request);
+        if (resourceId == null) {
+            logger.debug("未找到资源ID，直接放行: {}", path);
+            return true;
+        }
+
+        ResourceInfo resourceInfo = getResourceInfo(resourceId);
+        if (resourceInfo == null) {
+            logger.debug("资源未找到: {}", resourceId);
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            return false;
+        }
+
+        if (resourceInfo.isPublic()) {
+            logger.debug("公开资源，直接放行: {}", resourceId);
+            return true;
+        }
+
+        String token = extractToken(request);
+        if (token == null) {
+            logger.debug("未找到 Token，返回 401");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return false;
+        }
+
+        String username = jwtUtils.extractUsernameFromToken(token);
+        String requiredPerm = httpMethodToPermission(request.getMethod());
+
+        boolean allowed = rbacService.hasResourcePermission(
+            username,
+            "doc",
+            resourceId,
+            requiredPerm,
+            resourceInfo.getOwner(),
+            resourceInfo.getOrgTag(),
+            resourceInfo.isPublic()
+        );
+
+        if (allowed) {
+            String userId = jwtUtils.extractUserIdFromToken(token);
+            String role = jwtUtils.extractRoleFromToken(token);
+            if (userId != null) {
+                request.setAttribute("userId", userId);
+                request.setAttribute("username", username);
+                request.setAttribute("role", role);
+            }
+        } else {
+            logger.debug("用户 {} 无权访问资源 {} (requiredPerm={})", username, resourceId, requiredPerm);
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        }
+        return allowed;
     }
 
     /**
@@ -129,11 +147,9 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
     }
 
     /**
-     * 从 JWT 中提取 userId/username/role 并设置为请求属性，然后放行
+     * 从 JWT 中提取 userId/username/role 并设置为请求属性（不调用 filterChain.doFilter）
      */
-    private void injectUserAttributesFromToken(HttpServletRequest request,
-                                                HttpServletResponse response,
-                                                FilterChain filterChain) throws Exception {
+    private void injectUserAttributesOnly(HttpServletRequest request) {
         String token = extractToken(request);
         if (token != null) {
             String userId = jwtUtils.extractUserIdFromToken(token);
@@ -146,7 +162,6 @@ public class OrgTagAuthorizationFilter extends OncePerRequestFilter {
                 logger.debug("注入用户属性: userId={}, username={}, role={}", userId, username, role);
             }
         }
-        filterChain.doFilter(request, response);
     }
 
     /**

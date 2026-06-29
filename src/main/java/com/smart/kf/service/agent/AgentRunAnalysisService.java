@@ -99,10 +99,14 @@ public class AgentRunAnalysisService {
         }
 
         List<Agent> agents = agentRepository.findAll();
-        long runCount = agents.stream().mapToLong(Agent::getCallCount).sum();
-        long successCount = agents.stream().mapToLong(Agent::getSuccessCount).sum();
-        long failureCount = agents.stream().mapToLong(Agent::getFailureCount).sum();
-        long durationTotalMs = agents.stream().mapToLong(item -> item.getAvgDurationMs() * item.getCallCount()).sum();
+        long runCount = agents.stream().mapToLong(a -> a.getCallCount() != null ? a.getCallCount() : 0L).sum();
+        long successCount = agents.stream().mapToLong(a -> a.getSuccessCount() != null ? a.getSuccessCount() : 0L).sum();
+        long failureCount = agents.stream().mapToLong(a -> a.getFailureCount() != null ? a.getFailureCount() : 0L).sum();
+        long durationTotalMs = agents.stream().mapToLong(item -> {
+            long avg = item.getAvgDurationMs() != null ? item.getAvgDurationMs() : 0L;
+            long cnt = item.getCallCount() != null ? item.getCallCount() : 0L;
+            return avg * cnt;
+        }).sum();
 
         AgentRunAnalysisSnapshot snapshot = new AgentRunAnalysisSnapshot();
         snapshot.setSnapshotDate(LocalDate.now());

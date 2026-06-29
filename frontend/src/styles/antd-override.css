@@ -97,7 +97,8 @@
 }
 
 /* --- Menu (sidebar) --- */
-.ant-menu-item {
+.ant-menu-item,
+.ant-menu-submenu-title {
   border-radius: var(--kf-radius-sm) !important;
   margin: 2px 8px !important;
   width: calc(100% - 16px) !important;
@@ -146,4 +147,348 @@
 .ant-select-dropdown::-webkit-scrollbar,
 .ant-table-body::-webkit-scrollbar {
   width: 4px;
+}
+
+/* ============================================================
+   Neumorphism (拟态浮雕) — component overrides
+   Shadows replace borders; inputs use inset depth not ring;
+   buttons use solid accent + extruded→inset press physics
+   ============================================================ */
+
+/* Cards: no border, full neumorphic extrusion */
+[data-theme='neo'] .ant-card {
+  border: none !important;
+}
+
+/* Primary button: solid (not gradient) + extruded shadow */
+[data-theme='neo'] .ant-btn-primary {
+  background: var(--kf-accent) !important;
+  border: none !important;
+  box-shadow: var(--kf-shadow-sm) !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+[data-theme='neo'] .ant-btn-primary:hover {
+  box-shadow: var(--kf-shadow-md) !important;
+  transform: translateY(-1px) !important;
+  filter: none !important;
+}
+
+[data-theme='neo'] .ant-btn-primary:active {
+  box-shadow: var(--kf-shadow-inset) !important;
+  transform: translateY(0.5px) !important;
+}
+
+/* Default/secondary button: extruded clay surface */
+[data-theme='neo'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text) {
+  border: none !important;
+  background: var(--kf-bg) !important;
+  box-shadow: var(--kf-shadow-sm) !important;
+}
+
+[data-theme='neo'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text):hover {
+  box-shadow: var(--kf-shadow-md) !important;
+  transform: translateY(-1px) !important;
+}
+
+[data-theme='neo'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text):active {
+  box-shadow: var(--kf-shadow-inset) !important;
+  transform: translateY(0.5px) !important;
+}
+
+/* Inputs: inset (carved into surface) instead of border ring */
+[data-theme='neo'] .ant-input,
+[data-theme='neo'] .ant-input-affix-wrapper,
+[data-theme='neo'] .ant-select-selector,
+[data-theme='neo'] .ant-picker {
+  border: none !important;
+  background: var(--kf-bg) !important;
+  box-shadow: var(--kf-shadow-inset) !important;
+}
+
+[data-theme='neo'] .ant-input:focus,
+[data-theme='neo'] .ant-input-affix-wrapper:focus,
+[data-theme='neo'] .ant-input-affix-wrapper-focused,
+[data-theme='neo'] .ant-select-focused .ant-select-selector,
+[data-theme='neo'] .ant-picker-focused {
+  border: none !important;
+  box-shadow: var(--kf-shadow-inset-deep) !important;
+  outline: 2px solid var(--kf-accent-30) !important;
+  outline-offset: 2px !important;
+}
+
+/* Sidebar: subtle right-side shadow to separate from content */
+[data-theme='neo'] .ant-layout-sider {
+  box-shadow: 5px 0 20px rgb(163, 177, 198, 0.4) !important;
+}
+
+/* Popover/Tooltip: extruded from surface */
+[data-theme='neo'] .ant-popover-inner,
+[data-theme='neo'] .ant-tooltip-inner {
+  border: none !important;
+  box-shadow: var(--kf-shadow-lg) !important;
+}
+
+/* Modal: large radius + extruded shadow */
+[data-theme='neo'] .ant-modal-content {
+  border: none !important;
+}
+
+/* Table header: inset to feel pressed */
+[data-theme='neo'] .ant-table-thead > tr > th {
+  box-shadow: var(--kf-shadow-inset) !important;
+}
+
+/* Tabs ink bar: smaller to match quieter aesthetic */
+[data-theme='neo'] .ant-tabs-ink-bar {
+  background: var(--kf-accent) !important;
+}
+
+/* ============================================================
+   Corporate Trust (企业信任) — component overrides
+   Indigo-tinted shadows; Plus Jakarta Sans font weight boost
+   ============================================================ */
+
+/* Headings in corporate theme use ExtraBold (800) per spec */
+[data-theme='corporate'] h1,
+[data-theme='corporate'] h2,
+[data-theme='corporate'] h3 {
+  font-weight: 800 !important;
+  letter-spacing: -0.025em !important;
+}
+
+/* Cards: indigo-tinted hover shadow for dimensional depth */
+[data-theme='corporate'] .ant-card:hover {
+  box-shadow:
+    0 10px 25px -5px rgba(79, 70, 229, 0.15),
+    0 8px 10px -6px rgba(79, 70, 229, 0.1) !important;
+}
+
+/* ============================================================
+   Minimalist Monochrome (极简黑白) — component overrides
+   No shadows, no radius, black/white inversion on interaction
+   ============================================================ */
+
+/* Cards: clean editorial box — no shadow, just border */
+[data-theme='mono'] .ant-card {
+  box-shadow: none !important;
+  border: 1px solid #000000 !important;
+  transition: none !important;
+}
+
+[data-theme='mono'] .ant-card:hover {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Primary button: solid black → white inversion on hover */
+[data-theme='mono'] .ant-btn-primary {
+  background: #000000 !important;
+  border: 1px solid #000000 !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+[data-theme='mono'] .ant-btn-primary:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+[data-theme='mono'] .ant-btn-primary:active {
+  transform: none !important;
+}
+
+/* Default button: outlined → filled on hover */
+[data-theme='mono'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text) {
+  background: #ffffff !important;
+  border: 1px solid #000000 !important;
+  box-shadow: none !important;
+  color: #000000 !important;
+}
+
+[data-theme='mono'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text):hover {
+  background: #000000 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Inputs: bottom-border only */
+[data-theme='mono'] .ant-input,
+[data-theme='mono'] .ant-input-affix-wrapper,
+[data-theme='mono'] .ant-select-selector,
+[data-theme='mono'] .ant-picker {
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #000000 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+[data-theme='mono'] .ant-input:focus,
+[data-theme='mono'] .ant-input-affix-wrapper:focus,
+[data-theme='mono'] .ant-input-affix-wrapper-focused,
+[data-theme='mono'] .ant-select-focused .ant-select-selector,
+[data-theme='mono'] .ant-picker-focused {
+  border-bottom: 2px solid #000000 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* No rounding, no shadow anywhere */
+[data-theme='mono'] .ant-modal-content,
+[data-theme='mono'] .ant-drawer-content,
+[data-theme='mono'] .ant-popover-inner,
+[data-theme='mono'] .ant-tooltip-inner {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid #000000 !important;
+}
+
+/* Menu items: clean horizontal rule on selected */
+[data-theme='mono'] .ant-menu-item {
+  border-radius: 0 !important;
+}
+
+/* Tabs: no gradient bar, just a solid black underline */
+[data-theme='mono'] .ant-tabs-ink-bar {
+  background: #000000 !important;
+}
+
+/* ============================================================
+   Terminal CLI (终端黑绿) — component overrides
+   Neon glow borders, bracket-style primary button,
+   CRT scanline overlay, all radius 0
+   ============================================================ */
+
+/* CRT scanline effect */
+[data-theme='terminal'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.07) 0px,
+    rgba(0, 0, 0, 0.07) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+}
+
+/* Cards: green-glow border */
+[data-theme='terminal'] .ant-card {
+  border: 1px solid #1f521f !important;
+  box-shadow: 0 0 12px rgba(51, 255, 0, 0.15) !important;
+  transition: box-shadow 0.15s ease !important;
+}
+
+[data-theme='terminal'] .ant-card:hover {
+  box-shadow: 0 0 20px rgba(51, 255, 0, 0.3) !important;
+  transform: none !important;
+}
+
+/* Primary button: bracket-style (transparent bg + green border) */
+[data-theme='terminal'] .ant-btn-primary {
+  background: transparent !important;
+  border: 1px solid #33ff00 !important;
+  color: #33ff00 !important;
+  box-shadow: 0 0 8px rgba(51, 255, 0, 0.3) !important;
+  text-shadow: 0 0 8px rgba(51, 255, 0, 0.6) !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+[data-theme='terminal'] .ant-btn-primary:hover {
+  background: #33ff00 !important;
+  color: #000000 !important;
+  box-shadow: 0 0 16px rgba(51, 255, 0, 0.5) !important;
+  text-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+[data-theme='terminal'] .ant-btn-primary:active {
+  background: #1f9900 !important;
+  transform: none !important;
+}
+
+/* Default buttons */
+[data-theme='terminal'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text) {
+  background: transparent !important;
+  border: 1px solid #1f521f !important;
+  color: #33ff00 !important;
+  box-shadow: none !important;
+}
+
+[data-theme='terminal'] .ant-btn:not(.ant-btn-primary):not(.ant-btn-link):not(.ant-btn-text):hover {
+  border-color: #33ff00 !important;
+  box-shadow: 0 0 8px rgba(51, 255, 0, 0.2) !important;
+  transform: none !important;
+}
+
+/* Inputs: green bottom-border only */
+[data-theme='terminal'] .ant-input,
+[data-theme='terminal'] .ant-input-affix-wrapper,
+[data-theme='terminal'] .ant-select-selector,
+[data-theme='terminal'] .ant-picker {
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid #1f521f !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: #33ff00 !important;
+}
+
+[data-theme='terminal'] .ant-input:focus,
+[data-theme='terminal'] .ant-input-affix-wrapper:focus,
+[data-theme='terminal'] .ant-input-affix-wrapper-focused,
+[data-theme='terminal'] .ant-select-focused .ant-select-selector,
+[data-theme='terminal'] .ant-picker-focused {
+  border-bottom: 1px solid #33ff00 !important;
+  box-shadow: 0 2px 0 0 rgba(51, 255, 0, 0.3) !important;
+  outline: none !important;
+}
+
+/* Sidebar: green left-border glow */
+[data-theme='terminal'] .ant-layout-sider {
+  box-shadow: 2px 0 16px rgba(51, 255, 0, 0.1) !important;
+}
+
+/* Popover/Tooltip/Modal: green-border box */
+[data-theme='terminal'] .ant-modal-content,
+[data-theme='terminal'] .ant-drawer-content,
+[data-theme='terminal'] .ant-popover-inner,
+[data-theme='terminal'] .ant-tooltip-inner {
+  border-radius: 0 !important;
+  border: 1px solid #1f521f !important;
+  box-shadow: 0 0 16px rgba(51, 255, 0, 0.2) !important;
+}
+
+/* Menu: no rounding */
+[data-theme='terminal'] .ant-menu-item {
+  border-radius: 0 !important;
+}
+
+/* Tabs: neon underline */
+[data-theme='terminal'] .ant-tabs-ink-bar {
+  background: #33ff00 !important;
+  box-shadow: 0 0 8px rgba(51, 255, 0, 0.5) !important;
+}
+
+/* Gradient button override: terminals don't use gradients */
+[data-theme='terminal'] .ant-btn-primary {
+  background: transparent !important;
 }

@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import './i18n'
@@ -13,20 +12,23 @@ initErrorMonitor()
   try {
     const stored = localStorage.getItem('kf-theme')
     const parsed = stored ? JSON.parse(stored) : null
-    const isDark =
-      parsed?.state?.isDark ?? window.matchMedia('(prefers-color-scheme: dark)').matches
-    document.documentElement.dataset.theme = isDark ? 'dark' : 'light'
-    document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+    const themeId: string =
+      parsed?.state?.themeId ??
+      (parsed?.state?.isDark ? 'dark' : null) ??
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    document.documentElement.dataset.theme = themeId
+    const darkThemes = ['dark', 'terminal', 'vaporwave']
+    document.documentElement.style.colorScheme = darkThemes.includes(themeId) ? 'dark' : 'light'
   } catch {
     // ignore parse errors
   }
 })()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// StrictMode is intentionally omitted: @xyflow/react v12's StoreUpdater calls reset() in its
+// cleanup effect, which destroys handleBounds before ResizeObserver can re-measure them.
+// This causes getEdgePosition() to return null during the double-mount cycle, so newly
+// connected edges are never rendered. Remove StrictMode until upstream fixes this.
+createRoot(document.getElementById('root')!).render(<App />)
 
 // Collect Core Web Vitals after first paint
 initVitals()

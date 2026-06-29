@@ -108,6 +108,7 @@ export const promptApi = {
       variables: string
       tags: string
       status: string
+      changeDescription: string
     }>,
   ) {
     return http.put<Prompt>(`/resources/prompts/${templateId}`, payload).then(data)

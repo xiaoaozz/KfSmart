@@ -40,6 +40,12 @@ public class Agent {
     @Column(name = "owner_name")
     private String ownerName;
 
+    /**
+     * 所有者用户 FK（替代 ownerName 字符串，Phase 2 新增）
+     */
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @Column
     private String tags;
 
@@ -86,16 +92,16 @@ public class Agent {
     private String models;
 
     @Column(name = "call_count")
-    private long callCount = 0;
+    private Long callCount = 0L;
 
     @Column(name = "success_count")
-    private long successCount = 0;
+    private Long successCount = 0L;
 
     @Column(name = "failure_count")
-    private long failureCount = 0;
+    private Long failureCount = 0L;
 
     @Column(name = "avg_duration_ms")
-    private long avgDurationMs = 0;
+    private Long avgDurationMs = 0L;
 
     @Column(name = "install_count", nullable = false)
     private Long installCount = 0L;

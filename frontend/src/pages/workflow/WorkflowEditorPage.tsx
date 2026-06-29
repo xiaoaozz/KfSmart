@@ -1,21 +1,28 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
+  ControlButton,
   MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
+  useViewport,
+  useReactFlow,
+  useStore,
   BackgroundVariant,
+  MarkerType,
   type Node,
   type Edge,
   type Connection,
   type NodeTypes,
+  type OnNodesChange,
+  type OnEdgesChange,
   Panel,
+  ConnectionMode,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import { Button, App, Tooltip, Divider, Space } from 'antd'
+import { Button, App, Tooltip, Divider, Space, Modal, Form, Input } from 'antd'
 import {
   ArrowLeftOutlined,
   SaveOutlined,
@@ -23,6 +30,11 @@ import {
   DeleteOutlined,
   UndoOutlined,
   RedoOutlined,
+  HistoryOutlined,
+  BugOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  FullscreenOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -35,8 +47,15 @@ import LlmNode from './nodes/LlmNode'
 import KbNode from './nodes/KbNode'
 import CodeNode from './nodes/CodeNode'
 import ConditionNode from './nodes/ConditionNode'
+import HttpNode from './nodes/HttpNode'
+import LoopNode from './nodes/LoopNode'
+import VariableNode from './nodes/VariableNode'
+import AgentCallNode from './nodes/AgentCallNode'
+import DelayNode from './nodes/DelayNode'
 import NodeConfigDrawer from './NodeConfigDrawer'
+import WorkflowDebugPanel from './WorkflowDebugPanel'
 import { NODE_COLORS } from './nodes/nodeTypes'
+import { NodeStatusContext } from './nodes/NodeStatusContext'
 import styles from './WorkflowEditorPage.module.css'
 
 const NODE_TYPES: NodeTypes = {
@@ -46,16 +65,37 @@ const NODE_TYPES: NodeTypes = {
   kb: KbNode,
   code: CodeNode,
   condition: ConditionNode,
+  http: HttpNode,
+  loop: LoopNode,
+  variable: VariableNode,
+  agent_call: AgentCallNode,
+  delay: DelayNode,
 }
 
 const DEFAULT_NODES: Node[] = [
   { id: 'start-1', type: 'start', position: { x: 200, y: 80 }, data: { inputVariable: 'input' } },
-  { id: 'end-1', type: 'end', position: { x: 200, y: 420 }, data: { outputVariable: 'output' } },
+  { id: 'end-1', type: 'end', position: { x: 200, y: 300 }, data: { outputVariable: 'output' } },
 ]
 
 const DEFAULT_EDGES: Edge[] = [{ id: 'e-start-end', source: 'start-1', target: 'end-1' }]
 
-const NODE_PALETTE_TYPES = ['llm', 'kb', 'code', 'condition']
+const NODE_PALETTE_TYPES = [
+  'llm',
+  'kb',
+  'code',
+  'condition',
+  'http',
+  'loop',
+  'variable',
+  'agent_call',
+  'delay',
+]
+
+const DEFAULT_EDGE_OPTIONS = {
+  animated: true,
+  style: { stroke: 'var(--kf-accent)', strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--kf-accent)' },
+}
 
 let nodeIdCounter = 100
 
@@ -79,38 +119,124 @@ function toFlowEdges(wfEdges: WorkflowEdge[]): Edge[] {
   }))
 }
 
+// Zoom display embedded inside the built-in Controls panel to avoid overlap
+function ZoomDisplay() {
+  const { zoom } = useViewport()
+  const { zoomIn, zoomOut, fitView } = useReactFlow()
+  const minZoom = useStore((s) => s.minZoom)
+  const maxZoom = useStore((s) => s.maxZoom)
+  const minZoomReached = zoom <= minZoom
+  const maxZoomReached = zoom >= maxZoom
+  return (
+    <>
+      <ControlButton
+        title="Zoom in"
+        onClick={() => zoomIn({ duration: 200 })}
+        disabled={maxZoomReached}
+      >
+        <ZoomInOutlined style={{ pointerEvents: 'none' }} />
+      </ControlButton>
+      <div className={styles.zoomPct}>{Math.round(zoom * 100)}%</div>
+      <ControlButton
+        title="Zoom out"
+        onClick={() => zoomOut({ duration: 200 })}
+        disabled={minZoomReached}
+      >
+        <ZoomOutOutlined style={{ pointerEvents: 'none' }} />
+      </ControlButton>
+      <ControlButton
+        title="Fit view"
+        onClick={() => fitView({ duration: 300, padding: 0.15, minZoom: 1, maxZoom: 1 })}
+      >
+        <FullscreenOutlined style={{ pointerEvents: 'none' }} />
+      </ControlButton>
+    </>
+  )
+}
+
 export default function WorkflowEditorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { message } = App.useApp()
+  const { message, modal } = App.useApp()
   const { t } = useTranslation()
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(DEFAULT_NODES)
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(DEFAULT_EDGES)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
-  const [initialized, setInitialized] = useState(false)
+  const initializedRef = useRef(false)
 
-  useQuery({
-    queryKey: ['workflows', id],
-    queryFn: () => workflowApi.get(Number(id)),
-    enabled: !!id && !initialized,
-    select: (wf) => {
-      if (wf.nodes.length > 0) {
-        setNodes(toFlowNodes(wf.nodes))
-        setEdges(toFlowEdges(wf.edges))
+  // Undo / Redo history
+  type Snapshot = { nodes: Node[]; edges: Edge[] }
+  const historyRef = useRef<Snapshot[]>([])
+  const futureRef = useRef<Snapshot[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  const pushHistory = useCallback((prevNodes: Node[], prevEdges: Edge[]) => {
+    historyRef.current.push({ nodes: prevNodes, edges: prevEdges })
+    if (historyRef.current.length > 100) historyRef.current.shift()
+    futureRef.current = []
+    setCanUndo(true)
+    setCanRedo(false)
+  }, [])
+
+  const undo = useCallback(() => {
+    const past = historyRef.current.pop()
+    if (!past) return
+    futureRef.current.push({ nodes: [...nodes], edges: [...edges] })
+    setNodes(past.nodes)
+    setEdges(past.edges)
+    setCanUndo(historyRef.current.length > 0)
+    setCanRedo(true)
+  }, [nodes, edges, setNodes, setEdges])
+
+  const redo = useCallback(() => {
+    const next = futureRef.current.pop()
+    if (!next) return
+    historyRef.current.push({ nodes: [...nodes], edges: [...edges] })
+    setNodes(next.nodes)
+    setEdges(next.edges)
+    setCanUndo(true)
+    setCanRedo(futureRef.current.length > 0)
+  }, [nodes, edges, setNodes, setEdges])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      if (e.key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+      } else if (e.key === 'y') {
+        e.preventDefault()
+        redo()
       }
-      setInitialized(true)
-      return wf
-    },
-  })
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [undo, redo])
+
+  const [runDialogOpen, setRunDialogOpen] = useState(false)
+  const [runForm] = Form.useForm<{ input: string }>()
+  const [debugMode, setDebugMode] = useState(false)
+  const [nodeStatusMap, setNodeStatusMap] = useState<Record<string, string>>({})
 
   const { data: wf } = useQuery({
     queryKey: ['workflows', id],
     queryFn: () => workflowApi.get(Number(id)),
     enabled: !!id,
   })
+
+  useEffect(() => {
+    if (!wf || initializedRef.current) return
+    if (wf.nodes?.length > 0) {
+      setNodes(toFlowNodes(wf.nodes))
+      setEdges(toFlowEdges(wf.edges ?? []))
+    }
+    initializedRef.current = true
+  }, [wf, setNodes, setEdges])
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -137,13 +263,41 @@ export default function WorkflowEditorPage() {
   })
 
   const runMutation = useMutation({
-    mutationFn: () => workflowApi.run(Number(id), ''),
-    onSuccess: () => message.success(t('workflow.editor.runTriggered')),
+    mutationFn: (input: string) => workflowApi.run(Number(id), input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workflow-executions', id] })
+      setRunDialogOpen(false)
+      runForm.resetFields()
+      modal.success({
+        title: t('workflow.executions.runSuccess'),
+        content: t('workflow.executions.runSuccess'),
+        okText: t('workflow.executions.historyBtn'),
+        cancelText: t('common.cancel'),
+        onOk: () => navigate(`/workflows/${id}/executions`),
+      })
+    },
   })
 
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges],
+    (connection: Connection) => {
+      pushHistory([...nodes], [...edges])
+      setEdges((eds) => addEdge(connection, eds))
+    },
+    [nodes, edges, setEdges, pushHistory],
+  )
+
+  const onNodesChangeFn = useCallback<OnNodesChange>(
+    (changes) => {
+      onNodesChange(changes)
+    },
+    [onNodesChange],
+  )
+
+  const onEdgesChangeFn = useCallback<OnEdgesChange>(
+    (changes) => {
+      onEdgesChange(changes)
+    },
+    [onEdgesChange],
   )
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -168,10 +322,11 @@ export default function WorkflowEditorPage() {
       message.warning(t('workflow.editor.cannotDeleteFixed'))
       return
     }
+    pushHistory([...nodes], [...edges])
     setNodes((nds) => nds.filter((n) => n.id !== nodeId))
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
     setSelectedNode(null)
-  }, [selectedNode, setNodes, setEdges, message, t])
+  }, [selectedNode, nodes, edges, setNodes, setEdges, pushHistory, message, t])
 
   const addNode = useCallback(
     (type: string) => {
@@ -182,10 +337,11 @@ export default function WorkflowEditorPage() {
         position: { x: 200 + Math.random() * 100, y: 200 + Math.random() * 100 },
         data: {},
       }
+      pushHistory([...nodes], [...edges])
       setNodes((nds) => [...nds, newNode])
       setSelectedNode(newNode)
     },
-    [setNodes],
+    [nodes, edges, setNodes, pushHistory],
   )
 
   return (
@@ -196,6 +352,30 @@ export default function WorkflowEditorPage() {
         </Button>
         <span className={styles.wfName}>{wf?.name ?? t('workflow.editor.defaultTitle')}</span>
         <Space>
+          <Tooltip title={t('workflow.debug.title')}>
+            <Button
+              icon={<BugOutlined />}
+              type={debugMode ? 'primary' : 'default'}
+              onClick={() => {
+                setDebugMode((v) => !v)
+                if (debugMode) {
+                  setSelectedNode(null)
+                  setNodeStatusMap({})
+                }
+              }}
+              style={debugMode ? { background: 'var(--kf-accent-gradient-r)', border: 'none' } : {}}
+            >
+              {t('workflow.debug.title')}
+            </Button>
+          </Tooltip>
+          <Tooltip title={t('workflow.executions.historyBtn')}>
+            <Button
+              icon={<HistoryOutlined />}
+              onClick={() => navigate(`/workflows/${id}/executions`)}
+            >
+              {t('workflow.executions.historyBtn')}
+            </Button>
+          </Tooltip>
           <Tooltip title={t('workflow.editor.saveTooltip')}>
             <Button
               icon={<SaveOutlined />}
@@ -208,11 +388,7 @@ export default function WorkflowEditorPage() {
             </Button>
           </Tooltip>
           <Tooltip title={t('workflow.editor.runTooltip')}>
-            <Button
-              icon={<PlayCircleOutlined />}
-              loading={runMutation.isPending}
-              onClick={() => runMutation.mutate()}
-            >
+            <Button icon={<PlayCircleOutlined />} onClick={() => setRunDialogOpen(true)}>
               {t('workflow.editor.runBtn')}
             </Button>
           </Tooltip>
@@ -246,41 +422,71 @@ export default function WorkflowEditorPage() {
         </div>
 
         <div className={styles.flow} ref={reactFlowWrapper}>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            nodeTypes={NODE_TYPES}
-            fitView
-            defaultEdgeOptions={{
-              animated: true,
-              style: { stroke: 'var(--kf-primary)', strokeWidth: 2 },
-            }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={16} color="var(--kf-border)" />
-            <Controls />
-            <MiniMap
-              nodeStrokeColor={(n) => NODE_COLORS[n.type ?? ''] ?? '#aaa'}
-              nodeColor={(n) => NODE_COLORS[n.type ?? ''] ?? '#aaa'}
-              style={{ background: 'var(--kf-card)', border: '1px solid var(--kf-border)' }}
-            />
-            <Panel position="top-right">
-              <Space>
-                <Tooltip title={t('workflow.editor.undoTooltip')}>
-                  <Button size="small" icon={<UndoOutlined />} />
-                </Tooltip>
-                <Tooltip title={t('workflow.editor.redoTooltip')}>
-                  <Button size="small" icon={<RedoOutlined />} />
-                </Tooltip>
-              </Space>
-            </Panel>
-          </ReactFlow>
+          <NodeStatusContext.Provider value={nodeStatusMap}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChangeFn}
+              onEdgesChange={onEdgesChangeFn}
+              onConnect={onConnect}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              nodeTypes={NODE_TYPES}
+              fitView
+              fitViewOptions={{ maxZoom: 1, padding: 0.15 }}
+              minZoom={0.2}
+              maxZoom={2}
+              defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+              connectionLineStyle={{ stroke: 'var(--kf-accent)', strokeWidth: 2 }}
+              connectionMode={ConnectionMode.Loose}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background variant={BackgroundVariant.Dots} gap={16} color="var(--kf-border)" />
+              <Controls showZoom={false} showFitView={false} showInteractive={false}>
+                <ZoomDisplay />
+              </Controls>
+              <MiniMap
+                nodeStrokeColor={(n) => NODE_COLORS[n.type ?? ''] ?? '#aaa'}
+                nodeColor={(n) => NODE_COLORS[n.type ?? ''] ?? '#aaa'}
+                style={{ background: 'var(--kf-card)', border: '1px solid var(--kf-border)' }}
+              />
+              <Panel position="top-right">
+                <Space>
+                  <Tooltip title={t('workflow.editor.undoTooltip')}>
+                    <Button
+                      size="small"
+                      icon={<UndoOutlined />}
+                      disabled={!canUndo}
+                      onClick={undo}
+                    />
+                  </Tooltip>
+                  <Tooltip title={t('workflow.editor.redoTooltip')}>
+                    <Button
+                      size="small"
+                      icon={<RedoOutlined />}
+                      disabled={!canRedo}
+                      onClick={redo}
+                    />
+                  </Tooltip>
+                </Space>
+              </Panel>
+            </ReactFlow>
+          </NodeStatusContext.Provider>
         </div>
+
+        {/* Debug panel as right-side overlay within the canvas */}
+        {debugMode && (
+          <WorkflowDebugPanel
+            nodes={nodes}
+            nodeStatusMap={nodeStatusMap}
+            onStatusChange={setNodeStatusMap}
+            onClose={() => {
+              setDebugMode(false)
+              setNodeStatusMap({})
+            }}
+            workflowId={Number(id)}
+          />
+        )}
       </div>
 
       <NodeConfigDrawer
@@ -288,6 +494,33 @@ export default function WorkflowEditorPage() {
         onClose={() => setSelectedNode(null)}
         onSave={onSaveNodeConfig}
       />
+
+      <Modal
+        title={t('workflow.executions.runModalTitle')}
+        open={runDialogOpen}
+        onCancel={() => {
+          setRunDialogOpen(false)
+          runForm.resetFields()
+        }}
+        onOk={() => runForm.submit()}
+        okText={t('workflow.executions.runModalOk')}
+        confirmLoading={runMutation.isPending}
+        destroyOnClose
+      >
+        <Form form={runForm} layout="vertical" onFinish={(v) => runMutation.mutate(v.input ?? '')}>
+          <Form.Item
+            name="input"
+            label={t('workflow.executions.runInputLabel')}
+            rules={[{ required: true, message: t('workflow.executions.runInputPlaceholder') }]}
+          >
+            <Input.TextArea
+              rows={5}
+              placeholder={t('workflow.executions.runInputPlaceholder')}
+              style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 13 }}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   )
 }

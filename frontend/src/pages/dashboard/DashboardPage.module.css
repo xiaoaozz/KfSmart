@@ -1,5 +1,5 @@
 .root {
-  max-width: 1200px;
+  width: 100%;
 }
 
 /* Welcome */
@@ -17,40 +17,6 @@
 
 .welcomeSub {
   font-size: 14px;
-  color: var(--kf-muted-foreground);
-}
-
-/* Stats */
-.statsRow {
-  margin-bottom: 0;
-}
-
-.statCard {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  cursor: default;
-}
-
-.statIcon {
-  font-size: 22px;
-  color: var(--kf-accent);
-  line-height: 1;
-}
-
-.statValue {
-  font-family: var(--kf-font-display);
-  font-size: 28px;
-  color: var(--kf-foreground);
-  letter-spacing: -0.02em;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-}
-
-.statLabel {
-  font-size: 13px;
   color: var(--kf-muted-foreground);
 }
 
@@ -136,27 +102,102 @@
   flex-shrink: 0;
 }
 
-/* Quick action cards */
-.actionCard {
-  padding: 20px;
-  cursor: pointer;
+/* Section header */
+.sectionHeader {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
+.sectionIcon {
+  font-size: 16px;
+  color: var(--kf-accent);
+}
+
+/* Module overview cards */
+.moduleCard {
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.moduleCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.moduleIcon {
+  font-size: 20px;
+  color: var(--kf-accent);
+  line-height: 1;
+}
+
+.moduleCount {
+  font-family: var(--kf-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--kf-foreground);
+  letter-spacing: -0.02em;
+  min-width: 24px;
+  text-align: right;
+}
+
+.moduleLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+}
+
+.moduleDesc {
+  font-size: 11px;
+  color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moduleArrow {
+  font-size: 11px;
+  color: var(--kf-muted-foreground);
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.moduleCard:hover .moduleArrow {
+  opacity: 1;
+}
+
+/* Quick action cards */
+.actionCard {
+  padding: 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .actionIcon {
-  font-size: 22px;
+  font-size: 20px;
   color: var(--kf-accent);
 }
 
 .actionLabel {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--kf-foreground);
 }
 
 .actionDesc {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

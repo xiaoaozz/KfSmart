@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
 import { NODE_COLORS } from './nodeTypes'
+import { useNodeStatus } from './NodeStatusContext'
 import styles from './BaseNode.module.css'
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export default function BaseNode({
-  id: _id,
+  id,
   type,
   selected,
   hasTarget = true,
@@ -26,6 +27,7 @@ export default function BaseNode({
   const { t } = useTranslation()
   const color = NODE_COLORS[type] ?? '#aaa'
   const label = t('workflow.nodeLabel.' + type, { defaultValue: type })
+  const runStatus = useNodeStatus(id)
 
   return (
     <div
@@ -39,7 +41,14 @@ export default function BaseNode({
         {extra}
       </div>
       {children && <div className={styles.body}>{children}</div>}
+      {runStatus && (
+        <span className={`${styles.statusDot} ${styles['status' + capitalize(runStatus)]}`} />
+      )}
       {hasSource && <Handle type="source" position={Position.Bottom} className={styles.handle} />}
     </div>
   )
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1)
 }

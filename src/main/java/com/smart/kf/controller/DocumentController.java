@@ -190,9 +190,13 @@ public class DocumentController {
 
             // 应用其余筛选条件
             List<FileUpload> filteredFiles = files.stream().filter(file -> {
-                // mine=true 时只展示当前用户自己的文件（默认已是，该分支保持语义清晰）
-                if (Boolean.TRUE.equals(mine) && !userId.equals(file.getUserId())) {
-                    return false;
+                // mine=true 时只展示当前用户自己的文件（兼容旧 userId String 和新 ownerId Long）
+                if (Boolean.TRUE.equals(mine)) {
+                    boolean isOwner = userId.equals(file.getUserId())
+                            || (file.getOwnerId() != null && file.getOwnerId().toString().equals(userId));
+                    if (!isOwner) {
+                        return false;
+                    }
                 }
                 // 知识库筛选（仅当未在 SQL 层面过滤时才在内存再过滤）
                 if (!hasKeyword && hasKbId && !kbId.equals(file.getKbId())) {

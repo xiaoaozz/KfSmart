@@ -1,34 +1,24 @@
 import { useState } from 'react'
-import {
-  Button,
-  Modal,
-  Form,
-  Input,
-  Select,
-  App,
-  Empty,
-  Tag,
-  Badge,
-  Descriptions,
-  Space,
-  Tooltip,
-} from 'antd'
+import { Button, Modal, Form, Input, Select, App, Tag, Tooltip } from 'antd'
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  ApiOutlined,
   CheckCircleOutlined,
   DisconnectOutlined,
   SyncOutlined,
   ExclamationCircleOutlined,
+  SearchOutlined,
+  ApiOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { mcpApi } from '@/api/skill'
 import type { McpTool } from '@/types/skill'
-import { PermissionButton } from '@/components/business'
+import { GradientButton, GradientCard } from '@/components/base'
+import { PermissionButton, PageBar, EmptyState } from '@/components/business'
 import styles from './McpToolPage.module.css'
 
 const TYPE_OPTIONS = [
@@ -66,6 +56,10 @@ export default function McpToolPage() {
     },
   }
 
+  const [keyword, setKeyword] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string | undefined>()
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<McpTool | null>(null)
   const [form] = Form.useForm<{
@@ -82,7 +76,18 @@ export default function McpToolPage() {
     queryFn: () => mcpApi.list(),
   })
 
-  const tools = data?.records ?? []
+  const allTools = data?.records ?? []
+  const filteredTools = allTools.filter((tool) => {
+    const kw = keyword.toLowerCase()
+    const matchesKeyword =
+      !kw ||
+      tool.name.toLowerCase().includes(kw) ||
+      tool.endpoint.toLowerCase().includes(kw) ||
+      (tool.description ?? '').toLowerCase().includes(kw)
+    const matchesStatus = !statusFilter || tool.status === statusFilter
+    return matchesKeyword && matchesStatus
+  })
+  const tools = filteredTools.slice((current - 1) * pageSize, current * pageSize)
 
   const createMutation = useMutation({
     mutationFn: (v: {
@@ -176,110 +181,159 @@ export default function McpToolPage() {
 
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <h2 className={styles.pageTitle}>
-          <ApiOutlined /> {t('skill.mcp.title')}
-        </h2>
-        <PermissionButton permission="mcp:create">
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            style={{ background: 'var(--kf-accent-gradient-r)', border: 'none' }}
-            onClick={handleOpenCreate}
-          >
-            {t('skill.mcp.addBtn')}
-          </Button>
-        </PermissionButton>
+      <div className={styles.pageHeader}>
+        <div className={styles.topBar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('skill.mcp.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              style={{ width: 220 }}
+              allowClear
+            />
+            <Select
+              placeholder={t('skill.mcp.statusPlaceholder')}
+              allowClear
+              value={statusFilter}
+              onChange={(v) => {
+                setStatusFilter(v)
+                setCurrent(1)
+              }}
+              style={{ width: 130 }}
+              options={Object.entries(STATUS_CFG).map(([k, v]) => ({ label: v.label, value: k }))}
+            />
+          </div>
+          <PermissionButton permission="mcp:create">
+            <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
+              {t('skill.mcp.addBtn')}
+            </GradientButton>
+          </PermissionButton>
+        </div>
       </div>
 
-      <div className={styles.subtitle}>{t('skill.mcp.subtitle')}</div>
+      <div className={styles.body}>
+        {isLoading ? (
+          <div className={styles.grid}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={styles.skeleton} />
+            ))}
+          </div>
+        ) : !tools.length ? (
+          <EmptyState
+            title={t('skill.mcp.empty')}
+            description={t('skill.mcp.searchPlaceholder')}
+            action={
+              <PermissionButton permission="mcp:create">
+                <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
+                  {t('skill.mcp.addBtn')}
+                </GradientButton>
+              </PermissionButton>
+            }
+          />
+        ) : (
+          <div className={styles.grid}>
+            {tools.map((tool: McpTool, i: number) => {
+              const cfg = STATUS_CFG[tool.status] ?? STATUS_CFG['离线']
+              return (
+                <motion.div
+                  key={tool.id}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <GradientCard className={styles.card}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardIconWrap}>
+                        <ApiOutlined />
+                      </div>
+                      <Tag color={cfg.color} icon={cfg.icon} style={{ fontSize: 12 }}>
+                        {cfg.label}
+                      </Tag>
+                    </div>
 
-      {isLoading ? (
-        <div className={styles.listSkeleton}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className={styles.skeleton} />
-          ))}
-        </div>
-      ) : !tools.length ? (
-        <Empty description={t('skill.mcp.empty')} />
-      ) : (
-        <div className={styles.list}>
-          {tools.map((tool: McpTool, i: number) => {
-            const cfg = STATUS_CFG[tool.status] ?? STATUS_CFG['离线']
-            return (
-              <motion.div
-                key={tool.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className={styles.card}
-              >
-                <div className={styles.cardHeader}>
-                  <Badge
-                    status={
-                      tool.status === '在线'
-                        ? 'success'
-                        : tool.status === '错误'
-                          ? 'error'
-                          : 'default'
-                    }
-                  />
-                  <span className={styles.cardName}>{tool.name}</span>
-                  <Tag color={cfg.color} icon={cfg.icon}>
-                    {cfg.label}
-                  </Tag>
-                  {tool.callCount > 0 && (
-                    <Tag color="blue">{t('skill.mcp.toolCount', { count: tool.callCount })}</Tag>
-                  )}
-                </div>
-                {tool.description && <div className={styles.cardDesc}>{tool.description}</div>}
-                <Descriptions size="small" column={2}>
-                  <Descriptions.Item label={t('skill.mcp.descTransport')}>
-                    {tool.type}
-                  </Descriptions.Item>
-                  <Descriptions.Item label={t('skill.mcp.descEndpoint')}>
-                    <span className={styles.endpoint}>{tool.endpoint}</span>
-                  </Descriptions.Item>
-                  {tool.lastTestAt && (
-                    <Descriptions.Item label={t('skill.mcp.descLastTest')}>
-                      {new Date(tool.lastTestAt).toLocaleString()}
-                    </Descriptions.Item>
-                  )}
-                </Descriptions>
-                <div className={styles.cardActions}>
-                  <Space>
-                    <Button
-                      size="small"
-                      icon={<SyncOutlined spin={testingId === tool.id} />}
-                      loading={testingId === tool.id}
-                      onClick={() => handleTest(tool)}
-                    >
-                      {t('skill.mcp.testBtn')}
-                    </Button>
-                    <Tooltip title={t('skill.mcp.tooltipEdit')}>
-                      <PermissionButton permission="mcp:update">
+                    <h4 className={styles.cardName}>{tool.name}</h4>
+                    {tool.description && <p className={styles.cardDesc}>{tool.description}</p>}
+
+                    <div className={styles.cardEndpoint} title={tool.endpoint}>
+                      {tool.endpoint}
+                    </div>
+
+                    <div className={styles.cardMeta}>
+                      <span className={styles.metaItem}>{tool.type}</span>
+                      {tool.callCount > 0 && (
+                        <span className={styles.metaItem}>
+                          <ThunderboltOutlined /> {tool.callCount}
+                        </span>
+                      )}
+                      {tool.lastTestAt && (
+                        <span className={styles.metaItem}>
+                          {new Date(tool.lastTestAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title={t('skill.mcp.testBtn')}>
                         <Button
                           size="small"
-                          icon={<EditOutlined />}
-                          onClick={() => handleOpenEdit(tool)}
+                          icon={<SyncOutlined spin={testingId === tool.id} />}
+                          loading={testingId === tool.id}
+                          className={styles.btnBlue}
+                          onClick={() => handleTest(tool)}
                         />
+                      </Tooltip>
+                      <PermissionButton permission="mcp:update" mode="hide">
+                        <Tooltip title={t('skill.mcp.tooltipEdit')}>
+                          <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            className={styles.btnGray}
+                            onClick={() => handleOpenEdit(tool)}
+                          />
+                        </Tooltip>
                       </PermissionButton>
-                    </Tooltip>
-                    <Tooltip title={t('skill.mcp.tooltipDelete')}>
-                      <PermissionButton permission="mcp:delete">
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleDelete(tool)}
-                        />
+                      <PermissionButton permission="mcp:delete" mode="hide">
+                        <Tooltip title={t('skill.mcp.tooltipDelete')}>
+                          <Button
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            className={styles.btnRed}
+                            onClick={() => handleDelete(tool)}
+                          />
+                        </Tooltip>
                       </PermissionButton>
-                    </Tooltip>
-                  </Space>
-                </div>
-              </motion.div>
-            )
-          })}
+                    </div>
+                  </GradientCard>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {filteredTools.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={filteredTools.length}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
         </div>
       )}
 

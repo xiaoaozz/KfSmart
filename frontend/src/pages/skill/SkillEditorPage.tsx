@@ -49,8 +49,8 @@ function parseInputSchema(json?: string): SchemaProperty[] {
     const required: string[] = schema.required ?? []
     return Object.entries(props).map(([name, def]: [string, unknown]) => ({
       name,
-      type: (def as Record<string, unknown>).type ?? 'string',
-      description: (def as Record<string, unknown>).description ?? '',
+      type: String((def as Record<string, unknown>).type ?? 'string'),
+      description: String((def as Record<string, unknown>).description ?? ''),
       required: required.includes(name),
       defaultValue:
         (def as Record<string, unknown>).default != null

@@ -28,7 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { kbApi } from '@/api/knowledge-base'
 import type { KnowledgeBase, KbFormValues } from '@/types/knowledge-base'
 import { GradientButton, GradientCard } from '@/components/base'
-import { EmptyState, PermissionButton } from '@/components/business'
+import { EmptyState, PermissionButton, FavoriteButton, PageBar } from '@/components/business'
 import styles from './KbListPage.module.css'
 
 function KbCard({
@@ -48,6 +48,12 @@ function KbCard({
         <div className={styles.cardHeader}>
           <DatabaseOutlined className={styles.cardIcon} />
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+            <FavoriteButton
+              type="knowledge"
+              targetId={kb.kbId}
+              title={kb.name}
+              description={kb.description}
+            />
             <PermissionButton permission="kb:write" mode="hide">
               <Tooltip title={t('common.edit')}>
                 <EditOutlined className={styles.actionBtn} onClick={() => onEdit(kb)} />
@@ -99,6 +105,8 @@ function KbCard({
 export default function KbListPage() {
   const [keyword, setKeyword] = useState('')
   const [isPublic, setIsPublic] = useState<boolean | undefined>(undefined)
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<KnowledgeBase | null>(null)
   const [form] = Form.useForm<KbFormValues>()
@@ -107,8 +115,8 @@ export default function KbListPage() {
   const { t } = useTranslation()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['knowledge-bases', { keyword, isPublic }],
-    queryFn: () => kbApi.list({ keyword: keyword || undefined, isPublic }),
+    queryKey: ['knowledge-bases', { keyword, isPublic, current, pageSize }],
+    queryFn: () => kbApi.list({ keyword: keyword || undefined, isPublic, current, size: pageSize }),
   })
 
   const createMutation = useMutation({
@@ -169,69 +177,100 @@ export default function KbListPage() {
 
   return (
     <div className={styles.root}>
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div className={styles.filters}>
-          <Input
-            prefix={<SearchOutlined />}
-            placeholder={t('kb.searchPlaceholder')}
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            allowClear
-            style={{ width: 240 }}
-          />
-          <Select
-            placeholder={t('kb.accessFilter')}
-            allowClear
-            value={isPublic}
-            onChange={(v) => setIsPublic(v)}
-            style={{ width: 120 }}
-            options={[
-              { label: t('common.public'), value: true },
-              { label: t('common.private'), value: false },
-            ]}
-          />
+      <div className={styles.pageHeader}>
+        <div className={styles.toolbar}>
+          <div className={styles.filters}>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder={t('kb.searchPlaceholder')}
+              value={keyword}
+              onChange={(e) => {
+                setKeyword(e.target.value)
+                setCurrent(1)
+              }}
+              allowClear
+              style={{ width: 240 }}
+            />
+            <Select
+              placeholder={t('kb.accessFilter')}
+              allowClear
+              value={isPublic}
+              onChange={(v) => {
+                setIsPublic(v)
+                setCurrent(1)
+              }}
+              style={{ width: 120 }}
+              options={[
+                { label: t('common.public'), value: true },
+                { label: t('common.private'), value: false },
+              ]}
+            />
+          </div>
+          <PermissionButton permission="kb:write" mode="hide">
+            <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
+              {t('kb.createNew')}
+            </GradientButton>
+          </PermissionButton>
         </div>
-        <PermissionButton permission="kb:write" mode="hide">
-          <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
-            {t('kb.createNew')}
-          </GradientButton>
-        </PermissionButton>
       </div>
 
-      {/* Grid */}
-      {isLoading ? (
-        <Row gutter={[16, 16]}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Col key={i} xs={24} sm={12} lg={8}>
-              <Skeleton active />
-            </Col>
-          ))}
-        </Row>
-      ) : kbs.length === 0 ? (
-        <EmptyState
-          title={t('kb.emptyTitle')}
-          description={t('kb.emptyDesc')}
-          action={
-            <PermissionButton permission="kb:write" mode="hide">
-              <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
-                {t('kb.createNew')}
-              </GradientButton>
-            </PermissionButton>
-          }
-        />
-      ) : (
-        <Row gutter={[16, 16]}>
-          {kbs.map((kb) => (
-            <Col key={kb.id} xs={24} sm={12} lg={8}>
-              <KbCard
-                kb={kb}
-                onEdit={handleOpenEdit}
-                onDelete={(id) => deleteMutation.mutate(id)}
-              />
-            </Col>
-          ))}
-        </Row>
+      <div className={styles.body}>
+        {isLoading ? (
+          <Row gutter={[16, 16]}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Col key={i} xs={24} sm={12} lg={8}>
+                <Skeleton active />
+              </Col>
+            ))}
+          </Row>
+        ) : kbs.length === 0 ? (
+          <EmptyState
+            title={t('kb.emptyTitle')}
+            description={t('kb.emptyDesc')}
+            action={
+              <PermissionButton permission="kb:write" mode="hide">
+                <GradientButton icon={<PlusOutlined />} onClick={handleOpenCreate}>
+                  {t('kb.createNew')}
+                </GradientButton>
+              </PermissionButton>
+            }
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {kbs.map((kb) => (
+              <Col key={kb.id} xs={24} sm={12} lg={8}>
+                <KbCard
+                  kb={kb}
+                  onEdit={handleOpenEdit}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                />
+              </Col>
+            ))}
+          </Row>
+        )}
+      </div>
+
+      {(data?.total ?? 0) > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={data!.total}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
+        </div>
       )}
 
       {/* Create / Edit Modal */}

@@ -1,0 +1,100 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--kf-font-display);
+  font-size: 20px;
+  color: var(--kf-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.body {
+  flex: 1;
+}
+
+.progressBar {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.progressLabel {
+  font-weight: 600;
+  color: var(--kf-accent);
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.progressNodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1;
+}
+
+.progressNodeText {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  display: inline-flex;
+  align-items: center;
+}
+
+.codeBlock {
+  position: relative;
+  background: var(--kf-muted);
+  border-radius: var(--kf-radius-sm);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.codeBlock pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-foreground);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.detailContent {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.ioSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ioLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kf-muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

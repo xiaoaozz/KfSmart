@@ -53,10 +53,12 @@ class UserServiceTest {
     @Test
     void testRegisterUser_Success() {
         when(userRepository.findByUsername("testuser")).thenReturn(Optional.empty());
+        // "DEFAULT" doesn't exist → no migration needed (short-circuits)
         when(organizationTagRepository.existsByTagId("DEFAULT")).thenReturn(false);
-        when(organizationTagRepository.existsByTagId("default")).thenReturn(false);
-        when(organizationTagRepository.existsByTagId("PRIVATE_testuser")).thenReturn(false);
-        when(userRepository.findAll()).thenReturn(Collections.emptyList());
+        // "default" already exists → skip default org creation
+        when(organizationTagRepository.existsByTagId("default")).thenReturn(true);
+        // "new-users" already exists → skip pending org creation
+        when(organizationTagRepository.existsByTagId("new-users")).thenReturn(true);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             if (user.getId() == null) user.setId(1L);
@@ -85,7 +87,7 @@ class UserServiceTest {
 
         // 断言在注册已存在的用户名时抛出 CustomException 异常
         CustomException exception = assertThrows(CustomException.class, () -> userService.registerUser("testuser", "password123"));
-        assertEquals("Username already exists", exception.getMessage());
+        assertEquals("用户名已存在，请跳转登录", exception.getMessage());
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatus());
     }
 

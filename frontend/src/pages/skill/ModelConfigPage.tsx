@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { modelApi } from '@/api/skill'
 import type { ModelConfig } from '@/types/skill'
 import { GradientCard } from '@/components/base'
-import { EmptyState } from '@/components/business'
+import { EmptyState, PageBar } from '@/components/business'
 import styles from './ModelConfigPage.module.css'
 
 const PROVIDER_LABEL_MAP: Record<string, string> = {
@@ -117,6 +117,8 @@ function ModelCard({
 export default function ModelConfigPage() {
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
+  const [current, setCurrent] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   const { data: models, isLoading } = useQuery({
     queryKey: ['models'],
@@ -134,38 +136,68 @@ export default function ModelConfigPage() {
           m.category.toLowerCase().includes(keyword.toLowerCase()),
       )
     : safeModels
+  const paged = filtered.slice((current - 1) * pageSize, current * pageSize)
 
   return (
     <div className={styles.root}>
-      <div className={styles.toolbar}>
-        <Input
-          prefix={<SearchOutlined />}
-          placeholder={t('skill.model.searchPlaceholder')}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          allowClear
-          style={{ width: 240 }}
-        />
+      <div className={styles.pageHeader}>
+        <div className={styles.toolbar}>
+          <Input
+            prefix={<SearchOutlined />}
+            placeholder={t('skill.model.searchPlaceholder')}
+            value={keyword}
+            onChange={(e) => {
+              setKeyword(e.target.value)
+              setCurrent(1)
+            }}
+            allowClear
+            style={{ width: 240 }}
+          />
+        </div>
       </div>
 
-      {isLoading ? (
-        <Row gutter={[16, 16]}>
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Col key={i} xs={24} sm={12} lg={8}>
-              <Skeleton active />
-            </Col>
-          ))}
-        </Row>
-      ) : filtered.length === 0 ? (
-        <EmptyState title={t('skill.model.empty')} />
-      ) : (
-        <Row gutter={[16, 16]}>
-          {filtered.map((m) => (
-            <Col key={m.id} xs={24} sm={12} lg={8}>
-              <ModelCard model={m} t={t} />
-            </Col>
-          ))}
-        </Row>
+      <div className={styles.body}>
+        {isLoading ? (
+          <Row gutter={[16, 16]}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Col key={i} xs={24} sm={12} lg={8}>
+                <Skeleton active />
+              </Col>
+            ))}
+          </Row>
+        ) : filtered.length === 0 ? (
+          <EmptyState title={t('skill.model.empty')} />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {paged.map((m) => (
+              <Col key={m.id} xs={24} sm={12} lg={8}>
+                <ModelCard model={m} t={t} />
+              </Col>
+            ))}
+          </Row>
+        )}
+      </div>
+      {filtered.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            flexShrink: 0,
+            padding: '12px 20px',
+            borderTop: '1px solid var(--kf-border)',
+          }}
+        >
+          <PageBar
+            current={current}
+            pageSize={pageSize}
+            total={filtered.length}
+            onChange={(page, size) => {
+              setCurrent(page)
+              setPageSize(size)
+            }}
+          />
+        </div>
       )}
     </div>
   )

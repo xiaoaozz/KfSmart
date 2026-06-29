@@ -8,6 +8,7 @@ import com.smart.kf.model.agent.Agent;
 import com.smart.kf.model.agent.AgentExecutionLog;
 import com.smart.kf.repository.agent.AgentExecutionLogRepository;
 import com.smart.kf.repository.agent.AgentRepository;
+import com.smart.kf.utils.pagination.PageResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class AgentExecutionService {
@@ -51,8 +53,10 @@ public class AgentExecutionService {
     @Transactional
     public Map<String, Object> chat(String agentId, String query, List<Map<String, String>> history,
                                      Map<String, Object> debugOverrides, String username) {
-        Agent agent = agentRepository.findByAgentId(agentId)
-            .orElseThrow(() -> new IllegalArgumentException("Agent不存在: " + agentId));
+        Optional<Agent> found = (agentId != null && agentId.matches("\\d+"))
+            ? agentRepository.findById(Long.parseLong(agentId))
+            : agentRepository.findByAgentId(agentId);
+        Agent agent = found.orElseThrow(() -> new IllegalArgumentException("Agent不存在: " + agentId));
 
         long startTime = System.currentTimeMillis();
 
@@ -74,7 +78,7 @@ public class AgentExecutionService {
 
         updateAgentStats(agent, ctx, duration);
 
-        saveExecutionLog(ctx, agentId, query, username, duration);
+        saveExecutionLog(ctx, agent.getAgentId(), query, username, duration);
 
         return buildResponse(ctx, duration);
     }
@@ -88,11 +92,22 @@ public class AgentExecutionService {
             .orElseThrow(() -> new IllegalArgumentException("执行记录不存在: " + executionId));
     }
 
-    public Page<AgentExecutionLog> listExecutionLogs(String agentId, int page, int size) {
-        return logRepository.findByAgentIdOrderByStartedAtDesc(
-            agentId,
+    public PageResult<AgentExecutionLog> listExecutionLogs(String agentId, int page, int size) {
+        String canonicalId = resolveCanonicalAgentId(agentId);
+        Page<AgentExecutionLog> result = logRepository.findByAgentIdOrderByStartedAtDesc(
+            canonicalId,
             PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startedAt"))
         );
+        return PageResult.fromPage(result);
+    }
+
+    private String resolveCanonicalAgentId(String agentId) {
+        if (agentId != null && agentId.matches("\\d+")) {
+            return agentRepository.findById(Long.parseLong(agentId))
+                .map(Agent::getAgentId)
+                .orElse(agentId);
+        }
+        return agentId;
     }
 
     private void updateAgentStats(Agent agent, AgentContext ctx, long duration) {

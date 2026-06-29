@@ -24,6 +24,12 @@ export interface DocListParams {
   size?: number
 }
 
+export interface DocPreview {
+  fileName: string
+  content: string
+  fileSize: number
+}
+
 export interface UploadTaskStatus {
   fileMd5: string
   fileName: string
