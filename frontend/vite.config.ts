@@ -1,69 +1,77 @@
-import process from 'node:process';
-import { URL, fileURLToPath } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
-import { setupVitePlugins } from './build/plugins';
-import { createViteProxy, getBuildTime } from './build/config';
+import path from 'path'
 
-export default defineConfig(configEnv => {
-  const viteEnv = loadEnv(configEnv.mode, process.cwd()) as unknown as Env.ImportMeta;
+import react from '@vitejs/plugin-react'
+import { visualizer } from 'rollup-plugin-visualizer'
+import { defineConfig } from 'vitest/config'
 
-  const buildTime = getBuildTime();
-
-  const enableProxy = configEnv.command === 'serve' && !configEnv.isPreview;
-
-  return {
-    base: viteEnv.VITE_BASE_URL,
-    optimizeDeps: {
-      exclude: ['vue-markdown-shiki']
+export default defineConfig({
+  plugins: [
+    react(),
+    // Run `ANALYZE=true pnpm build` to generate bundle-stats.html
+    process.env.ANALYZE === 'true' && visualizer({
+      open: false,
+      filename: 'bundle-stats.html',
+      gzipSize: true,
+      brotliSize: true,
+    }),
+  ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
     },
-    resolve: {
-      alias: {
-        '~': fileURLToPath(new URL('./', import.meta.url)),
-        '@': fileURLToPath(new URL('./src', import.meta.url))
-      }
+  },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/avatars': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://localhost:8081',
+        ws: true,
+        changeOrigin: true,
+      },
+      '/chat': {
+        target: 'ws://localhost:8081',
+        ws: true,
+        changeOrigin: true,
+        bypass(req) {
+          // Only proxy WebSocket upgrades; regular HTTP navigation stays in the SPA
+          if (req.headers.upgrade?.toLowerCase() !== 'websocket') return req.url
+        },
+      },
     },
-    css: {
-      preprocessorOptions: {
-        scss: {
-          api: 'modern-compiler',
-          additionalData: `@use "@/styles/scss/global.scss" as *;`
-        }
-      }
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    alias: { '@': path.resolve(__dirname, './src') },
+  },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks: (id) => {
+          if (id.includes('node_modules')) {
+            if (id.includes('framer-motion')) return 'vendor-motion'
+            if (id.includes('react-router')) return 'vendor-router'
+            if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype') || id.includes('unified') || id.includes('micromark') || id.includes('mdast') || id.includes('unist')) return 'vendor-markdown'
+            if (id.includes('react-syntax-highlighter') || id.includes('highlight.js') || id.includes('refractor') || id.includes('prismjs')) return 'vendor-highlight'
+            if (id.includes('react-dom') || id.includes('react/')) return 'vendor-react'
+            if (id.includes('antd') || id.includes('@ant-design') || id.includes('rc-')) return 'vendor-antd'
+            if (id.includes('@xyflow')) return 'vendor-flow'
+            if (id.includes('@tanstack')) return 'vendor-query'
+            if (id.includes('zustand')) return 'vendor-zustand'
+            if (id.includes('axios')) return 'vendor-axios'
+          }
+        },
+      },
     },
-    plugins: [
-      ...setupVitePlugins(viteEnv, buildTime),
-      // Suppress WebSocket proxy ECONNRESET noise from chat store autoReconnect
-      {
-        name: 'suppress-ws-proxy-errors',
-        configureServer(server) {
-          const logger = server.config.logger;
-          const originalWarn = logger.warn.bind(logger);
-          logger.warn = (msg, ...args) => {
-            if (msg.includes('ws proxy socket error')) return;
-            originalWarn(msg, ...args);
-          };
-        }
-      }
-    ],
-    define: {
-      BUILD_TIME: JSON.stringify(buildTime)
-    },
-    server: {
-      host: '0.0.0.0',
-      port: 9528,
-      open: true,
-      proxy: createViteProxy(viteEnv, enableProxy),
-      allowedHosts: ['u45964x883.zicp.vip']
-    },
-    preview: {
-      port: 9725
-    },
-    build: {
-      reportCompressedSize: false,
-      sourcemap: viteEnv.VITE_SOURCE_MAP === 'Y',
-      commonjsOptions: {
-        ignoreTryCatch: false
-      }
-    }
-  };
-});
+  },
+})

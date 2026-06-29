@@ -11,11 +11,14 @@ import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.LoginRecordRepository;
 import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
+import com.smart.kf.service.AvatarService;
+import com.smart.kf.service.EmailService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.PasswordUtil;
+import com.smart.kf.utils.RsaService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -24,9 +27,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -45,8 +46,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/users")
 public class UserController {
 
-    private static final long MAX_AVATAR_SIZE = 2 * 1024 * 1024;
-    private static final Set<String> ALLOWED_AVATAR_TYPES = Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
+    @Autowired
+    private AvatarService avatarService;
 
     @Autowired
     private UserService userService;
@@ -74,23 +75,67 @@ public class UserController {
     @Autowired
     private LoginRecordRepository loginRecordRepository;
 
+    @Autowired
+    private EmailService emailService;
+
+    @Autowired
+    private RsaService rsaService;
+
+    // 返回 RSA 公钥（PEM 格式），供前端加密密码使用
+    @GetMapping("/public-key")
+    public ResponseEntity<?> getPublicKey() {
+        return ResponseEntity.ok(Map.of("code", 200, "data", rsaService.getPublicKeyPem()));
+    }
+
+    // 发送注册邮箱验证码
+    @PostMapping("/send-email-code")
+    public ResponseEntity<?> sendEmailCode(@RequestBody java.util.Map<String, String> body) {
+        String email = body.get("email");
+        try {
+            emailService.sendRegistrationCode(email);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "验证码已发送，请查收邮件"));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("SEND_EMAIL_CODE", email, "发送验证码异常: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("code", 500, "message", "发送验证码失败"));
+        }
+    }
+
     // 用户注册接口
     // 接收用户请求体中的用户名和密码，并调用用户服务进行注册
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody UserRequest request) {
+    public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("USER_REGISTER");
         try {
-            if (request.username() == null || request.username().isEmpty() ||
-                    request.password() == null || request.password().isEmpty()) {
+            if (request.username() == null || request.username().isBlank() ||
+                    request.password() == null || request.password().isBlank()) {
                 LogUtils.logUserOperation("anonymous", "REGISTER", "validation", "FAILED_EMPTY_PARAMS");
                 monitor.end("注册失败：参数为空");
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
-            
-            userService.registerUser(request.username(), request.password());
+            if (request.email() == null || request.email().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "邮箱不能为空"));
+            }
+            if (request.emailCode() == null || request.emailCode().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "邮箱验证码不能为空"));
+            }
+
+            // 在消费 OTP 之前预检：用户名或邮箱若已注册，直接返回错误，保留验证码供用户重试
+            if (userRepository.findByUsername(request.username()).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名已存在，请跳转登录"));
+            }
+            if (userRepository.findByEmail(request.email().trim().toLowerCase()).isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "该邮箱已被注册"));
+            }
+
+            // 先验证 OTP，通过后再创建账号
+            emailService.verifyRegistrationCode(request.email(), request.emailCode());
+
+            userService.registerUser(request.username(), request.password(), request.email());
             LogUtils.logUserOperation(request.username(), "REGISTER", "user_creation", "SUCCESS");
             monitor.end("注册成功");
-            
+
             return ResponseEntity.ok(Map.of("code", 200, "message", "User registered successfully"));
         } catch (CustomException e) {
             LogUtils.logBusinessError("USER_REGISTER", request.username(), "用户注册失败: %s", e, e.getMessage());
@@ -121,7 +166,14 @@ public class UserController {
                 return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "用户名和密码不能为空"));
             }
             
-            String username = userService.authenticateUser(request.username(), request.password());
+            // RSA 解密前端加密的密码
+            String rawPassword;
+            try {
+                rawPassword = rsaService.decrypt(request.password());
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "密码格式错误，请刷新页面后重试"));
+            }
+            String username = userService.authenticateUser(request.username(), rawPassword);
             if (username == null) {
                 LogUtils.logUserOperation(request.username(), "LOGIN", "authentication", "FAILED_INVALID_CREDENTIALS");
                 // 记录登录失败
@@ -354,16 +406,9 @@ public class UserController {
             User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new CustomException("User not found", HttpStatus.NOT_FOUND));
 
-            validateAvatarFile(file);
+            avatarService.validateAvatarFile(file);
 
-            String extension = getAvatarExtension(file.getContentType());
-            Path avatarDir = Path.of("data", "avatars");
-            Files.createDirectories(avatarDir);
-            String fileName = "user-" + user.getId() + extension;
-            Path target = avatarDir.resolve(fileName);
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-
-            String avatarUrl = "/avatars/" + fileName;
+            String avatarUrl = avatarService.saveAvatarFile(file, user.getId(), Path.of("data", "avatars"));
             user.setAvatarUrl(avatarUrl);
             userRepository.save(user);
 
@@ -785,6 +830,7 @@ public class UserController {
     
     // 用户请求记录类
     public record UserRequest(String username, String password) {}
+    public record RegisterRequest(String username, String password, String email, String emailCode) {}
 
     public record UpdateProfileRequest(String email, String phone, String bio) {}
 
@@ -794,31 +840,6 @@ public class UserController {
 
     // 主组织标签请求记录类
     public record PrimaryOrgRequest(String primaryOrg) {}
-
-    private void validateAvatarFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new CustomException("头像文件不能为空", HttpStatus.BAD_REQUEST);
-        }
-        if (file.getSize() > MAX_AVATAR_SIZE) {
-            throw new CustomException("头像文件不能超过2MB", HttpStatus.BAD_REQUEST);
-        }
-        String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_AVATAR_TYPES.contains(contentType.toLowerCase())) {
-            throw new CustomException("仅支持 JPG、PNG、WebP、GIF 格式头像", HttpStatus.BAD_REQUEST);
-        }
-    }
-
-    private String getAvatarExtension(String contentType) {
-        if (contentType == null) {
-            return ".png";
-        }
-        return switch (contentType.toLowerCase()) {
-            case "image/jpeg" -> ".jpg";
-            case "image/webp" -> ".webp";
-            case "image/gif" -> ".gif";
-            default -> ".png";
-        };
-    }
 
     private Map<String, Object> buildUsageStatistics(User user, int days) {
         LocalDate today = LocalDate.now();

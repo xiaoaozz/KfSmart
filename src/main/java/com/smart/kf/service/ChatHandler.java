@@ -405,6 +405,25 @@ public class ChatHandler {
         saveErrorMessage(conversationId, userId, userMessage, errorMessage);
     }
 
+    public void truncateConversationHistory(String userId, String conversationId, int keepCount) {
+        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
+            throw new CustomException("会话不存在或无权操作", HttpStatus.NOT_FOUND);
+        }
+        List<Map<String, String>> history = getConversationHistory(conversationId);
+        int safeKeep = Math.max(0, Math.min(keepCount, history.size()));
+        if (safeKeep == history.size()) return;
+        List<Map<String, String>> truncated = new ArrayList<>(history.subList(0, safeKeep));
+        try {
+            String key = conversationHistoryKey(conversationId);
+            String json = objectMapper.writeValueAsString(truncated);
+            redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
+            logger.info("截断会话历史: conversationId={}, keepCount={}, 原有={}", conversationId, safeKeep, history.size());
+        } catch (JsonProcessingException e) {
+            logger.error("截断会话历史序列化失败: {}", e.getMessage(), e);
+            throw new RuntimeException("截断失败", e);
+        }
+    }
+
     public Map<String, Object> deleteConversationSession(String userId, String conversationId) {
         if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
             throw new CustomException("会话不存在或无权删除", HttpStatus.NOT_FOUND);
@@ -1092,7 +1111,8 @@ public class ChatHandler {
         streamTerminalStates.put(sessionId, StreamTerminalState.FAILED);
         handleError(session, error);
         // 持久化错误消息，以便刷新后仍可展示
-        String failedMessage = error.getMessage() != null ? error.getMessage() : "响应处理失败";
+        String failedMessage = (error.getMessage() != null && !error.getMessage().isEmpty())
+                ? error.getMessage() : "响应处理失败";
         if (conversationId != null && userId != null && userMessage != null) {
             saveErrorMessage(conversationId, userId, userMessage, failedMessage);
         }

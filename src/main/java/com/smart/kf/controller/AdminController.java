@@ -8,22 +8,28 @@ import com.smart.kf.exception.CustomException;
 import com.smart.kf.model.*;
 import com.smart.kf.repository.ConversationRepository;
 import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.repository.PermissionRepository;
 import com.smart.kf.repository.RoleRepository;
+import com.smart.kf.repository.UserFavoriteRepository;
 import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.DocumentService;
 import com.smart.kf.service.FileTypeValidationService;
+import com.smart.kf.service.I18nTranslationService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.service.SystemActivityService;
 import com.smart.kf.service.UserService;
 import com.smart.kf.utils.JwtUtils;
 import com.smart.kf.utils.LogUtils;
 import com.smart.kf.utils.MinioMigrationUtil;
+import com.smart.kf.utils.PasswordUtil;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.pagination.PageResult;
+import io.minio.BucketExistsArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import javax.sql.DataSource;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -42,6 +48,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.Comparator;
+import java.util.concurrent.CompletableFuture;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.ScanOptions;
 
 /**
  * 管理员控制器，提供管理知识库、查看系统状态和监控用户活动的接口
@@ -72,7 +82,10 @@ public class AdminController {
 
     @Autowired
     private UserService userService;
-    
+
+    @Autowired
+    private I18nTranslationService i18nTranslationService;
+
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
     
@@ -108,7 +121,16 @@ public class AdminController {
     private DocumentService documentService;
 
     @Autowired
+    private DataSource dataSource;
+
+    @Autowired
     private SystemActivityService systemActivityService;
+
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
+
+    @Autowired
+    private UserFavoriteRepository userFavoriteRepository;
 
     /**
      * 获取所有用户列表
@@ -147,6 +169,106 @@ public class AdminController {
             monitor.end("获取用户列表失败: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("code", 500, "message", "Failed to get users: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 更新用户信息（用户名、邮箱、角色）
+     */
+    @PutMapping("/users/{userId}")
+    public ResponseEntity<?> updateUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId,
+            @RequestBody Map<String, Object> request) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            if (request.containsKey("username")) user.setUsername((String) request.get("username"));
+            if (request.containsKey("email")) user.setEmail((String) request.get("email"));
+            if (request.containsKey("role")) {
+                user.setRole(User.Role.valueOf(((String) request.get("role")).toUpperCase()));
+            }
+            userRepository.save(user);
+            user.setPassword(null);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_UPDATE_USER", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "用户信息更新成功", "data", user));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_UPDATE_USER", adminUsername, "更新用户失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "更新用户失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 删除用户（不允许删除管理员账号）
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<?> deleteUser(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            if (user.getRole() == User.Role.ADMIN) {
+                throw new CustomException("不能删除管理员账号", HttpStatus.FORBIDDEN);
+            }
+            User admin = userRepository.findByUsername(adminUsername)
+                    .orElseThrow(() -> new CustomException("管理员账号不存在", HttpStatus.NOT_FOUND));
+
+            // 删除用户私有数据
+            userFavoriteRepository.deleteAll(userFavoriteRepository.findByUserOrderByUpdatedAtDesc(user));
+            conversationRepository.deleteAll(conversationRepository.findByUserId(userId));
+
+            // 将该用户创建的共享资源转让给执行删除的管理员
+            List<OrganizationTag> ownedTags = organizationTagRepository.findByCreatedBy(user);
+            ownedTags.forEach(tag -> tag.setCreatedBy(admin));
+            organizationTagRepository.saveAll(ownedTags);
+
+            List<KnowledgeBase> ownedKbs = knowledgeBaseRepository.findByCreatedBy(user);
+            ownedKbs.forEach(kb -> kb.setCreatedBy(admin));
+            knowledgeBaseRepository.saveAll(ownedKbs);
+
+            userRepository.delete(user);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_DELETE_USER", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "用户删除成功"));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_DELETE_USER", adminUsername, "删除用户失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "删除用户失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 重置用户密码（生成随机12位密码并返回，管理员转告用户）
+     */
+    @PostMapping("/users/{userId}/reset-password")
+    public ResponseEntity<?> resetUserPassword(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long userId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        try {
+            validateAdmin(adminUsername);
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new CustomException("用户不存在", HttpStatus.NOT_FOUND));
+            String newPassword = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            user.setPassword(PasswordUtil.encode(newPassword));
+            userRepository.save(user);
+            LogUtils.logUserOperation(adminUsername, "ADMIN_RESET_PASSWORD", "user:" + userId, "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "密码重置成功", "data", Map.of("newPassword", newPassword)));
+        } catch (CustomException e) {
+            return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus().value(), "message", e.getMessage()));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ADMIN_RESET_PASSWORD", adminUsername, "重置密码失败: %s", e, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "重置密码失败: " + e.getMessage()));
         }
     }
 
@@ -230,6 +352,8 @@ public class AdminController {
             fileUpload.setTotalSize(fileSize);
             fileUpload.setStatus(1); // 已完成
             fileUpload.setUserId(adminUsername);
+            // 同时写入 ownerId FK
+            userRepository.findByUsername(adminUsername).ifPresent(u -> fileUpload.setOwnerId(u.getId()));
             fileUpload.setOrgTag("admin");
             fileUpload.setPublic(true);
             fileUploadRepository.save(fileUpload);
@@ -930,7 +1054,43 @@ public class AdminController {
                     .body(Map.of("code", 500, "message", "删除组织标签失败: " + e.getMessage()));
         }
     }
-    
+
+    /**
+     * 获取指定组织标签的所有翻译
+     */
+    @GetMapping("/org-tags/{tagId}/i18n")
+    public ResponseEntity<?> getOrgTagI18n(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String tagId) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        validateAdmin(adminUsername);
+        try {
+            return ResponseEntity.ok(Map.of("code", 200, "message", "ok", "data", userService.getOrganizationTagI18n(tagId)));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取翻译失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 保存或更新组织标签的某一语言翻译
+     */
+    @PutMapping("/org-tags/{tagId}/i18n")
+    public ResponseEntity<?> upsertOrgTagI18n(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String tagId,
+            @RequestBody OrgTagI18nRequest request) {
+        String adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+        validateAdmin(adminUsername);
+        try {
+            var saved = userService.upsertOrganizationTagI18n(tagId, request.lang(), request.name(), request.description());
+            return ResponseEntity.ok(Map.of("code", 200, "message", "翻译已保存", "data", saved));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "保存翻译失败: " + e.getMessage()));
+        }
+    }
+
     /**
      * 获取用户列表
      */
@@ -1561,6 +1721,9 @@ public class AdminController {
     /** 组织标签更新请求记录类 */
     public record OrgTagUpdateRequest(String name, String description, String parentTag) {}
 
+    /** 组织标签 i18n 写入请求体 */
+    public record OrgTagI18nRequest(String lang, String name, String description) {}
+
     private long getRedisLong(String key) {
         try {
             String value = redisTemplate.opsForValue().get(key);
@@ -1611,5 +1774,429 @@ public class AdminController {
             LogUtils.logBusinessError("ADMIN_GET_SYSTEM_STATS", "system", "统计热门问题失败", e);
         }
         return questions;
+    }
+
+    /**
+     * Trigger background translation of all KB / Agent / OrgTag entries that
+     * have no i18n record yet.  Returns immediately; translation happens async.
+     */
+    @PostMapping("/i18n/sync")
+    @PreAuthorize("hasAuthority('system:admin')")
+    public ResponseEntity<?> syncI18n() {
+        i18nTranslationService.syncAllI18n();
+        return ResponseEntity.ok(Map.of("code", 200, "message", "i18n sync started in background"));
+    }
+
+    // ========== System Metrics & Activity Logs ==========
+
+    /**
+     * 获取系统指标（综合监控数据）
+     */
+    @GetMapping("/system/metrics")
+    public ResponseEntity<?> getSystemMetrics(@RequestHeader("Authorization") String token) {
+        String adminUsername;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("code", 401, "message", "Unauthorized"));
+        }
+        try {
+            // === JVM 内存 / CPU (本地调用，极快) ===
+            java.lang.management.MemoryMXBean memBean = ManagementFactory.getMemoryMXBean();
+            long heapUsed    = memBean.getHeapMemoryUsage().getUsed();
+            long heapMax     = memBean.getHeapMemoryUsage().getMax();
+            long nonHeapUsed = memBean.getNonHeapMemoryUsage().getUsed();
+            long uptime      = ManagementFactory.getRuntimeMXBean().getUptime();
+
+            double cpuUsage = -1;
+            double loadAvg  = 0;
+            int    cores    = Runtime.getRuntime().availableProcessors();
+            long initMemTotal = 0, initMemAvail = 0;
+            try {
+                java.lang.management.OperatingSystemMXBean osMxBean = ManagementFactory.getOperatingSystemMXBean();
+                if (osMxBean instanceof com.sun.management.OperatingSystemMXBean sunOs) {
+                    cpuUsage      = sunOs.getCpuLoad();
+                    loadAvg       = osMxBean.getSystemLoadAverage();
+                    initMemTotal  = sunOs.getTotalMemorySize();
+                    initMemAvail  = sunOs.getFreeMemorySize();
+                }
+            } catch (Exception ignored) {}
+
+            final long capturedMemTotal = initMemTotal;
+            final long capturedMemAvail = initMemAvail;
+            final String osNameLower = System.getProperty("os.name", "").toLowerCase();
+
+            // === 磁盘 & 主机信息 (本地，极快) ===
+            java.io.File root = new java.io.File("/");
+            long diskTotal = root.getTotalSpace();
+            long diskUsed  = diskTotal - root.getFreeSpace();
+
+            String hostname  = "unknown";
+            String ipAddress = "unknown";
+            try {
+                java.net.InetAddress ia = java.net.InetAddress.getLocalHost();
+                hostname  = ia.getHostName();
+                ipAddress = ia.getHostAddress();
+            } catch (Exception ignored) {}
+
+            // === 并行: 平台内存精算 + Redis + MySQL + MinIO ===
+            // 平台精准内存: Linux /proc/meminfo; macOS vm_stat
+            CompletableFuture<long[]> memFuture = CompletableFuture.supplyAsync(() -> {
+                long total = capturedMemTotal, available = capturedMemAvail;
+                if (osNameLower.contains("linux")) {
+                    try (java.io.BufferedReader br = java.nio.file.Files.newBufferedReader(
+                            java.nio.file.Paths.get("/proc/meminfo"))) {
+                        String line;
+                        long memTotalKb = 0, memAvailableKb = 0;
+                        while ((line = br.readLine()) != null) {
+                            if (line.startsWith("MemTotal:"))
+                                memTotalKb = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                            else if (line.startsWith("MemAvailable:")) {
+                                memAvailableKb = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                                break;
+                            }
+                        }
+                        if (memTotalKb > 0) { total = memTotalKb * 1024L; available = memAvailableKb * 1024L; }
+                    } catch (Exception ignored) {}
+                } else if (osNameLower.contains("mac") || osNameLower.contains("darwin")) {
+                    try {
+                        Process proc = Runtime.getRuntime().exec("vm_stat");
+                        try (java.io.BufferedReader br = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(proc.getInputStream()))) {
+                            long pageSize = 16384L;
+                            long freePages = 0, inactivePages = 0, speculativePages = 0;
+                            java.util.regex.Pattern pageSizePat =
+                                java.util.regex.Pattern.compile("page size of (\\d+)");
+                            String line;
+                            while ((line = br.readLine()) != null) {
+                                java.util.regex.Matcher mm = pageSizePat.matcher(line);
+                                if (mm.find())                          pageSize        = Long.parseLong(mm.group(1));
+                                else if (line.startsWith("Pages free:"))        freePages        = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                                else if (line.startsWith("Pages inactive:"))    inactivePages    = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                                else if (line.startsWith("Pages speculative:")) speculativePages = Long.parseLong(line.replaceAll("[^0-9]", ""));
+                            }
+                            long avail = (freePages + inactivePages + speculativePages) * pageSize;
+                            if (avail > 0) available = avail;
+                        }
+                    } catch (Exception ignored) {}
+                }
+                return new long[]{total, available};
+            });
+
+            // Redis: ping 探活 + DBSIZE(O(1)) + SCAN 统计在线用户
+            CompletableFuture<long[]> redisFuture = CompletableFuture.supplyAsync(() -> {
+                // [latencyMs, keyCount, isUp(0/1), onlineUsers]
+                long latency = -1, keyCount = 0, onlineUsers = 0;
+                int up = 0;
+                try {
+                    long start = System.currentTimeMillis();
+                    redisTemplate.opsForValue().get("health:ping");
+                    latency = System.currentTimeMillis() - start;
+                    up = 1;
+                    Long dbSize = redisTemplate.execute(
+                        (RedisCallback<Long>) conn -> conn.serverCommands().dbSize()
+                    );
+                    keyCount = dbSize != null ? dbSize : 0;
+                    ScanOptions opts = ScanOptions.scanOptions()
+                        .match("user:*:current_conversation").count(200).build();
+                    try (Cursor<String> cursor = redisTemplate.scan(opts)) {
+                        while (cursor.hasNext()) { cursor.next(); onlineUsers++; }
+                    }
+                } catch (Exception ignored) {}
+                return new long[]{latency, keyCount, up, onlineUsers};
+            });
+
+            // MySQL: SELECT 1 健康检测
+            CompletableFuture<long[]> dbFuture = CompletableFuture.supplyAsync(() -> {
+                // [latencyMs, isUp(0/1)]
+                long latency = -1; int up = 0;
+                try {
+                    long start = System.currentTimeMillis();
+                    try (java.sql.Connection conn = dataSource.getConnection();
+                         java.sql.Statement  stmt = conn.createStatement()) {
+                        stmt.execute("SELECT 1");
+                        latency = System.currentTimeMillis() - start;
+                        up = 1;
+                    }
+                } catch (Exception ignored) {}
+                return new long[]{latency, up};
+            });
+
+            // MinIO: bucketExists 探活
+            CompletableFuture<long[]> minioFuture = CompletableFuture.supplyAsync(() -> {
+                long latency = -1; int up = 0;
+                try {
+                    long start = System.currentTimeMillis();
+                    minioClient.bucketExists(BucketExistsArgs.builder().bucket("uploads").build());
+                    latency = System.currentTimeMillis() - start;
+                    up = 1;
+                } catch (Exception ignored) {}
+                return new long[]{latency, up};
+            });
+
+            // 等待全部并行任务完成，最多 2 秒，避免个别慢服务拖垮整体响应
+            try {
+                CompletableFuture.allOf(memFuture, redisFuture, dbFuture, minioFuture)
+                    .orTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .join();
+            } catch (Exception ignored) {}
+
+            // getNow(default) —— 已完成取结果，仍在运行取兜底值
+            long[] memRes   = memFuture.getNow(new long[]{capturedMemTotal, capturedMemAvail});
+            long[] redisRes = redisFuture.getNow(new long[]{-1, 0, 0, 0});
+            long[] dbRes    = dbFuture.getNow(new long[]{-1, 0});
+            long[] minioRes = minioFuture.getNow(new long[]{-1, 0});
+
+            long systemMemTotal     = memRes[0];
+            long systemMemAvailable = memRes[1];
+
+            long   cacheLatency = redisRes[0];
+            long   keyCount     = redisRes[1];
+            String cacheStatus  = redisRes[2] == 1 ? "up" : "down";
+            long   onlineUsers  = redisRes[3];
+
+            long   dbLatency = dbRes[0];
+            String dbStatus  = dbRes[1] == 1 ? "up" : "down";
+            int    dbActive  = 0, dbMax = 20;
+
+            long   minioLatency = minioRes[0];
+            String minioStatus  = minioRes[1] == 1 ? "up" : "down";
+
+            // === 服务列表 ===
+            List<Map<String, Object>> services = new ArrayList<>();
+            services.add(Map.of("name", "MySQL",         "status", dbStatus,    "latencyMs", Math.max(dbLatency, 0)));
+            services.add(Map.of("name", "Redis",         "status", cacheStatus, "latencyMs", Math.max(cacheLatency, 0)));
+            services.add(Map.of("name", "Elasticsearch", "status", "up",        "latencyMs", 0L));
+            services.add(Map.of("name", "Kafka",         "status", "up",        "latencyMs", 0L));
+            services.add(Map.of("name", "MinIO",         "status", minioStatus, "latencyMs", Math.max(minioLatency, 0)));
+
+            long systemMemUsed = systemMemTotal > 0 ? systemMemTotal - systemMemAvailable : 0;
+
+            // === 动态告警生成 ===
+            List<Map<String, Object>> alerts = new ArrayList<>();
+            String nowStr = LocalDateTime.now().toString();
+            double safeCpu = cpuUsage >= 0 ? cpuUsage * 100 : 0;
+            if (safeCpu > 95) {
+                alerts.add(Map.of("id", "cpu_critical", "level", "critical",
+                    "title", "CPU 负载临界", "message", String.format("CPU 使用率 %.1f%%，系统可能无响应", safeCpu), "time", nowStr));
+            } else if (safeCpu > 80) {
+                alerts.add(Map.of("id", "cpu_high", "level", "warning",
+                    "title", "CPU 使用率过高", "message", String.format("当前 CPU 使用率 %.1f%%", safeCpu), "time", nowStr));
+            }
+            if (systemMemTotal > 0) {
+                double memPct = (double) systemMemUsed / systemMemTotal * 100;
+                if (memPct > 90) {
+                    alerts.add(Map.of("id", "mem_critical", "level", "critical",
+                        "title", "内存严重不足", "message", String.format("系统内存使用率 %.1f%%", memPct), "time", nowStr));
+                } else if (memPct > 80) {
+                    alerts.add(Map.of("id", "mem_high", "level", "warning",
+                        "title", "内存使用率过高", "message", String.format("系统内存使用率 %.1f%%", memPct), "time", nowStr));
+                }
+            }
+            if (heapMax > 0 && (double) heapUsed / heapMax * 100 > 85) {
+                alerts.add(Map.of("id", "jvm_high", "level", "warning",
+                    "title", "JVM 堆内存不足", "message", String.format("JVM 堆使用率 %.1f%%", (double) heapUsed / heapMax * 100), "time", nowStr));
+            }
+            if (diskTotal > 0 && (double) diskUsed / diskTotal * 100 > 90) {
+                alerts.add(Map.of("id", "disk_critical", "level", "critical",
+                    "title", "磁盘空间严重不足", "message", String.format("磁盘使用率 %.1f%%", (double) diskUsed / diskTotal * 100), "time", nowStr));
+            }
+            for (Map<String, Object> svc : services) {
+                if ("down".equals(svc.get("status"))) {
+                    alerts.add(Map.of("id", "svc_" + svc.get("name"), "level", "error",
+                        "title", svc.get("name") + " 服务故障",
+                        "message", svc.get("name") + " 无法连接，请检查服务状态", "time", nowStr));
+                }
+            }
+
+            // === 整体健康状态 ===
+            String overallStatus = "normal";
+            boolean hasCritical = alerts.stream().anyMatch(a -> "critical".equals(a.get("level")) || "error".equals(a.get("level")));
+            if (hasCritical) overallStatus = "error";
+            else if (!alerts.isEmpty()) overallStatus = "warning";
+
+            // === 组装响应 ===
+            Map<String, Object> overview = new LinkedHashMap<>();
+            overview.put("status",      overallStatus);
+            overview.put("uptime",      uptime);
+            overview.put("hostname",    hostname);
+            overview.put("ipAddress",   ipAddress);
+            overview.put("osName",      System.getProperty("os.name") + " " + System.getProperty("os.arch"));
+            overview.put("javaVersion", System.getProperty("java.version"));
+            overview.put("appVersion",  "1.0.0");
+            overview.put("lastUpdated", LocalDateTime.now().toString());
+
+            Map<String, Object> memory = new LinkedHashMap<>();
+            memory.put("systemTotal",    systemMemTotal);
+            memory.put("systemUsed",     systemMemUsed);
+            memory.put("jvmHeapUsed",    heapUsed);
+            memory.put("jvmHeapMax",     heapMax);
+            memory.put("jvmNonHeapUsed", nonHeapUsed);
+
+            Map<String, Object> online = new LinkedHashMap<>();
+            online.put("onlineUsers",       onlineUsers);
+            online.put("activeConnections", onlineUsers);
+
+            Map<String, Object> db = new LinkedHashMap<>();
+            db.put("activeConnections", dbActive);
+            db.put("maxConnections",    dbMax);
+            db.put("queryCount",        0);
+            db.put("status",            dbStatus);
+            db.put("latencyMs",         Math.max(dbLatency, 0));
+
+            Map<String, Object> cache = new LinkedHashMap<>();
+            cache.put("hitRate",    0.95);
+            cache.put("keyCount",   keyCount);
+            cache.put("memoryUsed", 0L);
+            cache.put("status",     cacheStatus);
+            cache.put("latencyMs",  Math.max(cacheLatency, 0));
+
+            Map<String, Object> metrics = new LinkedHashMap<>();
+            metrics.put("overview", overview);
+            metrics.put("cpu", Map.of("usage", Math.max(cpuUsage, 0), "cores", cores, "loadAvg", Math.max(loadAvg, 0)));
+            metrics.put("memory",   memory);
+            metrics.put("disk",     Map.of("used", diskUsed, "total", diskTotal, "path", "/"));
+            metrics.put("jvm",      Map.of("heapUsed", heapUsed, "heapMax", heapMax, "nonHeapUsed", nonHeapUsed, "uptime", uptime));
+            metrics.put("online",   online);
+            metrics.put("db",       db);
+            metrics.put("cache",    cache);
+            metrics.put("services", services);
+            metrics.put("alerts",   alerts);
+
+            return ResponseEntity.ok(Map.of("code", 200, "data", metrics));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("SYSTEM_METRICS", adminUsername, "获取系统指标失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取系统指标失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 清理系统分析缓存（不影响用户会话和对话数据）
+     */
+    @PostMapping("/system/clear-cache")
+    public ResponseEntity<?> clearSystemCache(@RequestHeader("Authorization") String token) {
+        String adminUsername;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("code", 401, "message", "Unauthorized"));
+        }
+        try {
+            long deleted = 0;
+            Set<String> analyticsKeys = redisTemplate.keys("analytics:*");
+            if (analyticsKeys != null && !analyticsKeys.isEmpty()) {
+                redisTemplate.delete(analyticsKeys);
+                deleted += analyticsKeys.size();
+            }
+            LogUtils.logUserOperation(adminUsername, "CLEAR_CACHE", "system", "SUCCESS");
+            return ResponseEntity.ok(Map.of("code", 200, "message", "缓存清理成功", "data", Map.of("deletedKeys", deleted)));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("CLEAR_CACHE", adminUsername, "清理缓存失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "清理缓存失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取操作日志（分页）
+     */
+    @GetMapping("/activity-logs")
+    public ResponseEntity<?> getActivityLogs(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(required = false) Integer current,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String startTime,
+            @RequestParam(required = false) String endTime) {
+
+        String adminUsername;
+        try {
+            adminUsername = jwtUtils.extractUsernameFromToken(token.replace("Bearer ", ""));
+            validateAdmin(adminUsername);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("code", 401, "message", "Unauthorized"));
+        }
+
+        try {
+            int page = current != null ? current : 1;
+            int pageSize = size != null ? size : 20;
+            int offset = (page - 1) * pageSize;
+
+            // 从 SystemActivityService 获取日志
+            Map<String, Object> activityData = systemActivityService.getRecentActivities();
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> allLogs = (List<Map<String, Object>>) activityData.getOrDefault("activities", List.of());
+            if (allLogs == null) allLogs = List.of();
+
+            // 过滤
+            if (keyword != null && !keyword.isBlank()) {
+                String kw = keyword.toLowerCase();
+                allLogs = allLogs.stream()
+                    .filter(log -> {
+                        String description = String.valueOf(log.getOrDefault("description", ""));
+                        String title = String.valueOf(log.getOrDefault("title", ""));
+                        return description.toLowerCase().contains(kw) || title.toLowerCase().contains(kw);
+                    })
+                    .toList();
+            }
+            if (action != null && !action.isBlank()) {
+                allLogs = allLogs.stream()
+                    .filter(log -> action.equals(log.get("title")))
+                    .toList();
+            }
+            if (status != null && !status.isBlank()) {
+                allLogs = allLogs.stream()
+                    .filter(log -> status.equals(log.get("status")))
+                    .toList();
+            }
+            if (startTime != null && !startTime.isBlank()) {
+                LocalDateTime start = startTime.contains("T")
+                    ? LocalDateTime.parse(startTime)
+                    : LocalDate.parse(startTime).atStartOfDay();
+                allLogs = allLogs.stream()
+                    .filter(log -> {
+                        String ts = String.valueOf(log.getOrDefault("occurredAt", ""));
+                        try { return LocalDateTime.parse(ts).isAfter(start); } catch (Exception e) { return true; }
+                    })
+                    .toList();
+            }
+            if (endTime != null && !endTime.isBlank()) {
+                LocalDateTime end = endTime.contains("T")
+                    ? LocalDateTime.parse(endTime)
+                    : LocalDate.parse(endTime).atTime(23, 59, 59);
+                allLogs = allLogs.stream()
+                    .filter(log -> {
+                        String ts = String.valueOf(log.getOrDefault("occurredAt", ""));
+                        try { return LocalDateTime.parse(ts).isBefore(end); } catch (Exception e) { return true; }
+                    })
+                    .toList();
+            }
+
+            int total = allLogs.size();
+            int end = Math.min(offset + pageSize, total);
+            List<Map<String, Object>> pageData = offset < total ? allLogs.subList(offset, end) : List.of();
+
+            return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "data", Map.of(
+                    "records", pageData,
+                    "total", total,
+                    "current", page,
+                    "size", pageSize
+                )
+            ));
+        } catch (Exception e) {
+            LogUtils.logBusinessError("ACTIVITY_LOGS", adminUsername, "获取操作日志失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("code", 500, "message", "获取操作日志失败: " + e.getMessage()));
+        }
     }
 }

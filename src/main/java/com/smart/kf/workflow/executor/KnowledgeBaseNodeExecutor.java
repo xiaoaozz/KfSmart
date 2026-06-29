@@ -34,7 +34,7 @@ public class KnowledgeBaseNodeExecutor implements NodeExecutor {
     @Override
     public NodeExecutionResult execute(WorkflowNode node, ExecutionContext ctx) {
         String knowledgeBase = node.configString("knowledgeBase");
-        int topK = toInt(node.configObject("topK"), 5);
+        int topK = toInt(node.configObject("topK"));
 
         // 即时调试覆盖
         String debugKb = (String) ctx.getVariable("debug_knowledgeBases");
@@ -52,7 +52,13 @@ public class KnowledgeBaseNodeExecutor implements NodeExecutor {
             return NodeExecutionResult.of(outputs, "未配置知识库，跳过检索");
         }
 
-        String query = String.valueOf(ctx.getOrDefault("query", ""));
+        String queryTemplate = node.configString("query");
+        String query;
+        if (queryTemplate != null && !queryTemplate.isBlank()) {
+            query = ctx.resolveTemplate(queryTemplate);
+        } else {
+            query = String.valueOf(ctx.getOrDefault("query", ""));
+        }
         List<SearchResult> documents = hybridSearchService.searchWithPermission(query, ctx.getUsername(), topK);
 
         String context = documents.stream()
@@ -66,6 +72,10 @@ public class KnowledgeBaseNodeExecutor implements NodeExecutor {
         outputs.put("documents", documents);
         outputs.put("context", context);
         return NodeExecutionResult.of(outputs, "检索知识库[" + knowledgeBase + "]，返回" + documents.size() + "条相关文档，topK=" + topK);
+    }
+
+    private int toInt(Object val) {
+        return toInt(val, 5);
     }
 
     @SuppressWarnings("sameParameterValue")

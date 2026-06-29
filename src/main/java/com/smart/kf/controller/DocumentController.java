@@ -3,6 +3,7 @@ package com.smart.kf.controller;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.OrganizationTag;
 import com.smart.kf.repository.FileUploadRepository;
+import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.OrganizationTagRepository;
 import com.smart.kf.service.DocumentService;
 import com.smart.kf.utils.LogUtils;
@@ -37,9 +38,12 @@ public class DocumentController {
     
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
-    
+
     @Autowired
     private JwtUtils jwtUtils;
+
+    @Autowired
+    private KnowledgeBaseRepository knowledgeBaseRepository;
 
     /**
      * 删除文档及其相关数据
@@ -186,9 +190,13 @@ public class DocumentController {
 
             // 应用其余筛选条件
             List<FileUpload> filteredFiles = files.stream().filter(file -> {
-                // mine=true 时只展示当前用户自己的文件（默认已是，该分支保持语义清晰）
-                if (Boolean.TRUE.equals(mine) && !userId.equals(file.getUserId())) {
-                    return false;
+                // mine=true 时只展示当前用户自己的文件（兼容旧 userId String 和新 ownerId Long）
+                if (Boolean.TRUE.equals(mine)) {
+                    boolean isOwner = userId.equals(file.getUserId())
+                            || (file.getOwnerId() != null && file.getOwnerId().toString().equals(userId));
+                    if (!isOwner) {
+                        return false;
+                    }
                 }
                 // 知识库筛选（仅当未在 SQL 层面过滤时才在内存再过滤）
                 if (!hasKeyword && hasKbId && !kbId.equals(file.getKbId())) {
@@ -230,23 +238,28 @@ public class DocumentController {
                 });
             }
 
-            // 将 FileUpload 转换为包含 tagName 的 DTO
+            // 将 FileUpload 转换为前端期望的 Document DTO 格式
+            // 状态映射：0=pending, 1=done (processing 由解析任务队列驱动，前端通过轮询发现状态变化)
             List<Map<String, Object>> fileData = filteredFiles.stream().map(file -> {
                 Map<String, Object> dto = new HashMap<>();
+                dto.put("id", file.getId());
                 dto.put("fileMd5", file.getFileMd5());
                 dto.put("fileName", file.getFileName());
-                dto.put("totalSize", file.getTotalSize());
-                dto.put("status", file.getStatus());
-                dto.put("userId", file.getUserId());
-                dto.put("public", file.isPublic());
-                dto.put("isPublic", file.isPublic());
-                dto.put("createdAt", file.getCreatedAt());
-                dto.put("mergedAt", file.getMergedAt());
-                dto.put("orgTag", file.getOrgTag());
-                dto.put("kbId", file.getKbId());
-
-                // 将 orgTag 从 tagId 转换为 tagName
-                dto.put("orgTagName", getOrgTagName(file.getOrgTag()));
+                // 提取文件扩展名作为 fileType
+                dto.put("fileType", extractFileExtension(file.getFileName()));
+                dto.put("fileSize", file.getTotalSize());
+                // 状态映射：0=pending, 1=processing/done
+                dto.put("status", mapFileStatus(file.getStatus()));
+                // 从文件扩展名提取知识库名称（如果有 kbId）
+                if (file.getKbId() != null && !file.getKbId().isEmpty()) {
+                    dto.put("knowledgeBaseId", file.getKbId());
+                    dto.put("knowledgeBaseName", getKnowledgeBaseName(file.getKbId()));
+                }
+                dto.put("uploadedBy", file.getUserId());
+                dto.put("createTime", file.getCreatedAt());
+                dto.put("updateTime", file.getMergedAt() != null ? file.getMergedAt() : file.getCreatedAt());
+                // chunkCount 暂设为 0，前端可通过预览接口获取实际分片数
+                dto.put("chunkCount", 0);
                 return dto;
             }).toList();
 
@@ -732,7 +745,7 @@ public class DocumentController {
         if (tagId == null || tagId.isEmpty()) {
             return null;
         }
-        
+
         try {
             Optional<OrganizationTag> tagOpt = organizationTagRepository.findByTagId(tagId);
             if (tagOpt.isPresent()) {
@@ -744,6 +757,43 @@ public class DocumentController {
         } catch (Exception e) {
             LogUtils.logBusinessError("GET_ORG_TAG_NAME", "system", "查询组织标签名称失败: tagId=%s", e, tagId);
             return tagId; // 发生错误时返回原tagId
+        }
+    }
+
+    /**
+     * 从文件名提取扩展名
+     */
+    private String extractFileExtension(String fileName) {
+        if (fileName == null || !fileName.contains(".")) {
+            return "";
+        }
+        return fileName.substring(fileName.lastIndexOf('.') + 1);
+    }
+
+    /**
+     * 将 FileUpload.status (int: 0=上传中, 1=已完成) 映射为前端 DocStatus
+     * - 0/pending: 上传中或等待解析
+     * - 1/done: 已完成（前端实际通过 chunkCount > 0 判断是否已解析）
+     * 注意：processing 状态由解析任务队列驱动，前端通过轮询文档列表发现状态变化
+     */
+    private String mapFileStatus(int status) {
+        // status 0 = 上传中/待解析，status 1 = 已完成
+        return status == 1 ? "done" : "pending";
+    }
+
+    /**
+     * 根据 kbId 获取知识库名称
+     */
+    private String getKnowledgeBaseName(String kbId) {
+        if (kbId == null || kbId.isEmpty()) {
+            return null;
+        }
+        try {
+            Optional<com.smart.kf.model.KnowledgeBase> kbOpt = knowledgeBaseRepository.findByKbId(kbId);
+            return kbOpt.map(com.smart.kf.model.KnowledgeBase::getName).orElse(null);
+        } catch (Exception e) {
+            LogUtils.logBusinessError("GET_KB_NAME", "system", "查询知识库名称失败: kbId=%s", e, kbId);
+            return null;
         }
     }
 } 

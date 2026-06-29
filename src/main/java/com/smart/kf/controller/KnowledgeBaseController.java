@@ -1,5 +1,7 @@
 package com.smart.kf.controller;
 
+import com.smart.kf.model.KnowledgeBaseI18n;
+import com.smart.kf.repository.KnowledgeBaseI18nRepository;
 import com.smart.kf.service.KnowledgeBaseService;
 import com.smart.kf.service.RbacService;
 import com.smart.kf.utils.pagination.PageQuery;
@@ -28,7 +30,10 @@ public class KnowledgeBaseController {
 
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
-    
+
+    @Autowired
+    private KnowledgeBaseI18nRepository knowledgeBaseI18nRepository;
+
     @Autowired
     private JwtUtils jwtUtils;
 
@@ -471,8 +476,33 @@ public class KnowledgeBaseController {
 
     /** 授权请求体 */
     public record GrantPermRequest(
-        String granteeType,   // user、role、org
-        String granteeId,     // 用户ID/角色编码/组织标签
-        String permission     // read、write、delete、admin
+        String granteeType,
+        String granteeId,
+        String permission
     ) {}
+
+    // ========== 知识库 i18n 接口 ==========
+
+    @GetMapping("/{kbId}/i18n")
+    public ResponseEntity<?> getKbI18n(@PathVariable String kbId) {
+        List<KnowledgeBaseI18n> all = knowledgeBaseI18nRepository.findByKbId(kbId);
+        return ResponseEntity.ok(Map.of("code", 200, "message", "ok", "data", all));
+    }
+
+    @PutMapping("/{kbId}/i18n")
+    @PreAuthorize("hasAuthority('kb:write') or hasAuthority('system:admin')")
+    public ResponseEntity<?> upsertKbI18n(
+            @PathVariable String kbId,
+            @RequestBody KbI18nRequest request) {
+        var existing = knowledgeBaseI18nRepository.findByKbIdAndLang(kbId, request.lang());
+        KnowledgeBaseI18n record = existing.orElseGet(KnowledgeBaseI18n::new);
+        record.setKbId(kbId);
+        record.setLang(request.lang());
+        if (request.name() != null) record.setName(request.name());
+        if (request.description() != null) record.setDescription(request.description());
+        knowledgeBaseI18nRepository.save(record);
+        return ResponseEntity.ok(Map.of("code", 200, "message", "ok", "data", record));
+    }
+
+    public record KbI18nRequest(String lang, String name, String description) {}
 }

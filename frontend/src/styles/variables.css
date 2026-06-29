@@ -1,0 +1,894 @@
+/* ============================================================
+   KfSmart AI Platform — Design Token System
+   CSS Custom Properties: light + dark theme
+   ============================================================ */
+
+:root,
+[data-theme='light'] {
+  /* --- Brand Accent --- */
+  --kf-accent: #0052ff;
+  --kf-accent-secondary: #4d7cff;
+  --kf-accent-hover: #0047e0;
+  --kf-accent-gradient: linear-gradient(135deg, #0052ff, #4d7cff);
+  --kf-accent-gradient-r: linear-gradient(to right, #0052ff, #4d7cff);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface --- */
+  --kf-bg: #fafafa;
+  --kf-card: #ffffff;
+  --kf-muted: #f1f5f9;
+  --kf-muted-hover: #e8edf5;
+
+  /* --- Text --- */
+  --kf-foreground: #0f172a;
+  --kf-muted-foreground: #64748b;
+  --kf-subtle-foreground: #94a3b8;
+
+  /* --- Border --- */
+  --kf-border: #e2e8f0;
+  --kf-border-strong: #cbd5e1;
+  --kf-ring: #0052ff;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #ffffff;
+  --kf-sidebar-border: #e2e8f0;
+  --kf-sidebar-item-hover: #f1f5f9;
+  --kf-sidebar-item-active-bg: rgba(0, 82, 255, 0.08);
+  --kf-sidebar-item-active-text: #0052ff;
+  --kf-sidebar-icon-color: #64748b;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(250, 250, 250, 0.85);
+  --kf-header-border: #e2e8f0;
+
+  /* --- Shadow --- */
+  --kf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --kf-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.05);
+  --kf-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --kf-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1), 0 10px 10px rgba(0, 0, 0, 0.04);
+  --kf-shadow-accent: 0 4px 14px rgba(0, 82, 255, 0.25);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(0, 82, 255, 0.35);
+  --kf-shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(0, 0, 0, 0.1);
+
+  /* --- Typography --- */
+  --kf-font-display: 'Calistoga', Georgia, serif;
+  --kf-font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius --- */
+  --kf-radius-xs: 4px;
+  --kf-radius-sm: 8px;
+  --kf-radius-md: 12px;
+  --kf-radius-lg: 16px;
+  --kf-radius-xl: 24px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition --- */
+  --kf-transition: all 0.2s ease-out;
+  --kf-transition-slow: all 0.3s ease-out;
+
+  /* --- Accent Tints (for backgrounds) --- */
+  --kf-accent-5: rgba(0, 82, 255, 0.05);
+  --kf-accent-8: rgba(0, 82, 255, 0.08);
+  --kf-accent-10: rgba(0, 82, 255, 0.1);
+  --kf-accent-15: rgba(0, 82, 255, 0.15);
+  --kf-accent-30: rgba(0, 82, 255, 0.3);
+
+  /* --- Status Colors --- */
+  --kf-success: #10b981;
+  --kf-success-bg: rgba(16, 185, 129, 0.08);
+  --kf-warning: #f59e0b;
+  --kf-warning-bg: rgba(245, 158, 11, 0.08);
+  --kf-danger: #ef4444;
+  --kf-danger-bg: rgba(239, 68, 68, 0.08);
+  --kf-info: #3b82f6;
+  --kf-info-bg: rgba(59, 130, 246, 0.08);
+
+  /* --- Inverted section (dark block on light page) --- */
+  --kf-inverted-bg: #0f172a;
+  --kf-inverted-text: #f0f4ff;
+  --kf-inverted-muted: rgba(240, 244, 255, 0.6);
+}
+
+/* ============================================================
+   Organic Earth Theme (有机大地风)
+   Warm cream + sage olive + terracotta brown
+   ============================================================ */
+[data-theme='earth'] {
+  /* --- Brand Accent --- */
+  --kf-accent: #4f6e35;
+  --kf-accent-secondary: #8c5e2a;
+  --kf-accent-hover: #3e5829;
+  --kf-accent-gradient: linear-gradient(135deg, #4f6e35, #8c5e2a);
+  --kf-accent-gradient-r: linear-gradient(to right, #4f6e35, #8c5e2a);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface --- */
+  --kf-bg: #f7f3eb;
+  --kf-card: #fffcf3;
+  --kf-muted: #ede5d4;
+  --kf-muted-hover: #e3d9c5;
+
+  /* --- Text --- */
+  --kf-foreground: #291a0b;
+  --kf-muted-foreground: #7a6248;
+  --kf-subtle-foreground: #a8906f;
+
+  /* --- Border --- */
+  --kf-border: #d4c5a8;
+  --kf-border-strong: #bfad90;
+  --kf-ring: #4f6e35;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #f0e8d5;
+  --kf-sidebar-border: #cabaa0;
+  --kf-sidebar-item-hover: #e6d9c2;
+  --kf-sidebar-item-active-bg: rgba(79, 110, 53, 0.1);
+  --kf-sidebar-item-active-text: #3e5829;
+  --kf-sidebar-icon-color: #8b7154;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(247, 243, 235, 0.88);
+  --kf-header-border: #d4c5a8;
+
+  /* --- Shadow --- */
+  --kf-shadow-sm: 0 1px 3px rgba(80, 55, 20, 0.08), 0 1px 2px rgba(80, 55, 20, 0.05);
+  --kf-shadow-md: 0 4px 6px rgba(80, 55, 20, 0.09), 0 2px 4px rgba(80, 55, 20, 0.06);
+  --kf-shadow-lg: 0 10px 15px rgba(80, 55, 20, 0.1), 0 4px 6px rgba(80, 55, 20, 0.06);
+  --kf-shadow-xl: 0 20px 25px rgba(80, 55, 20, 0.12), 0 10px 10px rgba(80, 55, 20, 0.05);
+  --kf-shadow-accent: 0 4px 14px rgba(79, 110, 53, 0.25);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(79, 110, 53, 0.35);
+  --kf-shadow-inset: inset 0 2px 4px rgba(80, 55, 20, 0.08);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(80, 55, 20, 0.12);
+
+  /* --- Typography (warm humanist: Lora display + Nunito UI) --- */
+  --kf-font-display: 'Lora', Georgia, serif;
+  --kf-font-ui: 'Nunito', system-ui, -apple-system, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius (same as light) --- */
+  --kf-radius-xs: 4px;
+  --kf-radius-sm: 8px;
+  --kf-radius-md: 12px;
+  --kf-radius-lg: 16px;
+  --kf-radius-xl: 24px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition --- */
+  --kf-transition: all 0.2s ease-out;
+  --kf-transition-slow: all 0.3s ease-out;
+
+  /* --- Accent Tints --- */
+  --kf-accent-5: rgba(79, 110, 53, 0.05);
+  --kf-accent-8: rgba(79, 110, 53, 0.08);
+  --kf-accent-10: rgba(79, 110, 53, 0.1);
+  --kf-accent-15: rgba(79, 110, 53, 0.15);
+  --kf-accent-30: rgba(79, 110, 53, 0.3);
+
+  /* --- Status Colors (nature-tinted) --- */
+  --kf-success: #4e8c3a;
+  --kf-success-bg: rgba(78, 140, 58, 0.08);
+  --kf-warning: #c47c10;
+  --kf-warning-bg: rgba(196, 124, 16, 0.08);
+  --kf-danger: #b54030;
+  --kf-danger-bg: rgba(181, 64, 48, 0.08);
+  --kf-info: #4a7b8c;
+  --kf-info-bg: rgba(74, 123, 140, 0.08);
+
+  /* --- Inverted section --- */
+  --kf-inverted-bg: #1a120a;
+  --kf-inverted-text: #f5f0e5;
+  --kf-inverted-muted: rgba(245, 240, 229, 0.6);
+}
+
+/* ============================================================
+   Dark Theme
+   ============================================================ */
+[data-theme='dark'] {
+  --kf-accent: #4d7cff;
+  --kf-accent-secondary: #6b93ff;
+  --kf-accent-hover: #6b93ff;
+  --kf-accent-gradient: linear-gradient(135deg, #4d7cff, #6b93ff);
+  --kf-accent-gradient-r: linear-gradient(to right, #4d7cff, #6b93ff);
+  --kf-accent-foreground: #ffffff;
+
+  --kf-bg: #0a0a0f;
+  --kf-card: #141420;
+  --kf-muted: #1a1a2e;
+  --kf-muted-hover: #22223a;
+
+  --kf-foreground: #f0f4ff;
+  --kf-muted-foreground: #8892aa;
+  --kf-subtle-foreground: #5a6480;
+
+  --kf-border: #252540;
+  --kf-border-strong: #32325a;
+  --kf-ring: #4d7cff;
+
+  --kf-sidebar-bg: #0f0f1a;
+  --kf-sidebar-border: #1e1e35;
+  --kf-sidebar-item-hover: rgba(77, 124, 255, 0.06);
+  --kf-sidebar-item-active-bg: rgba(77, 124, 255, 0.15);
+  --kf-sidebar-item-active-text: #6b93ff;
+  --kf-sidebar-icon-color: #8892aa;
+
+  --kf-header-bg: rgba(10, 10, 15, 0.85);
+  --kf-header-border: #1e1e35;
+
+  --kf-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --kf-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.35);
+  --kf-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --kf-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
+  --kf-shadow-accent: 0 4px 14px rgba(77, 124, 255, 0.3);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(77, 124, 255, 0.4);
+  --kf-shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(0, 0, 0, 0.4);
+
+  --kf-accent-5: rgba(77, 124, 255, 0.05);
+  --kf-accent-8: rgba(77, 124, 255, 0.08);
+  --kf-accent-10: rgba(77, 124, 255, 0.1);
+  --kf-accent-15: rgba(77, 124, 255, 0.15);
+  --kf-accent-30: rgba(77, 124, 255, 0.3);
+
+  --kf-success: #34d399;
+  --kf-success-bg: rgba(52, 211, 153, 0.1);
+  --kf-warning: #fbbf24;
+  --kf-warning-bg: rgba(251, 191, 36, 0.1);
+  --kf-danger: #f87171;
+  --kf-danger-bg: rgba(248, 113, 113, 0.1);
+  --kf-info: #60a5fa;
+  --kf-info-bg: rgba(96, 165, 250, 0.1);
+
+  --kf-inverted-bg: #f0f4ff;
+  --kf-inverted-text: #0f172a;
+  --kf-inverted-muted: rgba(15, 23, 42, 0.6);
+}
+
+/* ============================================================
+   Corporate Trust Theme (企业信任)  ·  enterprise.xml
+   Indigo/Violet gradient signature · colored shadows · Plus Jakarta Sans
+   ============================================================ */
+[data-theme='corporate'] {
+  /* --- Brand: Indigo→Violet gradient --- */
+  --kf-accent: #4f46e5;
+  --kf-accent-secondary: #7c3aed;
+  --kf-accent-hover: #4338ca;
+  --kf-accent-gradient: linear-gradient(135deg, #4f46e5, #7c3aed);
+  --kf-accent-gradient-r: linear-gradient(to right, #4f46e5, #7c3aed);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface --- */
+  --kf-bg: #f8fafc;
+  --kf-card: #ffffff;
+  --kf-muted: #f1f5f9;
+  --kf-muted-hover: #e2e8f0;
+
+  /* --- Text --- */
+  --kf-foreground: #0f172a;
+  --kf-muted-foreground: #64748b;
+  --kf-subtle-foreground: #94a3b8;
+
+  /* --- Border --- */
+  --kf-border: #e2e8f0;
+  --kf-border-strong: #cbd5e1;
+  --kf-ring: #4f46e5;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #ffffff;
+  --kf-sidebar-border: #e2e8f0;
+  --kf-sidebar-item-hover: #f1f5f9;
+  --kf-sidebar-item-active-bg: rgba(79, 70, 229, 0.08);
+  --kf-sidebar-item-active-text: #4f46e5;
+  --kf-sidebar-icon-color: #64748b;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(248, 250, 252, 0.85);
+  --kf-header-border: #e2e8f0;
+
+  /* --- Shadows: indigo-tinted (signature) --- */
+  --kf-shadow-sm: 0 1px 3px rgba(79, 70, 229, 0.06), 0 1px 2px rgba(79, 70, 229, 0.04);
+  --kf-shadow-md: 0 4px 20px -2px rgba(79, 70, 229, 0.1);
+  --kf-shadow-lg: 0 10px 25px -5px rgba(79, 70, 229, 0.15), 0 8px 10px -6px rgba(79, 70, 229, 0.1);
+  --kf-shadow-xl:
+    0 20px 40px -10px rgba(79, 70, 229, 0.2), 0 10px 15px -5px rgba(79, 70, 229, 0.12);
+  --kf-shadow-accent: 0 4px 14px rgba(79, 70, 229, 0.3);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(79, 70, 229, 0.4);
+  --kf-shadow-inset: inset 0 2px 4px rgba(79, 70, 229, 0.08);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(79, 70, 229, 0.12);
+
+  /* --- Typography: Plus Jakarta Sans unified --- */
+  --kf-font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --kf-font-ui: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius --- */
+  --kf-radius-xs: 4px;
+  --kf-radius-sm: 8px;
+  --kf-radius-md: 12px;
+  --kf-radius-lg: 16px;
+  --kf-radius-xl: 24px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition --- */
+  --kf-transition: all 0.2s ease-out;
+  --kf-transition-slow: all 0.3s ease-out;
+
+  /* --- Accent Tints --- */
+  --kf-accent-5: rgba(79, 70, 229, 0.05);
+  --kf-accent-8: rgba(79, 70, 229, 0.08);
+  --kf-accent-10: rgba(79, 70, 229, 0.1);
+  --kf-accent-15: rgba(79, 70, 229, 0.15);
+  --kf-accent-30: rgba(79, 70, 229, 0.3);
+
+  /* --- Status --- */
+  --kf-success: #10b981;
+  --kf-success-bg: rgba(16, 185, 129, 0.08);
+  --kf-warning: #f59e0b;
+  --kf-warning-bg: rgba(245, 158, 11, 0.08);
+  --kf-danger: #ef4444;
+  --kf-danger-bg: rgba(239, 68, 68, 0.08);
+  --kf-info: #3b82f6;
+  --kf-info-bg: rgba(59, 130, 246, 0.08);
+
+  /* --- Inverted (dark indigo CTA section) --- */
+  --kf-inverted-bg: #1e1b4b;
+  --kf-inverted-text: #eef2ff;
+  --kf-inverted-muted: rgba(238, 242, 255, 0.6);
+}
+
+/* ============================================================
+   Neumorphism Theme (拟态浮雕)  ·  Neumorphism.xml
+   Monochromatic cool grey · dual opposing shadows · 32px radius
+   Plus Jakarta Sans display · DM Sans body
+   ============================================================ */
+[data-theme='neo'] {
+  /* --- Brand: Soft violet accent (used sparingly) --- */
+  --kf-accent: #6c63ff;
+  --kf-accent-secondary: #38b2ac;
+  --kf-accent-hover: #5a52e8;
+  --kf-accent-gradient: linear-gradient(135deg, #6c63ff, #38b2ac);
+  --kf-accent-gradient-r: linear-gradient(to right, #6c63ff, #38b2ac);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface: MONOCHROMATIC — everything is the same clay --- */
+  --kf-bg: #e0e5ec;
+  --kf-card: #e0e5ec;
+  --kf-muted: #d5dbe6;
+  --kf-muted-hover: #c8cfdc;
+
+  /* --- Text --- */
+  --kf-foreground: #3d4852;
+  --kf-muted-foreground: #6b7280;
+  --kf-subtle-foreground: #a0aec0;
+
+  /* --- Border: transparent — shadows define all edges --- */
+  --kf-border: transparent;
+  --kf-border-strong: rgba(163, 177, 198, 0.35);
+  --kf-ring: #6c63ff;
+
+  /* --- Sidebar: same clay surface, shadow separates --- */
+  --kf-sidebar-bg: #e0e5ec;
+  --kf-sidebar-border: transparent;
+  --kf-sidebar-item-hover: #d5dbe6;
+  --kf-sidebar-item-active-bg: rgba(108, 99, 255, 0.1);
+  --kf-sidebar-item-active-text: #6c63ff;
+  --kf-sidebar-icon-color: #6b7280;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(224, 229, 236, 0.92);
+  --kf-header-border: transparent;
+
+  /* --- Shadows: dual-direction neumorphic (the entire design language) --- */
+  --kf-shadow-sm: 5px 5px 10px rgb(163, 177, 198, 0.6), -5px -5px 10px rgba(255, 255, 255, 0.5);
+  --kf-shadow-md: 9px 9px 16px rgb(163, 177, 198, 0.6), -9px -9px 16px rgba(255, 255, 255, 0.5);
+  --kf-shadow-lg: 12px 12px 20px rgb(163, 177, 198, 0.7), -12px -12px 20px rgba(255, 255, 255, 0.6);
+  --kf-shadow-xl: 16px 16px 28px rgb(163, 177, 198, 0.7), -16px -16px 28px rgba(255, 255, 255, 0.6);
+  --kf-shadow-accent: 9px 9px 16px rgb(163, 177, 198, 0.6), -9px -9px 16px rgba(255, 255, 255, 0.5);
+  --kf-shadow-accent-lg:
+    12px 12px 20px rgb(163, 177, 198, 0.7), -12px -12px 20px rgba(255, 255, 255, 0.6);
+  /* Inset (pressed/carved) states */
+  --kf-shadow-inset:
+    inset 6px 6px 10px rgb(163, 177, 198, 0.6), inset -6px -6px 10px rgba(255, 255, 255, 0.5);
+  --kf-shadow-inset-deep:
+    inset 10px 10px 20px rgb(163, 177, 198, 0.7), inset -10px -10px 20px rgba(255, 255, 255, 0.6);
+
+  /* --- Typography: Space Grotesk display · DM Sans body --- */
+  --kf-font-display: 'Space Grotesk', system-ui, sans-serif;
+  --kf-font-ui: 'DM Sans', system-ui, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius: hyper-rounded (pillowed, organic) --- */
+  --kf-radius-xs: 8px;
+  --kf-radius-sm: 16px;
+  --kf-radius-md: 24px;
+  --kf-radius-lg: 32px;
+  --kf-radius-xl: 40px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition: slightly weightier, physics-based --- */
+  --kf-transition: all 0.3s ease-out;
+  --kf-transition-slow: all 0.5s ease-out;
+
+  /* --- Accent tints --- */
+  --kf-accent-5: rgba(108, 99, 255, 0.05);
+  --kf-accent-8: rgba(108, 99, 255, 0.08);
+  --kf-accent-10: rgba(108, 99, 255, 0.1);
+  --kf-accent-15: rgba(108, 99, 255, 0.15);
+  --kf-accent-30: rgba(108, 99, 255, 0.3);
+
+  /* --- Status --- */
+  --kf-success: #38b2ac;
+  --kf-success-bg: rgba(56, 178, 172, 0.1);
+  --kf-warning: #ecc94b;
+  --kf-warning-bg: rgba(236, 201, 75, 0.1);
+  --kf-danger: #e53e3e;
+  --kf-danger-bg: rgba(229, 62, 62, 0.1);
+  --kf-info: #4299e1;
+  --kf-info-bg: rgba(66, 153, 225, 0.1);
+
+  /* --- Inverted (dark section in neumorphic page) --- */
+  --kf-inverted-bg: #2d3748;
+  --kf-inverted-text: #edf2f7;
+  --kf-inverted-muted: rgba(237, 242, 247, 0.6);
+}
+
+/* ============================================================
+   Minimalist Monochrome (极简黑白)  ·  Monochrome.xml
+   Pure black + white · zero radius · zero shadow · serif editorial
+   Playfair Display headlines · Source Serif 4 body
+   ============================================================ */
+[data-theme='mono'] {
+  /* --- Brand: black IS the accent --- */
+  --kf-accent: #000000;
+  --kf-accent-secondary: #525252;
+  --kf-accent-hover: #333333;
+  --kf-accent-gradient: linear-gradient(135deg, #000000, #333333);
+  --kf-accent-gradient-r: linear-gradient(to right, #000000, #333333);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface: pure white --- */
+  --kf-bg: #ffffff;
+  --kf-card: #ffffff;
+  --kf-muted: #f5f5f5;
+  --kf-muted-hover: #e5e5e5;
+
+  /* --- Text --- */
+  --kf-foreground: #000000;
+  --kf-muted-foreground: #525252;
+  --kf-subtle-foreground: #737373;
+
+  /* --- Border: black lines define all structure --- */
+  --kf-border: #000000;
+  --kf-border-strong: #000000;
+  --kf-ring: #000000;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #ffffff;
+  --kf-sidebar-border: #000000;
+  --kf-sidebar-item-hover: #f5f5f5;
+  --kf-sidebar-item-active-bg: #000000;
+  --kf-sidebar-item-active-text: #ffffff;
+  --kf-sidebar-icon-color: #525252;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(255, 255, 255, 0.97);
+  --kf-header-border: #000000;
+
+  /* --- Shadows: NONE — depth via contrast only --- */
+  --kf-shadow-sm: none;
+  --kf-shadow-md: none;
+  --kf-shadow-lg: none;
+  --kf-shadow-xl: none;
+  --kf-shadow-accent: none;
+  --kf-shadow-accent-lg: none;
+  --kf-shadow-inset: none;
+  --kf-shadow-inset-deep: none;
+
+  /* --- Typography: editorial serif --- */
+  --kf-font-display: 'Playfair Display', Georgia, serif;
+  --kf-font-ui: 'Source Serif 4', Georgia, serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius: 0px everywhere — architectural precision --- */
+  --kf-radius-xs: 0px;
+  --kf-radius-sm: 0px;
+  --kf-radius-md: 0px;
+  --kf-radius-lg: 0px;
+  --kf-radius-xl: 0px;
+  --kf-radius-full: 0px;
+
+  /* --- Transition: instant state changes --- */
+  --kf-transition: all 0.1s ease;
+  --kf-transition-slow: all 0.1s ease;
+
+  /* --- Accent tints: black-based --- */
+  --kf-accent-5: rgba(0, 0, 0, 0.05);
+  --kf-accent-8: rgba(0, 0, 0, 0.08);
+  --kf-accent-10: rgba(0, 0, 0, 0.1);
+  --kf-accent-15: rgba(0, 0, 0, 0.15);
+  --kf-accent-30: rgba(0, 0, 0, 0.3);
+
+  /* --- Status: achromatic shades --- */
+  --kf-success: #000000;
+  --kf-success-bg: rgba(0, 0, 0, 0.05);
+  --kf-warning: #525252;
+  --kf-warning-bg: rgba(0, 0, 0, 0.05);
+  --kf-danger: #000000;
+  --kf-danger-bg: rgba(0, 0, 0, 0.08);
+  --kf-info: #525252;
+  --kf-info-bg: rgba(0, 0, 0, 0.04);
+
+  /* --- Inverted section: black block --- */
+  --kf-inverted-bg: #000000;
+  --kf-inverted-text: #ffffff;
+  --kf-inverted-muted: rgba(255, 255, 255, 0.6);
+}
+
+/* ============================================================
+   Organic / Natural (自然有机)  ·  Organic.xml
+   Rice paper · moss green · terracotta · wabi-sabi warmth
+   Fraunces display · Nunito body
+   ============================================================ */
+[data-theme='organic'] {
+  /* --- Brand: moss green + terracotta --- */
+  --kf-accent: #5d7052;
+  --kf-accent-secondary: #c18c5d;
+  --kf-accent-hover: #4d5e43;
+  --kf-accent-gradient: linear-gradient(135deg, #5d7052, #c18c5d);
+  --kf-accent-gradient-r: linear-gradient(to right, #5d7052, #c18c5d);
+  --kf-accent-foreground: #f3f4f1;
+
+  /* --- Surface --- */
+  --kf-bg: #fdfcf8;
+  --kf-card: #fefefa;
+  --kf-muted: #f0ebe5;
+  --kf-muted-hover: #e6dccd;
+
+  /* --- Text --- */
+  --kf-foreground: #2c2c24;
+  --kf-muted-foreground: #78786c;
+  --kf-subtle-foreground: #9a9a8c;
+
+  /* --- Border --- */
+  --kf-border: #ded8cf;
+  --kf-border-strong: #c8c2b9;
+  --kf-ring: #5d7052;
+
+  /* --- Sidebar --- */
+  --kf-sidebar-bg: #f5f0ea;
+  --kf-sidebar-border: #ded8cf;
+  --kf-sidebar-item-hover: #ede5d8;
+  --kf-sidebar-item-active-bg: rgba(93, 112, 82, 0.1);
+  --kf-sidebar-item-active-text: #5d7052;
+  --kf-sidebar-icon-color: #78786c;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(253, 252, 248, 0.88);
+  --kf-header-border: #ded8cf;
+
+  /* --- Shadows: moss-tinted soft --- */
+  --kf-shadow-sm: 0 1px 3px rgba(93, 112, 82, 0.08), 0 1px 2px rgba(93, 112, 82, 0.05);
+  --kf-shadow-md: 0 4px 20px -2px rgba(93, 112, 82, 0.12);
+  --kf-shadow-lg: 0 10px 40px -10px rgba(193, 140, 93, 0.15), 0 4px 6px rgba(93, 112, 82, 0.06);
+  --kf-shadow-xl: 0 20px 50px -15px rgba(93, 112, 82, 0.2), 0 10px 10px rgba(93, 112, 82, 0.05);
+  --kf-shadow-accent: 0 4px 14px rgba(93, 112, 82, 0.25);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(93, 112, 82, 0.35);
+  --kf-shadow-inset: inset 0 2px 4px rgba(93, 112, 82, 0.06);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(93, 112, 82, 0.1);
+
+  /* --- Typography: Fraunces display + Nunito body --- */
+  --kf-font-display: 'Fraunces', Georgia, serif;
+  --kf-font-ui: 'Nunito', system-ui, sans-serif;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius: generous organic curves --- */
+  --kf-radius-xs: 8px;
+  --kf-radius-sm: 16px;
+  --kf-radius-md: 24px;
+  --kf-radius-lg: 32px;
+  --kf-radius-xl: 48px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition: natural, gentle --- */
+  --kf-transition: all 0.3s ease-out;
+  --kf-transition-slow: all 0.5s ease-out;
+
+  /* --- Accent tints (moss) --- */
+  --kf-accent-5: rgba(93, 112, 82, 0.05);
+  --kf-accent-8: rgba(93, 112, 82, 0.08);
+  --kf-accent-10: rgba(93, 112, 82, 0.1);
+  --kf-accent-15: rgba(93, 112, 82, 0.15);
+  --kf-accent-30: rgba(93, 112, 82, 0.3);
+
+  /* --- Status: nature palette --- */
+  --kf-success: #5d7052;
+  --kf-success-bg: rgba(93, 112, 82, 0.08);
+  --kf-warning: #c18c5d;
+  --kf-warning-bg: rgba(193, 140, 93, 0.08);
+  --kf-danger: #a85448;
+  --kf-danger-bg: rgba(168, 84, 72, 0.08);
+  --kf-info: #4a7b8c;
+  --kf-info-bg: rgba(74, 123, 140, 0.08);
+
+  /* --- Inverted section --- */
+  --kf-inverted-bg: #2c2c24;
+  --kf-inverted-text: #f3f4f1;
+  --kf-inverted-muted: rgba(243, 244, 241, 0.6);
+}
+
+/* ============================================================
+   Vaporwave / Outrun (蒸汽波霓虹)  ·  Vaporwave.xml  [DARK]
+   Void purple · hot magenta · electric cyan · neon glow
+   Orbitron headlines · Share Tech Mono body
+   ============================================================ */
+[data-theme='vaporwave'] {
+  /* --- Brand: magenta primary, cyan secondary --- */
+  --kf-accent: #ff00ff;
+  --kf-accent-secondary: #00ffff;
+  --kf-accent-hover: #ff33ff;
+  --kf-accent-gradient: linear-gradient(135deg, #ff9900, #ff00ff, #00ffff);
+  --kf-accent-gradient-r: linear-gradient(to right, #ff9900, #ff00ff, #00ffff);
+  --kf-accent-foreground: #090014;
+
+  /* --- Surface: the void --- */
+  --kf-bg: #090014;
+  --kf-card: #1a103c;
+  --kf-muted: #12082a;
+  --kf-muted-hover: #1e1047;
+
+  /* --- Text: chrome silver --- */
+  --kf-foreground: #e0e0e0;
+  --kf-muted-foreground: #a090cc;
+  --kf-subtle-foreground: #604a8a;
+
+  /* --- Border: dark purple / neon active --- */
+  --kf-border: #2d1b4e;
+  --kf-border-strong: #00ffff;
+  --kf-ring: #00ffff;
+
+  /* --- Sidebar: deeper void --- */
+  --kf-sidebar-bg: #0d0020;
+  --kf-sidebar-border: #2d1b4e;
+  --kf-sidebar-item-hover: rgba(255, 0, 255, 0.06);
+  --kf-sidebar-item-active-bg: rgba(255, 0, 255, 0.15);
+  --kf-sidebar-item-active-text: #ff00ff;
+  --kf-sidebar-icon-color: #a090cc;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(9, 0, 20, 0.9);
+  --kf-header-border: #2d1b4e;
+
+  /* --- Shadows: neon glow (colored, not drop) --- */
+  --kf-shadow-sm: 0 0 8px rgba(255, 0, 255, 0.2);
+  --kf-shadow-md: 0 0 15px rgba(255, 0, 255, 0.3);
+  --kf-shadow-lg: 0 0 25px rgba(0, 255, 255, 0.25);
+  --kf-shadow-xl: 0 0 40px rgba(255, 0, 255, 0.35);
+  --kf-shadow-accent: 0 0 20px #ff00ff;
+  --kf-shadow-accent-lg: 0 0 40px rgba(0, 255, 255, 0.5);
+  --kf-shadow-inset: inset 0 0 10px rgba(255, 0, 255, 0.1);
+  --kf-shadow-inset-deep: inset 0 0 20px rgba(0, 255, 255, 0.15);
+
+  /* --- Typography: Orbitron + Share Tech Mono --- */
+  --kf-font-display: 'Orbitron', sans-serif;
+  --kf-font-ui: 'Share Tech Mono', monospace;
+  --kf-font-mono: 'Share Tech Mono', 'JetBrains Mono', monospace;
+
+  /* --- Radius: zero — geometric angular --- */
+  --kf-radius-xs: 0px;
+  --kf-radius-sm: 0px;
+  --kf-radius-md: 0px;
+  --kf-radius-lg: 0px;
+  --kf-radius-xl: 0px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition: snappy digital --- */
+  --kf-transition: all 0.2s linear;
+  --kf-transition-slow: all 0.3s linear;
+
+  /* --- Accent tints (magenta) --- */
+  --kf-accent-5: rgba(255, 0, 255, 0.05);
+  --kf-accent-8: rgba(255, 0, 255, 0.08);
+  --kf-accent-10: rgba(255, 0, 255, 0.1);
+  --kf-accent-15: rgba(255, 0, 255, 0.15);
+  --kf-accent-30: rgba(255, 0, 255, 0.3);
+
+  /* --- Status: neon palette --- */
+  --kf-success: #00ffff;
+  --kf-success-bg: rgba(0, 255, 255, 0.08);
+  --kf-warning: #ff9900;
+  --kf-warning-bg: rgba(255, 153, 0, 0.08);
+  --kf-danger: #ff00ff;
+  --kf-danger-bg: rgba(255, 0, 255, 0.1);
+  --kf-info: #00ffff;
+  --kf-info-bg: rgba(0, 255, 255, 0.05);
+
+  /* --- Inverted section: magenta block --- */
+  --kf-inverted-bg: #ff00ff;
+  --kf-inverted-text: #090014;
+  --kf-inverted-muted: rgba(9, 0, 20, 0.7);
+}
+
+/* ============================================================
+   Professional / Editorial Serif (典雅衬线)  ·  Professional.xml
+   Ivory · burnished gold · rich black · typographic restraint
+   Playfair Display headlines · Source Serif 4 body
+   ============================================================ */
+[data-theme='professional'] {
+  /* --- Brand: burnished gold --- */
+  --kf-accent: #b8860b;
+  --kf-accent-secondary: #d4a84b;
+  --kf-accent-hover: #9a7009;
+  --kf-accent-gradient: linear-gradient(135deg, #b8860b, #d4a84b);
+  --kf-accent-gradient-r: linear-gradient(to right, #b8860b, #d4a84b);
+  --kf-accent-foreground: #ffffff;
+
+  /* --- Surface: ivory canvas --- */
+  --kf-bg: #fafaf8;
+  --kf-card: #ffffff;
+  --kf-muted: #f5f3f0;
+  --kf-muted-hover: #edeae6;
+
+  /* --- Text: rich black --- */
+  --kf-foreground: #1a1a1a;
+  --kf-muted-foreground: #6b6b6b;
+  --kf-subtle-foreground: #9a9a9a;
+
+  /* --- Border: warm gray rules --- */
+  --kf-border: #e8e4df;
+  --kf-border-strong: #b8860b;
+  --kf-ring: #b8860b;
+
+  /* --- Sidebar: warm muted surface --- */
+  --kf-sidebar-bg: #f5f3f0;
+  --kf-sidebar-border: #e8e4df;
+  --kf-sidebar-item-hover: #edeae6;
+  --kf-sidebar-item-active-bg: rgba(184, 134, 11, 0.08);
+  --kf-sidebar-item-active-text: #b8860b;
+  --kf-sidebar-icon-color: #6b6b6b;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(250, 250, 248, 0.92);
+  --kf-header-border: #e8e4df;
+
+  /* --- Shadows: refined, barely-there --- */
+  --kf-shadow-sm: 0 1px 2px rgba(26, 26, 26, 0.04);
+  --kf-shadow-md: 0 4px 12px rgba(26, 26, 26, 0.06);
+  --kf-shadow-lg: 0 8px 24px rgba(26, 26, 26, 0.08);
+  --kf-shadow-xl: 0 16px 40px rgba(26, 26, 26, 0.1);
+  --kf-shadow-accent: 0 4px 14px rgba(184, 134, 11, 0.2);
+  --kf-shadow-accent-lg: 0 8px 24px rgba(184, 134, 11, 0.3);
+  --kf-shadow-inset: inset 0 2px 4px rgba(26, 26, 26, 0.04);
+  --kf-shadow-inset-deep: inset 0 4px 8px rgba(26, 26, 26, 0.06);
+
+  /* --- Typography: Playfair Display + Source Serif 4 --- */
+  --kf-font-display: 'Playfair Display', Georgia, serif;
+  --kf-font-ui: 'Source Serif 4', Georgia, serif;
+  --kf-font-mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+
+  /* --- Radius: restrained editorial --- */
+  --kf-radius-xs: 2px;
+  --kf-radius-sm: 6px;
+  --kf-radius-md: 8px;
+  --kf-radius-lg: 10px;
+  --kf-radius-xl: 12px;
+  --kf-radius-full: 9999px;
+
+  /* --- Transition: refined, inevitable --- */
+  --kf-transition: all 0.2s ease-out;
+  --kf-transition-slow: all 0.3s ease-out;
+
+  /* --- Accent tints (gold) --- */
+  --kf-accent-5: rgba(184, 134, 11, 0.05);
+  --kf-accent-8: rgba(184, 134, 11, 0.08);
+  --kf-accent-10: rgba(184, 134, 11, 0.1);
+  --kf-accent-15: rgba(184, 134, 11, 0.15);
+  --kf-accent-30: rgba(184, 134, 11, 0.3);
+
+  /* --- Status: warm editorial palette --- */
+  --kf-success: #2d6a4f;
+  --kf-success-bg: rgba(45, 106, 79, 0.08);
+  --kf-warning: #b8860b;
+  --kf-warning-bg: rgba(184, 134, 11, 0.08);
+  --kf-danger: #9b2335;
+  --kf-danger-bg: rgba(155, 35, 53, 0.08);
+  --kf-info: #1a4e8c;
+  --kf-info-bg: rgba(26, 78, 140, 0.08);
+
+  /* --- Inverted section: rich black block --- */
+  --kf-inverted-bg: #1a1a1a;
+  --kf-inverted-text: #fafaf8;
+  --kf-inverted-muted: rgba(250, 250, 248, 0.6);
+}
+
+/* ============================================================
+   Terminal CLI (终端黑绿)  ·  Terminal.xml
+   Deep black · phosphor green · zero radius · glow shadows
+   JetBrains Mono everywhere · CRT scanlines
+   ============================================================ */
+[data-theme='terminal'] {
+  /* --- Brand: phosphor green + amber --- */
+  --kf-accent: #33ff00;
+  --kf-accent-secondary: #ffb000;
+  --kf-accent-hover: #52ff2a;
+  --kf-accent-gradient: linear-gradient(135deg, #33ff00, #1f9900);
+  --kf-accent-gradient-r: linear-gradient(to right, #33ff00, #1f9900);
+  --kf-accent-foreground: #000000;
+
+  /* --- Surface: deep black --- */
+  --kf-bg: #0a0a0a;
+  --kf-card: #0f0f0f;
+  --kf-muted: #141414;
+  --kf-muted-hover: #1c1c1c;
+
+  /* --- Text: terminal green --- */
+  --kf-foreground: #33ff00;
+  --kf-muted-foreground: #1f7a00;
+  --kf-subtle-foreground: #155200;
+
+  /* --- Border: dimmed green --- */
+  --kf-border: #1f521f;
+  --kf-border-strong: #33ff00;
+  --kf-ring: #33ff00;
+
+  /* --- Sidebar: same dark surface --- */
+  --kf-sidebar-bg: #0a0a0a;
+  --kf-sidebar-border: #1f521f;
+  --kf-sidebar-item-hover: #141414;
+  --kf-sidebar-item-active-bg: rgba(51, 255, 0, 0.1);
+  --kf-sidebar-item-active-text: #33ff00;
+  --kf-sidebar-icon-color: #1f7a00;
+
+  /* --- Header --- */
+  --kf-header-bg: rgba(10, 10, 10, 0.97);
+  --kf-header-border: #1f521f;
+
+  /* --- Shadows: phosphor glow (no drop shadows) --- */
+  --kf-shadow-sm: 0 0 6px rgba(51, 255, 0, 0.2);
+  --kf-shadow-md: 0 0 12px rgba(51, 255, 0, 0.25);
+  --kf-shadow-lg: 0 0 20px rgba(51, 255, 0, 0.3);
+  --kf-shadow-xl: 0 0 32px rgba(51, 255, 0, 0.35);
+  --kf-shadow-accent: 0 0 14px rgba(51, 255, 0, 0.5);
+  --kf-shadow-accent-lg: 0 0 24px rgba(51, 255, 0, 0.6);
+  --kf-shadow-inset: inset 0 0 10px rgba(51, 255, 0, 0.1);
+  --kf-shadow-inset-deep: inset 0 0 18px rgba(51, 255, 0, 0.15);
+
+  /* --- Typography: monospace supremacy --- */
+  --kf-font-display: 'JetBrains Mono', 'Fira Code', monospace;
+  --kf-font-ui: 'JetBrains Mono', 'Fira Code', monospace;
+  --kf-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* --- Radius: 0px — terminal has no rounded corners --- */
+  --kf-radius-xs: 0px;
+  --kf-radius-sm: 0px;
+  --kf-radius-md: 0px;
+  --kf-radius-lg: 0px;
+  --kf-radius-xl: 0px;
+  --kf-radius-full: 0px;
+
+  /* --- Transition: snappy --- */
+  --kf-transition: all 0.1s ease;
+  --kf-transition-slow: all 0.15s ease;
+
+  /* --- Accent tints: green-based --- */
+  --kf-accent-5: rgba(51, 255, 0, 0.05);
+  --kf-accent-8: rgba(51, 255, 0, 0.08);
+  --kf-accent-10: rgba(51, 255, 0, 0.1);
+  --kf-accent-15: rgba(51, 255, 0, 0.15);
+  --kf-accent-30: rgba(51, 255, 0, 0.3);
+
+  /* --- Status: phosphor palette --- */
+  --kf-success: #33ff00;
+  --kf-success-bg: rgba(51, 255, 0, 0.08);
+  --kf-warning: #ffb000;
+  --kf-warning-bg: rgba(255, 176, 0, 0.08);
+  --kf-danger: #ff3333;
+  --kf-danger-bg: rgba(255, 51, 51, 0.08);
+  --kf-info: #33ff00;
+  --kf-info-bg: rgba(51, 255, 0, 0.05);
+
+  /* --- Inverted section: green on black swap --- */
+  --kf-inverted-bg: #33ff00;
+  --kf-inverted-text: #000000;
+  --kf-inverted-muted: rgba(0, 0, 0, 0.7);
+}

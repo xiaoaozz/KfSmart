@@ -77,14 +77,16 @@ public class UploadService {
                 // 插入 file_upload 表
                 FileUpload fileUpload = new FileUpload();
                 fileUpload.setFileMd5(fileMd5);
-                fileUpload.setFileName(fileName); // 文件名可以从请求中获取
-                fileUpload.setTotalSize(totalSize); // 文件总大小
-                fileUpload.setStatus(0); // 0 表示上传中
-                fileUpload.setUserId(userId); // 设置上传用户ID
-                fileUpload.setOrgTag(orgTag); // 设置组织标签
-                fileUpload.setPublic(isPublic); // 设置是否公开
+                fileUpload.setFileName(fileName);
+                fileUpload.setTotalSize(totalSize);
+                fileUpload.setStatus(0);
+                fileUpload.setUserId(userId);
+                // 同时写入 ownerId FK（向新字段迁移，userId 保留用于兼容）
+                try { fileUpload.setOwnerId(Long.parseLong(userId)); } catch (NumberFormatException ignored) {}
+                fileUpload.setOrgTag(orgTag);
+                fileUpload.setPublic(isPublic);
                 if (kbId != null && !kbId.isEmpty()) {
-                    fileUpload.setKbId(kbId); // 设置所属知识库ID
+                    fileUpload.setKbId(kbId);
                 }
                 try {
                     fileUploadRepository.save(fileUpload);

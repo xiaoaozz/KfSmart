@@ -32,8 +32,11 @@ public class AgentCallNodeExecutor implements NodeExecutor {
     @Override
     public NodeExecutionResult execute(WorkflowNode node, ExecutionContext ctx) {
         String agentId = node.configString("agentId");
-        String query = node.configString("query");
-        if (query == null || query.isBlank()) {
+        String queryTemplate = node.configString("query");
+        String query;
+        if (queryTemplate != null && !queryTemplate.isBlank()) {
+            query = ctx.resolveTemplate(queryTemplate);
+        } else {
             query = String.valueOf(ctx.getOrDefault("query", ""));
         }
 

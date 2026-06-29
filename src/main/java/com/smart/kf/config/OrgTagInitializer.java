@@ -29,6 +29,10 @@ public class OrgTagInitializer implements CommandLineRunner {
     private static final String ADMIN_NAME = "管理员组织";
     private static final String ADMIN_DESCRIPTION = "管理员专用组织标签，具有管理权限";
 
+    private static final String PENDING_TAG = "new-users";
+    private static final String PENDING_NAME = "新注册用户";
+    private static final String PENDING_DESCRIPTION = "新注册用户的待分配组织，管理员可将用户分配到具体部门";
+
     @Autowired
     private OrganizationTagRepository organizationTagRepository;
 
@@ -49,7 +53,10 @@ public class OrgTagInitializer implements CommandLineRunner {
         
         // 创建管理员组织标签
         createOrganizationTagIfNotExists(ADMIN_TAG, ADMIN_NAME, ADMIN_DESCRIPTION, adminUser);
-        
+
+        // 创建新注册用户待分配组织标签
+        createOrganizationTagIfNotExists(PENDING_TAG, PENDING_NAME, PENDING_DESCRIPTION, adminUser);
+
         logger.info("组织标签初始化完成");
     }
     

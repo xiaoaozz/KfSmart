@@ -1,0 +1,68 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--kf-font-ui);
+  font-weight: 600;
+  color: var(--kf-accent-foreground);
+  background: var(--kf-accent-gradient-r);
+  border: none;
+  border-radius: var(--kf-radius-sm);
+  cursor: pointer;
+  box-shadow: var(--kf-shadow-accent);
+  transition:
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.btn:hover {
+  box-shadow: var(--kf-shadow-accent-lg);
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Sizes */
+.sm {
+  height: 32px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: var(--kf-radius-xs);
+}
+
+.md {
+  height: 40px;
+  padding: 0 20px;
+  font-size: 14px;
+}
+
+.lg {
+  height: 48px;
+  padding: 0 28px;
+  font-size: 16px;
+  border-radius: var(--kf-radius-md);
+}
+
+/* Icon wrapper */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  font-size: 1em;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: kf-spin 0.7s linear infinite;
+}

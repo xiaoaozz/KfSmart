@@ -1,9 +1,14 @@
 package com.smart.kf.service.agent;
 
+import com.smart.kf.config.LocaleContext;
 import com.smart.kf.model.agent.Agent;
+import com.smart.kf.model.agent.AgentI18n;
+import com.smart.kf.repository.agent.AgentI18nRepository;
 import com.smart.kf.repository.agent.AgentRepository;
+import com.smart.kf.service.I18nTranslationService;
 import com.smart.kf.utils.pagination.PageQuery;
 import com.smart.kf.utils.pagination.PageResult;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +17,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -20,11 +26,17 @@ public class AgentService {
     private final AgentRepository agentRepository;
     private final AgentVersionService versionService;
     private final AgentRunAnalysisService runAnalysisService;
+    private final AgentI18nRepository agentI18nRepository;
 
-    public AgentService(AgentRepository agentRepository, AgentVersionService versionService, AgentRunAnalysisService runAnalysisService) {
+    @Autowired
+    private I18nTranslationService i18nTranslationService;
+
+    public AgentService(AgentRepository agentRepository, AgentVersionService versionService,
+                        AgentRunAnalysisService runAnalysisService, AgentI18nRepository agentI18nRepository) {
         this.agentRepository = agentRepository;
         this.versionService = versionService;
         this.runAnalysisService = runAnalysisService;
+        this.agentI18nRepository = agentI18nRepository;
     }
 
     public PageResult<Agent> listAgents(String keyword, PageQuery query) {
@@ -32,15 +44,20 @@ public class AgentService {
             ? agentRepository.findAll()
             : agentRepository.findByNameContainingIgnoreCase(keyword);
         source.sort(Comparator.comparing(Agent::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())));
+        source.forEach(this::applyI18n);
         return PageResult.fromList(source, query);
     }
 
     public Map<String, Object> agentStats() {
         List<Agent> agents = agentRepository.findAll();
         long agentCount = agents.size();
-        long calls = agents.stream().mapToLong(Agent::getCallCount).sum();
-        long success = agents.stream().mapToLong(Agent::getSuccessCount).sum();
-        long duration = agents.stream().mapToLong(a -> a.getAvgDurationMs() * Math.max(1, a.getCallCount())).sum();
+        long calls = agents.stream().mapToLong(a -> a.getCallCount() != null ? a.getCallCount() : 0L).sum();
+        long success = agents.stream().mapToLong(a -> a.getSuccessCount() != null ? a.getSuccessCount() : 0L).sum();
+        long duration = agents.stream().mapToLong(a -> {
+            long avg = a.getAvgDurationMs() != null ? a.getAvgDurationMs() : 0L;
+            long cnt = a.getCallCount() != null ? a.getCallCount() : 0L;
+            return avg * Math.max(1L, cnt);
+        }).sum();
         long successRate = calls == 0 ? 100 : Math.round(success * 100.0 / calls);
         long avgDurationMs = calls == 0 ? 0 : Math.round(duration * 1.0 / calls);
 
@@ -53,15 +70,25 @@ public class AgentService {
     }
 
     public Agent getAgent(String agentId) {
-        return agentRepository.findByAgentId(agentId)
+        Agent agent = resolveAgent(agentId)
             .orElseThrow(() -> new IllegalArgumentException("Agent不存在"));
+        applyI18n(agent);
+        return agent;
+    }
+
+    /** Looks up by numeric primary key if agentId is all-digits, otherwise by the agentId string. */
+    private Optional<Agent> resolveAgent(String agentId) {
+        if (agentId != null && agentId.matches("\\d+")) {
+            return agentRepository.findById(Long.parseLong(agentId));
+        }
+        return agentRepository.findByAgentId(agentId);
     }
 
     @Transactional
     public Agent saveAgent(Agent request) {
         Agent agent = isBlank(request.getAgentId())
             ? new Agent()
-            : agentRepository.findByAgentId(request.getAgentId()).orElse(new Agent());
+            : resolveAgent(request.getAgentId()).orElse(new Agent());
         boolean isNew = isBlank(agent.getAgentId());
         if (isNew) {
             agent.setAgentId("agt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
@@ -70,6 +97,9 @@ public class AgentService {
         Agent saved = agentRepository.save(agent);
         if (!isNew) {
             versionService.createVersion(saved, "system", "编辑保存");
+            i18nTranslationService.retranslateAgentAsync(saved.getAgentId(), saved.getName(), saved.getDescription());
+        } else {
+            i18nTranslationService.translateAgentAsync(saved.getAgentId(), saved.getName(), saved.getDescription());
         }
         return saved;
     }
@@ -81,20 +111,22 @@ public class AgentService {
         applyAgent(copy, source);
         copy.setAgentId("agt_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12));
         copy.setName(source.getName() + " 副本");
-        copy.setStatus("草稿");
-        copy.setCallCount(0);
-        copy.setSuccessCount(0);
-        copy.setFailureCount(0);
+        copy.setStatus("draft");
+        copy.setCallCount(0L);
+        copy.setSuccessCount(0L);
+        copy.setFailureCount(0L);
         copy.setPublishedAt(null);
         source.setInstallCount(safeLong(source.getInstallCount()) + 1);
         agentRepository.save(source);
-        return agentRepository.save(copy);
+        Agent savedCopy = agentRepository.save(copy);
+        i18nTranslationService.translateAgentAsync(savedCopy.getAgentId(), savedCopy.getName(), savedCopy.getDescription());
+        return savedCopy;
     }
 
     @Transactional
     public Agent publishAgent(String agentId) {
         Agent agent = getAgent(agentId);
-        agent.setStatus("运行中");
+        agent.setStatus("published");
         agent.setPublishedAt(LocalDateTime.now());
         return agentRepository.save(agent);
     }
@@ -106,8 +138,9 @@ public class AgentService {
 
     public List<Map<String, Object>> marketplace() {
         return agentRepository.findAll().stream()
-            .filter(item -> "运行中".equals(item.getStatus()))
+            .filter(item -> "published".equals(item.getStatus()))
             .map(item -> {
+                applyI18n(item);
                 Map<String, Object> row = new HashMap<>();
                 row.put("agentId", item.getAgentId());
                 row.put("name", item.getName());
@@ -119,6 +152,32 @@ public class AgentService {
             .toList();
     }
 
+    public AgentI18n upsertAgentI18n(String agentId, String lang, String name, String description) {
+        AgentI18n i18n = agentI18nRepository.findByAgentIdAndLang(agentId, lang)
+            .orElseGet(() -> {
+                AgentI18n newI18n = new AgentI18n();
+                newI18n.setAgentId(agentId);
+                newI18n.setLang(lang);
+                return newI18n;
+            });
+        if (name != null) i18n.setName(name);
+        if (description != null) i18n.setDescription(description);
+        return agentI18nRepository.save(i18n);
+    }
+
+    public List<AgentI18n> getAgentI18n(String agentId) {
+        return agentI18nRepository.findByAgentId(agentId);
+    }
+
+    private void applyI18n(Agent agent) {
+        String lang = LocaleContext.get();
+        if (lang == null || lang.equals("zh-CN")) return;
+        agentI18nRepository.findByAgentIdAndLang(agent.getAgentId(), lang).ifPresent(i18n -> {
+            if (i18n.getName() != null && !i18n.getName().isBlank()) agent.setName(i18n.getName());
+            if (i18n.getDescription() != null && !i18n.getDescription().isBlank()) agent.setDescription(i18n.getDescription());
+        });
+    }
+
     public Map<String, Object> runAnalysis() {
         return runAnalysisService.buildRunAnalysis();
     }
@@ -126,7 +185,7 @@ public class AgentService {
     private void applyAgent(Agent target, Agent source) {
         target.setName(source.getName());
         target.setDescription(source.getDescription());
-        target.setStatus(isBlank(source.getStatus()) ? "草稿" : source.getStatus());
+        target.setStatus(isBlank(source.getStatus()) ? "draft" : source.getStatus());
         target.setOwnerName(source.getOwnerName());
         target.setTags(source.getTags());
         target.setPermissionScope(isBlank(source.getPermissionScope()) ? "组织内" : source.getPermissionScope());

@@ -1,0 +1,173 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px - 48px);
+  border-radius: var(--kf-radius-md);
+  border: 1px solid var(--kf-border);
+  background: var(--kf-card);
+  box-shadow: var(--kf-shadow-sm);
+  overflow: hidden;
+}
+
+.pageHeader {
+  padding: 14px 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--kf-border);
+  background: var(--kf-card);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  padding-bottom: 52px;
+  height: 100%;
+  position: relative;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cardIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--kf-radius-sm);
+  background: var(--kf-accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 16px;
+}
+
+.cardName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cardEndpoint {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metaItem {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  background: var(--kf-muted);
+  padding: 2px 8px;
+  border-radius: var(--kf-radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cardActions {
+  position: absolute;
+  bottom: 14px;
+  right: 16px;
+  display: flex;
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+
+/* Colored icon-only action button variants */
+.btnBlue {
+  border-color: var(--kf-accent) !important;
+  border-style: solid !important;
+  border-width: 1px !important;
+  color: var(--kf-accent) !important;
+}
+.btnBlue:hover {
+  background: var(--kf-accent-8) !important;
+}
+
+.btnGray {
+  border-color: var(--kf-muted-foreground) !important;
+  border-style: solid !important;
+  border-width: 1px !important;
+  color: var(--kf-muted-foreground) !important;
+}
+.btnGray:hover {
+  background: var(--kf-muted) !important;
+}
+
+.btnRed {
+  border-color: var(--kf-danger) !important;
+  border-style: solid !important;
+  border-width: 1px !important;
+  color: var(--kf-danger) !important;
+}
+.btnRed:hover {
+  background: var(--kf-danger-bg) !important;
+}
+
+.skeleton {
+  height: 168px;
+  background: linear-gradient(90deg, var(--kf-muted) 25%, var(--kf-card) 50%, var(--kf-muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--kf-radius-md);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

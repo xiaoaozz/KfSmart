@@ -1,0 +1,241 @@
+.section {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 24px;
+}
+
+.sectionTitle {
+  font-family: var(--kf-font-display);
+  font-size: 18px;
+  color: var(--kf-foreground);
+  margin: 0 0 20px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+/* ---- BasicInfo ---- */
+.avatarRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.avatarWrap {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.avatarOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.avatarWrap:hover .avatarOverlay {
+  opacity: 1;
+}
+
+.avatarName {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+}
+
+.avatarRole {
+  font-size: 13px;
+  color: var(--kf-primary);
+  margin: 2px 0;
+}
+
+.avatarTip {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+/* ---- Password ---- */
+.strengthBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -12px;
+  margin-bottom: 12px;
+}
+
+/* ---- Notifications ---- */
+.notifGroup {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kf-muted-foreground);
+  margin-bottom: 10px;
+}
+
+.notifRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--kf-border);
+}
+
+.notifRow:last-of-type {
+  border-bottom: none;
+}
+
+.notifText {
+  flex: 1;
+}
+
+.notifLabel {
+  font-size: 14px;
+  color: var(--kf-foreground);
+  font-weight: 500;
+}
+
+.notifDesc {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  margin-top: 2px;
+}
+
+/* ---- Favorites ---- */
+.favList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.favRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--kf-radius-sm);
+  border: 1px solid var(--kf-border);
+  background: var(--kf-background);
+  transition: box-shadow 0.15s;
+}
+
+.favRow:hover {
+  box-shadow: var(--kf-shadow-sm);
+}
+
+.favLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.favName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--kf-foreground);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favName:hover {
+  color: var(--kf-primary);
+  text-decoration: underline;
+}
+
+.favDesc {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.favTime {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+.favSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---- Activity ---- */
+.activityItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activityAction {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+}
+
+.activityDetail {
+  font-size: 13px;
+  color: var(--kf-foreground);
+}
+
+.activityMeta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  font-family: var(--kf-font-mono);
+}
+
+.listSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---- shared skeleton ---- */
+.skeleton {
+  height: 48px;
+  background: linear-gradient(90deg, var(--kf-muted) 25%, var(--kf-card) 50%, var(--kf-muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--kf-radius-sm);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

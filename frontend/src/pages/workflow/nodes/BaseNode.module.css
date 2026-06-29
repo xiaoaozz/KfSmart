@@ -1,0 +1,92 @@
+.node {
+  min-width: 140px;
+  background: var(--kf-card);
+  border: 1.5px solid var(--kf-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s;
+  font-size: 12px;
+}
+
+.node:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+
+.selected {
+  border-color: var(--node-color, var(--kf-accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color, var(--kf-accent)) 25%, transparent);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px 6px;
+  border-bottom: 1px solid var(--kf-border);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--node-color, var(--kf-accent));
+  flex-shrink: 0;
+}
+
+.label {
+  font-weight: 600;
+  color: var(--kf-foreground);
+  flex: 1;
+}
+
+.body {
+  padding: 7px 10px;
+  color: var(--kf-muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: var(--node-color, var(--kf-accent)) !important;
+  border: 2.5px solid var(--kf-bg) !important;
+  transition: box-shadow 0.15s !important;
+}
+
+.statusDot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  z-index: 5;
+}
+
+.statusRunning {
+  background: #3b82f6;
+  animation: kdot-pulse 1s ease-in-out infinite;
+}
+
+.statusSuccess {
+  background: #10b981;
+}
+
+.statusError {
+  background: #ef4444;
+}
+
+@keyframes kdot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.3);
+  }
+}

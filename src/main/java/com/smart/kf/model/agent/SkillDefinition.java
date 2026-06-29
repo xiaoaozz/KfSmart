@@ -36,6 +36,12 @@ public class SkillDefinition {
     @Column(name = "owner_name", length = 100)
     private String ownerName;
 
+    /**
+     * 所有者用户 FK（替代 ownerName 字符串，Phase 2 新增）
+     */
+    @Column(name = "owner_id")
+    private Long ownerId;
+
     @Column(length = 500)
     private String description;
 

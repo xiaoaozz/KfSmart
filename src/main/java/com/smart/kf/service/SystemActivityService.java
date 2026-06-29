@@ -62,18 +62,17 @@ public class SystemActivityService {
         }
 
         activities.sort(Comparator.<Map<String, Object>>comparingLong(item -> toLong(item.get("timestamp"))).reversed());
-        List<Map<String, Object>> visibleActivities = activities.stream().limit(40).toList();
 
         Map<String, Object> stats = new LinkedHashMap<>();
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime weekAgo = now.minusDays(7);
-        stats.put("todayActivities", visibleActivities.stream().filter(item -> isSameDay(item.get("occurredAt"), now)).count());
-        stats.put("weekActivities", visibleActivities.stream().filter(item -> !parseTime(item.get("occurredAt")).isBefore(weekAgo)).count());
-        stats.put("knowledgeUpdates", visibleActivities.stream().filter(item -> "knowledge".equals(item.get("type")) && "更新知识库".equals(item.get("title"))).count());
-        stats.put("documentUpdates", visibleActivities.stream().filter(item -> "document".equals(item.get("type")) && "更新文档".equals(item.get("title"))).count());
+        stats.put("todayActivities", activities.stream().filter(item -> isSameDay(item.get("occurredAt"), now)).count());
+        stats.put("weekActivities", activities.stream().filter(item -> !parseTime(item.get("occurredAt")).isBefore(weekAgo)).count());
+        stats.put("knowledgeUpdates", activities.stream().filter(item -> "knowledge".equals(item.get("type")) && "更新知识库".equals(item.get("title"))).count());
+        stats.put("documentUpdates", activities.stream().filter(item -> "document".equals(item.get("type")) && "更新文档".equals(item.get("title"))).count());
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("activities", visibleActivities);
+        result.put("activities", activities);
         result.put("stats", stats);
         return result;
     }

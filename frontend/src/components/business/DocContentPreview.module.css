@@ -1,0 +1,105 @@
+/* Markdown prose for document content preview.
+   Block code is rendered by react-syntax-highlighter (its own PreTag),
+   so `.prose pre` is intentionally unstyled — only inline `code` and
+   other block elements are scoped here. */
+
+.prose {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--kf-foreground);
+  word-break: break-word;
+}
+
+.prose p {
+  margin: 0 0 8px;
+}
+
+.prose p:last-child {
+  margin: 0;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.prose h1 {
+  font-size: 1.4em;
+}
+
+.prose h2 {
+  font-size: 1.25em;
+}
+
+.prose h3 {
+  font-size: 1.1em;
+}
+
+.prose ul,
+.prose ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.prose li {
+  margin: 2px 0;
+}
+
+.prose a {
+  color: var(--kf-accent);
+  text-decoration: none;
+}
+
+.prose a:hover {
+  text-decoration: underline;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--kf-border-strong);
+  margin: 8px 0;
+  padding: 4px 0 4px 12px;
+  color: var(--kf-muted-foreground);
+}
+
+.prose code {
+  font-family: var(--kf-font-mono);
+  font-size: 0.875em;
+  padding: 1px 4px;
+  border-radius: var(--kf-radius-xs);
+  background: var(--kf-muted);
+  color: var(--kf-foreground);
+}
+
+/* GFM tables */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--kf-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.prose th {
+  background: var(--kf-muted);
+  font-weight: 600;
+}
+
+.prose img {
+  max-width: 100%;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--kf-border);
+  margin: 12px 0;
+}

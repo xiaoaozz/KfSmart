@@ -22,6 +22,7 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
 
     /**
      * 根据用户 ID 查询所有对话记录。
+     * Spring Data JPA 会将 UserId 解析为 user.id 属性路径遍历。
      *
      * @param userId 用户 ID
      * @return 符合条件的对话记录列表

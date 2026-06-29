@@ -33,7 +33,7 @@ public class CodeNodeExecutor implements NodeExecutor {
         }
 
         if ("JavaScript".equalsIgnoreCase(language) || "JS".equalsIgnoreCase(language)) {
-            return executeJavaScript(code, ctx);
+            return executeJavaScript(code, ctx, node);
         }
 
         logger.info("{} 代码执行暂未实现", language);
@@ -44,7 +44,7 @@ public class CodeNodeExecutor implements NodeExecutor {
     }
 
     @SuppressWarnings("unchecked")
-    private NodeExecutionResult executeJavaScript(String code, ExecutionContext ctx) {
+    private NodeExecutionResult executeJavaScript(String code, ExecutionContext ctx, WorkflowNode node) {
         try {
             ScriptEngineManager manager = new ScriptEngineManager();
             ScriptEngine engine = manager.getEngineByName("js");
@@ -61,7 +61,27 @@ public class CodeNodeExecutor implements NodeExecutor {
                 return NodeExecutionResult.of(outputs);
             }
 
-            engine.put("input", ctx.getVariables());
+            // 解析输入映射：如果配置了 inputs (JSON)，解析模板变量后作为 input 传入
+            String inputsJson = node.configString("inputs");
+            Map<String, Object> inputMap;
+            if (inputsJson != null && !inputsJson.isBlank()) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    Map<String, Object> rawInputs = mapper.readValue(inputsJson, Map.class);
+                    inputMap = new HashMap<>();
+                    for (Map.Entry<String, Object> entry : rawInputs.entrySet()) {
+                        String val = String.valueOf(entry.getValue());
+                        inputMap.put(entry.getKey(), ctx.resolveTemplate(val));
+                    }
+                } catch (Exception e) {
+                    logger.warn("解析输入映射失败，使用全部变量: {}", e.getMessage());
+                    inputMap = ctx.getVariables();
+                }
+            } else {
+                inputMap = ctx.getVariables();
+            }
+
+            engine.put("input", inputMap);
             engine.put("context", ctx.getVariables());
             Object result = engine.eval(code);
 

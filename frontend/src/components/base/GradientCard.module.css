@@ -1,0 +1,33 @@
+.card {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  box-shadow: var(--kf-shadow-sm);
+  transition:
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+  overflow: hidden;
+}
+
+.hoverable:hover {
+  box-shadow: var(--kf-shadow-lg);
+  border-color: var(--kf-border-strong);
+}
+
+/* Featured: gradient border via wrapper trick */
+.featuredWrapper {
+  padding: 2px;
+  border-radius: calc(var(--kf-radius-md) + 2px);
+  background: var(--kf-accent-gradient);
+  box-shadow: var(--kf-shadow-accent-lg);
+}
+
+.featured {
+  border: none;
+  border-radius: var(--kf-radius-md);
+  box-shadow: none;
+}
+
+.featured.hoverable:hover {
+  box-shadow: none;
+}

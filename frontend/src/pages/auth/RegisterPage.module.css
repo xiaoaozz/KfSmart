@@ -1,0 +1,30 @@
+.root {
+  width: 100%;
+}
+
+.header {
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.title {
+  font-family: var(--kf-font-display);
+  font-size: 28px;
+  color: var(--kf-foreground);
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--kf-muted-foreground);
+}
+
+.form {
+  margin-top: 8px;
+}
+
+.strengthWrap {
+  margin-top: -12px;
+  margin-bottom: 12px;
+}

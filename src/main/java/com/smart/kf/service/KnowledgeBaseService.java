@@ -1,8 +1,11 @@
 package com.smart.kf.service;
 
+import com.smart.kf.config.LocaleContext;
 import com.smart.kf.model.FileUpload;
 import com.smart.kf.model.KnowledgeBase;
+import com.smart.kf.model.KnowledgeBaseI18n;
 import com.smart.kf.model.User;
+import com.smart.kf.repository.KnowledgeBaseI18nRepository;
 import com.smart.kf.repository.KnowledgeBaseRepository;
 import com.smart.kf.repository.FileUploadRepository;
 import com.smart.kf.repository.UserRepository;
@@ -48,6 +51,12 @@ public class KnowledgeBaseService {
     @Autowired
     private RbacService rbacService;
 
+    @Autowired
+    private KnowledgeBaseI18nRepository knowledgeBaseI18nRepository;
+
+    @Autowired
+    private I18nTranslationService i18nTranslationService;
+
     private static final int CHUNK_SIZE_BYTES = 4096;
 
     /**
@@ -84,7 +93,7 @@ public class KnowledgeBaseService {
         
         KnowledgeBase saved = knowledgeBaseRepository.save(kb);
         LogUtils.logBusiness("CREATE_KB", creatorUsername, "知识库创建成功: kbId=%s, name=%s", kbId, name);
-        
+        i18nTranslationService.translateKbAsync(kbId, name, description);
         return saved;
     }
     
@@ -248,13 +257,27 @@ public class KnowledgeBaseService {
 
     /**
      * 构建知识库DTO（含统计信息）
+     * name / description 优先使用 knowledge_base_i18n 表中的翻译，无翻译时回落到原始中文字段（COALESCE 语义）
      */
     private Map<String, Object> buildKbDto(KnowledgeBase kb) {
+        String lang = LocaleContext.get();
+        String name = kb.getName();
+        String description = kb.getDescription();
+
+        if (lang != null && !lang.equals("zh-CN")) {
+            var i18nOpt = knowledgeBaseI18nRepository.findByKbIdAndLang(kb.getKbId(), lang);
+            if (i18nOpt.isPresent()) {
+                KnowledgeBaseI18n i18n = i18nOpt.get();
+                if (i18n.getName() != null && !i18n.getName().isBlank()) name = i18n.getName();
+                if (i18n.getDescription() != null && !i18n.getDescription().isBlank()) description = i18n.getDescription();
+            }
+        }
+
         Map<String, Object> dto = new HashMap<>();
         dto.put("id", kb.getId());
         dto.put("kbId", kb.getKbId());
-        dto.put("name", kb.getName());
-        dto.put("description", kb.getDescription());
+        dto.put("name", name);
+        dto.put("description", description);
         dto.put("orgTag", kb.getOrgTag());
         dto.put("isPublic", kb.isPublic());
         dto.put("icon", kb.getIcon());
@@ -274,7 +297,7 @@ public class KnowledgeBaseService {
         dto.put("fileCount", docCount);
         dto.put("totalSize", totalSize);
         dto.put("chunkCount", Math.max(1, (int) Math.floor((double) totalSize / CHUNK_SIZE_BYTES)));
-        dto.put("status", docCount > 0 ? "正常" : "空库");
+        dto.put("status", docCount > 0 ? "NORMAL" : "EMPTY");
         
         return dto;
     }
@@ -331,8 +354,12 @@ public class KnowledgeBaseService {
         if (orgTag != null) kb.setOrgTag(orgTag);
         if (isPublic != null) kb.setPublic(isPublic);
         if (icon != null) kb.setIcon(icon);
-        
-        return knowledgeBaseRepository.save(kb);
+
+        KnowledgeBase updated = knowledgeBaseRepository.save(kb);
+        if (name != null || description != null) {
+            i18nTranslationService.retranslateKbAsync(kbId, updated.getName(), updated.getDescription());
+        }
+        return updated;
     }
     
     /**

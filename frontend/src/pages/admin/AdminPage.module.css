@@ -1,0 +1,352 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  height: 100%;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pageTitle {
+  font-family: var(--kf-font-display);
+  font-size: 22px;
+  color: var(--kf-foreground);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Section heading */
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  margin: 4px 0 8px;
+}
+
+/* System Status cards */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.metricCard {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.metricHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metricLabel {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  font-weight: 500;
+}
+
+.metricValue {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--kf-font-mono);
+  color: var(--kf-foreground);
+  line-height: 1;
+}
+
+.metricUnit {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin-left: 4px;
+}
+
+.metricSub {
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+.serviceList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.serviceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-sm);
+}
+
+.serviceName {
+  font-weight: 500;
+  color: var(--kf-foreground);
+}
+
+.serviceLatency {
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+/* API Key masking */
+.keyMask {
+  font-family: var(--kf-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+/* Page subtitle */
+.pageDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin: 2px 0 0;
+}
+
+/* ── API Key Card List ─────────────────────────────────── */
+.apiKeyList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.apiKeyCard {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-left-width: 4px;
+  border-left-color: var(--kf-border-strong);
+  border-radius: var(--kf-radius-md);
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.apiKeyCard:hover {
+  box-shadow: var(--kf-shadow-md);
+  border-color: var(--kf-border-strong);
+  border-left-color: inherit;
+}
+
+.apiKeyCardActive {
+  border-left-color: var(--kf-success);
+}
+.apiKeyCardDisabled {
+  border-left-color: var(--kf-border-strong);
+}
+.apiKeyCardExpired {
+  border-left-color: var(--kf-danger);
+}
+
+.apiKeyCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.apiKeyInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.apiKeyName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.apiKeyPrefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--kf-font-mono);
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+  background: var(--kf-muted);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-xs);
+  padding: 2px 8px;
+  width: fit-content;
+  letter-spacing: 0.04em;
+}
+
+.apiKeyCardRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.apiKeyStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: var(--kf-radius-full);
+  white-space: nowrap;
+}
+
+.apiKeyStatusActive {
+  color: var(--kf-success);
+  background: var(--kf-success-bg);
+}
+.apiKeyStatusDisabled {
+  color: var(--kf-muted-foreground);
+  background: var(--kf-muted);
+}
+.apiKeyStatusExpired {
+  color: var(--kf-danger);
+  background: var(--kf-danger-bg);
+}
+
+.apiKeyActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.apiKeyScopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.apiKeyMeta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kf-border);
+  flex-wrap: wrap;
+}
+
+.apiKeyMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--kf-muted-foreground);
+}
+
+/* ── Reveal Key Modal ─────────────────────────────────── */
+.revealKeyBlock {
+  background: var(--kf-muted);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-sm);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.revealCopyRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.revealKeyText {
+  flex: 1;
+  font-family: var(--kf-font-mono);
+  font-size: 13px;
+  color: var(--kf-foreground);
+  word-break: break-all;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.revealWarningBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--kf-warning-bg);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--kf-radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--kf-warning);
+  line-height: 1.5;
+}
+
+/* ── Empty State ──────────────────────────────────────── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 72px 24px;
+  background: var(--kf-card);
+  border: 1px dashed var(--kf-border-strong);
+  border-radius: var(--kf-radius-md);
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 60px;
+  height: 60px;
+  background: var(--kf-accent-8);
+  border-radius: var(--kf-radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: var(--kf-accent);
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--kf-foreground);
+  margin: 0;
+}
+
+.emptyDesc {
+  font-size: 13px;
+  color: var(--kf-muted-foreground);
+  margin: 0;
+  max-width: 320px;
+}
+
+/* Org Tree */
+.orgTree {
+  background: var(--kf-card);
+  border: 1px solid var(--kf-border);
+  border-radius: var(--kf-radius-md);
+  padding: 16px;
+}

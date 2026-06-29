@@ -187,6 +187,8 @@ public class ParseService {
             vector.setChunkId(currentChunkId);
             vector.setTextContent(chunk);
             vector.setUserId(userId);
+            // 同时写入 ownerId FK
+            try { vector.setOwnerId(Long.parseLong(userId)); } catch (NumberFormatException ignored) {}
             vector.setOrgTag(orgTag);
             vector.setPublic(isPublic);
             documentVectorRepository.save(vector);

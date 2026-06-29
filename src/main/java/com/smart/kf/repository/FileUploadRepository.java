@@ -53,6 +53,26 @@ public interface FileUploadRepository extends JpaRepository<FileUpload, Long> {
 
     List<FileUpload> findByFileMd5In(List<String> md5List);
 
+    // -------- 基于 ownerId (Long FK) 的新查询方法 --------
+
+    Optional<FileUpload> findByFileMd5AndOwnerId(String fileMd5, Long ownerId);
+
+    List<FileUpload> findByOwnerId(Long ownerId);
+
+    List<FileUpload> findByOwnerIdOrIsPublicTrue(Long ownerId);
+
+    @Query("SELECT f FROM FileUpload f WHERE f.ownerId = :ownerId OR f.isPublic = true OR (f.orgTag IN :orgTagList AND f.isPublic = false)")
+    List<FileUpload> findAccessibleFilesByOwnerWithTags(@Param("ownerId") Long ownerId, @Param("orgTagList") List<String> orgTagList);
+
+    @Query("SELECT f FROM FileUpload f WHERE f.ownerId = :ownerId AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<FileUpload> findByOwnerIdAndFileNameContainingIgnoreCase(@Param("ownerId") Long ownerId, @Param("keyword") String keyword);
+
+    @Query("SELECT f FROM FileUpload f WHERE f.ownerId = :ownerId AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%')) AND f.kbId = :kbId")
+    List<FileUpload> findByOwnerIdAndFileNameContainingIgnoreCaseAndKbId(
+            @Param("ownerId") Long ownerId,
+            @Param("keyword") String keyword,
+            @Param("kbId") String kbId);
+
     /**
      * 查找指定组织标签的所有文件
      * 用于删除组织标签时重新分配文档归属
