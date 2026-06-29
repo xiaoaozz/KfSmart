@@ -61,10 +61,9 @@ export const workflowApi = {
     return http.delete<Workflow>(`/workflows/${id}`).then(data)
   },
 
-  run(id: number, input: string) {
-    return http
-      .post<{ executionId: string }>(`/workflows/${id}/execute-async`, { input })
-      .then(data)
+  run(id: number, input: string | Record<string, string>) {
+    const payload = typeof input === 'string' ? { input } : input
+    return http.post<{ executionId: string }>(`/workflows/${id}/execute-async`, payload).then(data)
   },
 
   listRuns(id: number, params: { current?: number; size?: number }) {

@@ -491,6 +491,8 @@ export default function WorkflowEditorPage() {
 
       <NodeConfigDrawer
         node={selectedNode}
+        nodes={nodes}
+        edges={edges}
         onClose={() => setSelectedNode(null)}
         onSave={onSaveNodeConfig}
       />

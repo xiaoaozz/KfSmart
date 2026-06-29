@@ -154,13 +154,105 @@
 /* Inline detail expand */
 .chainDetail {
   margin: 2px 4px 2px 34px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--kf-muted);
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--kf-border);
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.detailMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
+}
+
+.metaTag {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tokenBar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--kf-accent) 8%, transparent);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--kf-accent) 15%, transparent);
+}
+
+.tokenItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.tokenValue {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--kf-font-mono);
+  color: var(--kf-foreground);
+}
+
+.tokenValueTotal {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--kf-font-mono);
+  color: var(--kf-accent);
+}
+
+.detailDesc {
+  padding: 4px 8px;
+  background: var(--kf-card);
+  border-radius: 4px;
+  border-left: 2px solid var(--kf-accent);
+  line-height: 1.5;
+}
+
+.detailError {
+  padding: 4px 8px;
+  background: color-mix(in srgb, #ef4444 8%, transparent);
+  border-radius: 4px;
+  border-left: 2px solid #ef4444;
+  line-height: 1.5;
+}
+
+.detailBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detailBlockTitle {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kf-muted-foreground);
+}
+
+.detailJson {
+  background: var(--kf-card);
+  border-radius: 6px;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--kf-border);
+}
+
+.detailJson pre {
+  margin: 0;
+  font-family: var(--kf-font-mono);
+  font-size: 11px;
+  color: var(--kf-foreground);
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .detailRow {

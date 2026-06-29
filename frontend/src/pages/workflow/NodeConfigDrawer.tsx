@@ -1,8 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Drawer, Form, Input, Select, Slider, InputNumber, Button } from 'antd'
-import type { Node } from '@xyflow/react'
+import {
+  Drawer,
+  Form,
+  Input,
+  Select,
+  Slider,
+  InputNumber,
+  Button,
+  Divider,
+  Tag,
+  Typography,
+} from 'antd'
+import type { Node, Edge } from '@xyflow/react'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import type { StartNodeVariable, InputMapping } from '@/types/workflow'
+import InputMappingEditor from './InputMappingEditor'
+import { getNodeOutputs } from './nodeSchema'
+
+const { Text } = Typography
 
 const LLM_OPTIONS = [
   { label: 'DeepSeek Chat', value: 'deepseek-chat' },
@@ -16,31 +32,48 @@ const HTTP_METHODS = [
   { label: 'DELETE', value: 'DELETE' },
 ]
 
+const NODES_WITH_INPUT_MAPPING = new Set([
+  'end',
+  'llm',
+  'kb',
+  'code',
+  'condition',
+  'http',
+  'loop',
+  'variable',
+  'agent_call',
+])
+
 interface Props {
   node: Node | null
+  nodes: Node[]
+  edges: Edge[]
   onClose: () => void
   onSave: (nodeId: string, data: Record<string, unknown>) => void
 }
 
-export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
+function NodeConfigForm({ node, nodes, edges, onClose, onSave }: Props) {
   const [form] = Form.useForm()
   const { t } = useTranslation()
+  const [inputMappings, setInputMappings] = useState<InputMapping[]>(
+    (node?.data?.inputMappings as InputMapping[]) ?? [],
+  )
 
   useEffect(() => {
-    if (node) {
-      form.setFieldsValue(node.data)
-    }
+    form.setFieldsValue(node?.data)
   }, [node, form])
 
   const handleSave = () => {
     form.validateFields().then((values) => {
-      if (node) onSave(node.id, values)
+      if (node) onSave(node.id, { ...values, inputMappings })
       onClose()
     })
   }
 
   const type = node?.type ?? ''
   const nodeLabel = t('workflow.nodeLabel.' + type, { defaultValue: type })
+  const currentNodeId = node?.id ?? ''
+  const outputs = node ? getNodeOutputs(node) : []
 
   return (
     <Drawer
@@ -62,24 +95,54 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
       }
     >
       <Form form={form} layout="vertical">
+        {/* Input mapping section — for all nodes that accept inputs */}
+        {NODES_WITH_INPUT_MAPPING.has(type) && (
+          <Form.Item>
+            <InputMappingEditor
+              nodes={nodes}
+              edges={edges}
+              currentNodeId={currentNodeId}
+              value={inputMappings}
+              onChange={setInputMappings}
+            />
+          </Form.Item>
+        )}
+
         {type === 'start' && (
-          <Form.Item
-            name="inputVariable"
-            label={t('workflow.nodeConfig.inputVariable')}
-            initialValue="input"
-          >
-            <Input placeholder="input" />
+          <Form.Item label={t('workflow.nodeConfig.inputVariables')}>
+            <StartVariablesEditor />
           </Form.Item>
         )}
 
         {type === 'end' && (
-          <Form.Item
-            name="outputVariable"
-            label={t('workflow.nodeConfig.outputVariable')}
-            initialValue="output"
-          >
-            <Input placeholder="output" />
-          </Form.Item>
+          <>
+            <Form.Item
+              name="outputVariable"
+              label={t('workflow.nodeConfig.outputVariable')}
+              initialValue="output"
+            >
+              <Input placeholder="output" />
+            </Form.Item>
+            <Form.Item
+              name="outputMode"
+              label={t('workflow.nodeConfig.outputMode')}
+              initialValue="模板渲染"
+            >
+              <Select
+                options={[
+                  { label: t('workflow.nodeConfig.outputModeTemplate'), value: '模板渲染' },
+                  { label: t('workflow.nodeConfig.outputModeVariable'), value: '变量映射' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="outputTemplate" label={t('workflow.nodeConfig.outputTemplate')}>
+              <Input.TextArea
+                rows={4}
+                placeholder="{{llm.output}}"
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
+            </Form.Item>
+          </>
         )}
 
         {type === 'llm' && (
@@ -93,8 +156,15 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             </Form.Item>
             <Form.Item name="systemPrompt" label={t('workflow.nodeConfig.systemPrompt')}>
               <Input.TextArea
-                rows={6}
+                rows={4}
                 placeholder={t('workflow.nodeConfig.promptPlaceholder')}
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
+            </Form.Item>
+            <Form.Item name="prompt" label={t('workflow.nodeConfig.prompt')}>
+              <Input.TextArea
+                rows={3}
+                placeholder="{{start.query}}"
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
@@ -133,6 +203,13 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             >
               <InputNumber min={1} style={{ width: '100%' }} />
             </Form.Item>
+            <Form.Item name="query" label={t('workflow.nodeConfig.query')}>
+              <Input.TextArea
+                rows={2}
+                placeholder="{{start.query}}"
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
+            </Form.Item>
             <Form.Item name="topK" label={t('workflow.nodeConfig.topK')} initialValue={5}>
               <InputNumber min={1} max={20} style={{ width: '100%' }} />
             </Form.Item>
@@ -163,7 +240,7 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             <Form.Item name="code" label={t('workflow.nodeConfig.code')}>
               <Input.TextArea
                 rows={12}
-                placeholder="// input: string&#10;// return string"
+                placeholder="// input.xxx 可引用映射的变量&#10;// return result"
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
@@ -171,30 +248,17 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
         )}
 
         {type === 'condition' && (
-          <>
-            <Form.Item
-              name="variable"
-              label={t('workflow.nodeConfig.variable')}
-              initialValue="input"
-            >
-              <Input placeholder="input" />
-            </Form.Item>
-            <Form.Item name="operator" label={t('workflow.nodeConfig.operator')} initialValue="eq">
-              <Select
-                options={[
-                  { label: t('workflow.nodeConfig.opEq'), value: 'eq' },
-                  { label: t('workflow.nodeConfig.opNeq'), value: 'neq' },
-                  { label: t('workflow.nodeConfig.opContains'), value: 'contains' },
-                  { label: t('workflow.nodeConfig.opNotContains'), value: 'not_contains' },
-                  { label: t('workflow.nodeConfig.opGt'), value: 'gt' },
-                  { label: t('workflow.nodeConfig.opLt'), value: 'lt' },
-                ]}
-              />
-            </Form.Item>
-            <Form.Item name="value" label={t('workflow.nodeConfig.value')}>
-              <Input placeholder={t('workflow.nodeConfig.valuePlaceholder')} />
-            </Form.Item>
-          </>
+          <Form.Item
+            name="conditionExpr"
+            label={t('workflow.nodeConfig.conditionExpr')}
+            initialValue='{{query}} != ""'
+          >
+            <Input.TextArea
+              rows={2}
+              placeholder='{{llm.output}} contains "yes"'
+              style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+            />
+          </Form.Item>
         )}
 
         {type === 'http' && (
@@ -203,7 +267,11 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
               <Select options={HTTP_METHODS} />
             </Form.Item>
             <Form.Item name="url" label={t('workflow.nodeConfig.url')} rules={[{ required: true }]}>
-              <Input placeholder={t('workflow.nodeConfig.urlPlaceholder')} />
+              <Input.TextArea
+                rows={2}
+                placeholder="https://api.example.com/{{start.path}}"
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
             </Form.Item>
             <Form.Item label={t('workflow.nodeConfig.headers')}>
               <HttpHeadersEditor />
@@ -211,7 +279,7 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             <Form.Item name="body" label={t('workflow.nodeConfig.body')}>
               <Input.TextArea
                 rows={4}
-                placeholder={t('workflow.nodeConfig.bodyPlaceholder')}
+                placeholder={'{"query": "{{llm.output}}"}'}
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
@@ -248,7 +316,10 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
               {({ getFieldValue }) =>
                 getFieldValue('mode') === 'array' && (
                   <Form.Item name="arrayVariable" label={t('workflow.nodeConfig.loopArray')}>
-                    <Input placeholder={t('workflow.nodeConfig.loopArrayPlaceholder')} />
+                    <Input
+                      placeholder="{{kb.documents}}"
+                      style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+                    />
                   </Form.Item>
                 )
               }
@@ -275,7 +346,7 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             <Form.Item name="value" label={t('workflow.nodeConfig.varValue')}>
               <Input.TextArea
                 rows={4}
-                placeholder={t('workflow.nodeConfig.varValuePlaceholder')}
+                placeholder="{{llm.output}}"
                 style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
               />
             </Form.Item>
@@ -291,12 +362,12 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             >
               <InputNumber min={1} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item
-              name="inputVariable"
-              label={t('workflow.nodeConfig.agentInput')}
-              initialValue="input"
-            >
-              <Input placeholder={t('workflow.nodeConfig.agentInputPlaceholder')} />
+            <Form.Item name="query" label={t('workflow.nodeConfig.query')}>
+              <Input.TextArea
+                rows={2}
+                placeholder="{{start.query}}"
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
             </Form.Item>
           </>
         )}
@@ -311,8 +382,98 @@ export default function NodeConfigDrawer({ node, onClose, onSave }: Props) {
             <InputNumber min={1} max={300} style={{ width: '100%' }} />
           </Form.Item>
         )}
+
+        {/* Output variables display */}
+        {outputs.length > 0 && (
+          <>
+            <Divider style={{ margin: '12px 0' }} />
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, fontWeight: 600 }}>
+                {t('workflow.nodeConfig.outputs')}
+              </Text>
+              <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {outputs.map((out) => (
+                  <Tag key={out.key} style={{ fontSize: 11 }}>
+                    <Text code style={{ fontSize: 11 }}>
+                      {out.key}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
+                      {out.label}
+                    </Text>
+                  </Tag>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </Form>
     </Drawer>
+  )
+}
+
+export default function NodeConfigDrawer({ node, ...props }: Props) {
+  if (!node) {
+    return (
+      <Drawer open={false} onClose={props.onClose} width={360}>
+        <Form layout="vertical" />
+      </Drawer>
+    )
+  }
+  return <NodeConfigForm key={node.id} node={node} {...props} />
+}
+
+// Variable list editor for Start node
+function StartVariablesEditor() {
+  const { t } = useTranslation()
+  const [form] = Form.useForm()
+  const existing = (form.getFieldValue('variables') as StartNodeVariable[] | undefined) ?? [
+    { name: 'query', value: '' },
+  ]
+  const [variables, setVariables] = useState<StartNodeVariable[]>(existing)
+
+  const add = () => {
+    const next = [...variables, { name: '', value: '' }]
+    setVariables(next)
+    form.setFieldValue('variables', next)
+  }
+
+  const remove = (i: number) => {
+    const next = variables.filter((_, idx) => idx !== i)
+    setVariables(next)
+    form.setFieldValue('variables', next)
+  }
+
+  const update = (i: number, field: 'name' | 'value', val: string) => {
+    const next = variables.map((v, idx) => (idx === i ? { ...v, [field]: val } : v))
+    setVariables(next)
+    form.setFieldValue('variables', next)
+  }
+
+  return (
+    <div>
+      {variables.map((v, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <Input
+            size="small"
+            placeholder={t('workflow.nodeConfig.varName')}
+            value={v.name}
+            onChange={(e) => update(i, 'name', e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <Input
+            size="small"
+            placeholder={t('workflow.nodeConfig.varDefaultValue')}
+            value={v.value}
+            onChange={(e) => update(i, 'value', e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => remove(i)} />
+        </div>
+      ))}
+      <Button size="small" icon={<PlusOutlined />} onClick={add}>
+        {t('workflow.nodeConfig.addVariable')}
+      </Button>
+    </div>
   )
 }
 

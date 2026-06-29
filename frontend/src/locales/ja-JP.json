@@ -914,7 +914,24 @@
     "nodeConfig": {
       "title": "設定 — {{label}}",
       "inputVariable": "入力変数",
+      "inputVariables": "入力変数リスト",
+      "varName": "変数名",
+      "varDefaultValue": "デフォルト値",
+      "addVariable": "変数を追加",
       "outputVariable": "出力変数",
+      "outputMode": "出力モード",
+      "outputModeTemplate": "テンプレート",
+      "outputModeVariable": "変数マッピング",
+      "outputTemplate": "出力テンプレート（{{nodeId.key}} サポート）",
+      "outputs": "出力変数",
+      "inputMapping": "入力マッピング",
+      "upstreamNode": "上流ノード",
+      "mapTo": "マップ先",
+      "noUpstream": "上流ノードがありません",
+      "prompt": "ユーザーメッセージ（変数サポート）",
+      "query": "クエリ（変数サポート）",
+      "inputs": "入力マッピング（JSON、変数サポート）",
+      "conditionExpr": "条件式（{{var}} サポート）",
       "model": "モデル",
       "systemPrompt": "システムプロンプト",
       "promptPlaceholder": "あなたはプロフェッショナルなAIアシスタントです…",
@@ -986,6 +1003,10 @@
       "variable": "{{key}} に代入",
       "agent_call": "Agent #{{id}}",
       "delay": "{{seconds}}秒待機"
+    },
+    "variablePicker": {
+      "title": "変数を選択",
+      "empty": "利用可能な変数がありません"
     },
     "debug": {
       "title": "デバッグ",

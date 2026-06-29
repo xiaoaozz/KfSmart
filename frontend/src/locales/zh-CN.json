@@ -914,7 +914,24 @@
     "nodeConfig": {
       "title": "配置 — {{label}}",
       "inputVariable": "输入变量名",
+      "inputVariables": "输入变量",
+      "varName": "变量名",
+      "varDefaultValue": "默认值",
+      "addVariable": "添加变量",
       "outputVariable": "输出变量名",
+      "outputMode": "输出模式",
+      "outputModeTemplate": "模板渲染",
+      "outputModeVariable": "变量映射",
+      "outputTemplate": "输出模板（支持 {{nodeId.key}} 变量）",
+      "outputs": "输出变量",
+      "inputMapping": "入参映射",
+      "upstreamNode": "上游节点",
+      "mapTo": "映射到",
+      "noUpstream": "无上游节点",
+      "prompt": "用户消息（支持变量）",
+      "query": "查询内容（支持变量）",
+      "inputs": "输入映射（JSON，支持变量）",
+      "conditionExpr": "条件表达式（支持 {{var}}）",
       "model": "模型",
       "systemPrompt": "系统 Prompt",
       "promptPlaceholder": "你是一个专业的 AI 助手…",
@@ -986,6 +1003,10 @@
       "variable": "赋值 {{key}}",
       "agent_call": "调用 Agent #{{id}}",
       "delay": "等待 {{seconds}}s"
+    },
+    "variablePicker": {
+      "title": "选择变量",
+      "empty": "暂无可用变量"
     },
     "debug": {
       "title": "调试",

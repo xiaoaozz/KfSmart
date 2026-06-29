@@ -87,15 +87,23 @@ public class LlmNodeExecutor implements NodeExecutor {
         if (maxTokensConfig instanceof Number mt) resolvedConfig.setMaxTokens(mt.intValue());
         if (debugMaxTokens instanceof Number dmt) resolvedConfig.setMaxTokens(dmt.intValue());
 
-        // 3. 构建 LLM 输入
-        String query = String.valueOf(ctx.getVariable("llmPrompt") != null
-            ? ctx.getVariable("llmPrompt")
-            : ctx.getOrDefault("query", ""));
+        // 3. 构建 LLM 输入 — 优先使用 prompt 模板，其次 llmPrompt，最后 query
+        String promptTemplate = node.configString("prompt");
+        String query;
+        if (promptTemplate != null && !promptTemplate.isBlank()) {
+            query = ctx.resolveTemplate(promptTemplate);
+        } else {
+            query = String.valueOf(ctx.getVariable("llmPrompt") != null
+                ? ctx.getVariable("llmPrompt")
+                : ctx.getOrDefault("query", ""));
+        }
         String context = String.valueOf(ctx.getOrDefault("context", ""));
 
-        // 4. 构建 System Prompt
+        // 4. 构建 System Prompt — 支持模板变量解析
         String systemPrompt = firstNonBlank(debugSystemPrompt, nodeSystemPrompt);
-        if (systemPrompt == null || systemPrompt.isBlank()) {
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            systemPrompt = ctx.resolveTemplate(systemPrompt);
+        } else {
             systemPrompt = buildAutoSystemPrompt(ctx);
         }
 
@@ -120,7 +128,7 @@ public class LlmNodeExecutor implements NodeExecutor {
         outputs.put("answer", safeAnswer);
 
         String desc = "调用模型[" + resolvedConfig.getModelName() + "]，输入" + query.length() + "字，输出" + safeAnswer.length() + "字，消耗token=" + (promptTokens + completionTokens);
-        return NodeExecutionResult.of(outputs, desc);
+        return NodeExecutionResult.of(outputs, desc, promptTokens, completionTokens);
     }
 
     private String buildAutoSystemPrompt(ExecutionContext ctx) {

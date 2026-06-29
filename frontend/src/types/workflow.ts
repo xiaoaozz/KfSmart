@@ -81,13 +81,26 @@ export interface WorkflowRun {
 }
 
 // ---- node-specific data shapes ----
+export interface StartNodeVariable {
+  name: string
+  value: string
+}
+
+export interface InputMapping {
+  param: string
+  source: string
+  enabled: boolean
+}
+
 export interface StartNodeData {
   inputVariable: string
+  variables?: StartNodeVariable[]
 }
 
 export interface LlmNodeData {
   model: string
   systemPrompt: string
+  prompt?: string
   temperature: number
   maxTokens: number
 }
@@ -96,6 +109,7 @@ export interface KbNodeData {
   knowledgeBaseId: number
   topK: number
   threshold: number
+  query?: string
 }
 
 export interface CodeNodeData {
@@ -137,6 +151,7 @@ export interface VariableNodeData {
 export interface AgentCallNodeData {
   agentId: number
   inputVariable: string
+  query?: string
 }
 
 export interface DelayNodeData {

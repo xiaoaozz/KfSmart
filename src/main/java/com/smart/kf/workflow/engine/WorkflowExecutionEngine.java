@@ -83,6 +83,12 @@ public class WorkflowExecutionEngine {
         // 提取即时调试覆盖配置
         extractDebugOverrides(effectiveInput);
 
+        // 前端调试面板以 {input: "..."} 传入用户输入，映射到 query 变量
+        Object inputVal = effectiveInput.get("input");
+        if (inputVal != null && effectiveInput.get("query") == null) {
+            effectiveInput.put("query", String.valueOf(inputVal));
+        }
+
         ExecutionContext ctx = new ExecutionContext(workflowId, username, effectiveInput);
         if (progressListener != null) {
             ctx.setProgressListener(progressListener);
@@ -149,6 +155,14 @@ public class WorkflowExecutionEngine {
             ctx.addTrace(trace);
 
             long nodeStart = System.currentTimeMillis();
+            int promptBefore = ctx.getTokenUsage().getPromptTokens();
+            int completionBefore = ctx.getTokenUsage().getCompletionTokens();
+
+            // 执行前解析入参映射，将上游节点输出注入到当前节点可访问的变量中
+            resolveInputMappings(node, ctx);
+
+            Map<String, Object> inputSnapshot = captureNodeInputs(ctx);
+
             try {
                 NodeExecutor executor = registry.getExecutor(node.type());
                 if (executor == null) {
@@ -162,7 +176,21 @@ public class WorkflowExecutionEngine {
                 Map<String, Object> outputs = result.outputs() != null ? result.outputs() : Map.of();
                 ctx.setNodeOutput(currentId, outputs);
 
-                NodeTrace completed = trace.success(System.currentTimeMillis() - nodeStart, outputs, result.description());
+                int promptDelta = ctx.getTokenUsage().getPromptTokens() - promptBefore;
+                int completionDelta = ctx.getTokenUsage().getCompletionTokens() - completionBefore;
+                int nodePromptTokens = result.promptTokens() != null && result.promptTokens() > 0
+                    ? result.promptTokens() : promptDelta;
+                int nodeCompletionTokens = result.completionTokens() != null && result.completionTokens() > 0
+                    ? result.completionTokens() : completionDelta;
+
+                NodeTrace completed = trace.success(
+                    System.currentTimeMillis() - nodeStart,
+                    inputSnapshot,
+                    outputs,
+                    result.description(),
+                    nodePromptTokens,
+                    nodeCompletionTokens
+                );
                 ctx.addTrace(completed);
 
                 // 确定下一批节点
@@ -279,6 +307,56 @@ public class WorkflowExecutionEngine {
         Object value = input.get(key);
         if (value != null) {
             input.put("debug_" + key, value);
+        }
+    }
+
+    private static final List<String> INPUT_KEYS = List.of("query", "context", "llmPrompt", "answer", "documents", "toolResult", "conditionMatched");
+
+    /**
+     * 捕获节点执行时的关键输入变量快照（用于调试展示）。
+     */
+    private Map<String, Object> captureNodeInputs(ExecutionContext ctx) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        for (String key : INPUT_KEYS) {
+            Object val = ctx.getVariable(key);
+            if (val != null) {
+                snapshot.put(key, val);
+            }
+        }
+        return snapshot;
+    }
+
+    /**
+     * 解析节点配置的 inputMappings，将上游节点输出注入到当前节点可访问的变量中。
+     * 映射格式: [{ param: "prompt", source: "start.query", enabled: true }]
+     */
+    @SuppressWarnings("unchecked")
+    private void resolveInputMappings(WorkflowNode node, ExecutionContext ctx) {
+        Object config = node.configObject("inputMappings");
+        if (config == null) return;
+
+        List<Map<String, Object>> mappings = new ArrayList<>();
+        if (config instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) {
+                    mappings.add((Map<String, Object>) map);
+                }
+            }
+        }
+
+        for (Map<String, Object> mapping : mappings) {
+            Object enabledObj = mapping.get("enabled");
+            boolean enabled = enabledObj == null || Boolean.parseBoolean(String.valueOf(enabledObj));
+            if (!enabled) continue;
+
+            String source = String.valueOf(mapping.get("source"));
+            String param = String.valueOf(mapping.get("param"));
+            if (source.isBlank() || param.isBlank()) continue;
+
+            Object value = ctx.resolveTemplate("{{" + source + "}}");
+            if (value != null) {
+                ctx.setVariable(param, value);
+            }
         }
     }
 }

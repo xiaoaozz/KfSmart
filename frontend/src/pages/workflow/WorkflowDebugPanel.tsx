@@ -16,6 +16,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth'
 import { workflowApi } from '@/api/workflow'
+import type { StartNodeData, StartNodeVariable } from '@/types/workflow'
 import styles from './WorkflowDebugPanel.module.css'
 
 const { Text } = Typography
@@ -36,8 +37,14 @@ interface TraceEntry {
   nodeName?: string
   status: 'pending' | 'running' | 'success' | 'error'
   output?: string
+  outputs?: Record<string, unknown>
   errorMessage?: string
   durationMs?: number
+  startedAt?: number
+  promptTokens?: number
+  completionTokens?: number
+  description?: string
+  inputs?: Record<string, unknown>
   order: number
 }
 
@@ -55,6 +62,52 @@ const STATUS_COLOR = {
   error: 'error' as const,
 }
 
+function formatDuration(ms?: number): string {
+  if (ms == null) return ''
+  return `${(ms / 1000).toFixed(2)}s`
+}
+
+function formatTotalTokens(prompt?: number, completion?: number): string | null {
+  const p = prompt ?? 0
+  const c = completion ?? 0
+  const total = p + c
+  return total > 0 ? `${total} tok` : null
+}
+
+function formatTimestamp(ts?: number): string | null {
+  if (!ts) return null
+  const d = new Date(ts)
+  return d.toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function tryStringifyJson(value: unknown): string | null {
+  if (value == null) return null
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function extractOutputText(outputs?: Record<string, unknown>): string | undefined {
+  if (!outputs) return undefined
+  const out = (outputs as Record<string, unknown>).output
+  const ans = (outputs as Record<string, unknown>).answer
+  if (typeof out === 'string') return out
+  if (typeof ans === 'string') return ans
+  return undefined
+}
+
+function getStartVariables(nodes: Node[]): StartNodeVariable[] {
+  const startNode = nodes.find((n) => n.type === 'start')
+  if (!startNode) return [{ name: 'query', value: '' }]
+  const data = startNode.data as unknown as StartNodeData
+  const vars = data?.variables
+  if (!vars || vars.length === 0) return [{ name: 'query', value: '' }]
+  return vars
+}
+
 export default function WorkflowDebugPanel({
   nodes,
   nodeStatusMap: _nodeStatusMap,
@@ -65,7 +118,7 @@ export default function WorkflowDebugPanel({
   const { message } = App.useApp()
   const { t } = useTranslation()
   const token = useAuthStore((s) => s.token)
-  const [form] = Form.useForm<{ input: string }>()
+  const [form] = Form.useForm<Record<string, string>>()
   const [trace, setTrace] = useState<TraceEntry[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isRunning, setIsRunning] = useState(false)
@@ -103,15 +156,20 @@ export default function WorkflowDebugPanel({
           const type = frame.type as string
 
           if (type === 'node_completed' || type === 'node_progress') {
-            // Server sends node info under "node" key OR at top-level
             const node = (frame.node ?? frame) as Record<string, unknown>
             const nodeId = node.nodeId as string
             const nodeType = node.nodeType as string
             const status = (node.status ?? 'success') as TraceEntry['status']
             const durationMs = node.durationMs as number | undefined
             const errorMessage = node.errorMessage as string | undefined
-            const output = node.output as string | undefined
             const nodeName = node.nodeName as string | undefined
+            const outputs = node.outputs as Record<string, unknown> | undefined
+            const description = node.description as string | undefined
+            const promptTokens = node.promptTokens as number | undefined
+            const completionTokens = node.completionTokens as number | undefined
+            const startedAt = node.startedAt as number | undefined
+            const inputs = node.inputs as Record<string, unknown> | undefined
+            const output = extractOutputText(outputs) ?? (node.output as string | undefined)
 
             const order = orderRef.current++
 
@@ -126,6 +184,12 @@ export default function WorkflowDebugPanel({
                 durationMs,
                 errorMessage,
                 output,
+                outputs,
+                description,
+                promptTokens,
+                completionTokens,
+                startedAt,
+                inputs,
                 order: existing >= 0 ? prev[existing].order : order,
               }
               if (existing >= 0) {
@@ -164,20 +228,17 @@ export default function WorkflowDebugPanel({
     [token, nodes, onStatusChange, message, t],
   )
 
+  const startVars = getStartVariables(nodes)
+  const isMultiVar =
+    startVars.length > 1 || (startVars.length === 1 && startVars[0].name !== 'input')
+
   const runMutation = useMutation({
-    mutationFn: (input: string) => workflowApi.run(workflowId, input),
+    mutationFn: (input: string | Record<string, string>) => workflowApi.run(workflowId, input),
     onSuccess: (res) => {
       const pending: StatusMap = {}
       nodes.forEach((n) => (pending[n.id] = 'pending'))
       onStatusChange(pending)
-      setTrace(
-        nodes.map((n, i) => ({
-          nodeId: n.id,
-          nodeType: n.type ?? 'unknown',
-          status: 'pending',
-          order: i,
-        })),
-      )
+      setTrace([])
       setFinalOutput(null)
       setIsRunning(true)
       connectWs(res.executionId)
@@ -209,18 +270,45 @@ export default function WorkflowDebugPanel({
 
       {/* Input + Actions */}
       <div className={styles.inputSection}>
-        <Form form={form} layout="vertical" onFinish={(v) => runMutation.mutate(v.input ?? '')}>
-          <Form.Item
-            name="input"
-            label={t('workflow.debug.inputLabel')}
-            rules={[{ required: true }]}
-          >
-            <Input.TextArea
-              rows={3}
-              placeholder={t('workflow.debug.inputPlaceholder')}
-              style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
-            />
-          </Form.Item>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(v) => {
+            if (isMultiVar) {
+              runMutation.mutate(v as Record<string, string>)
+            } else {
+              runMutation.mutate((v as Record<string, string>).input ?? '')
+            }
+          }}
+        >
+          {isMultiVar ? (
+            startVars.map((variable) => (
+              <Form.Item
+                key={variable.name}
+                name={variable.name}
+                label={variable.name}
+                initialValue={variable.value}
+              >
+                <Input.TextArea
+                  rows={2}
+                  placeholder={variable.value || t('workflow.debug.inputPlaceholder')}
+                  style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+                />
+              </Form.Item>
+            ))
+          ) : (
+            <Form.Item
+              name="input"
+              label={t('workflow.debug.inputLabel')}
+              rules={[{ required: true }]}
+            >
+              <Input.TextArea
+                rows={3}
+                placeholder={t('workflow.debug.inputPlaceholder')}
+                style={{ fontFamily: 'var(--kf-font-mono)', fontSize: 12 }}
+              />
+            </Form.Item>
+          )}
         </Form>
         <Space>
           <Button
@@ -247,64 +335,152 @@ export default function WorkflowDebugPanel({
           <div className={styles.emptyHint}>{t('workflow.debug.emptyLog')}</div>
         ) : (
           <div className={styles.chain}>
-            {sortedTrace.map((entry, idx) => (
-              <div key={entry.nodeId}>
-                <div
-                  className={`${styles.chainNode} ${selectedId === entry.nodeId ? styles.chainNodeSelected : ''}`}
-                  onClick={() => setSelectedId(entry.nodeId === selectedId ? null : entry.nodeId)}
-                >
-                  <span className={styles.chainIcon}>
-                    {STATUS_ICON[entry.status] ?? STATUS_ICON.pending}
-                  </span>
-                  <span className={styles.chainLabel}>{entry.nodeName ?? entry.nodeId}</span>
-                  <Tag
-                    color={STATUS_COLOR[entry.status]}
-                    style={{ marginLeft: 'auto', flexShrink: 0 }}
+            {sortedTrace.map((entry, idx) => {
+              const durStr = formatDuration(entry.durationMs)
+              const tokStr = formatTotalTokens(entry.promptTokens, entry.completionTokens)
+              const tagText = [durStr, tokStr].filter(Boolean).join(' · ')
+              return (
+                <div key={entry.nodeId}>
+                  <div
+                    className={`${styles.chainNode} ${selectedId === entry.nodeId ? styles.chainNodeSelected : ''}`}
+                    onClick={() => setSelectedId(entry.nodeId === selectedId ? null : entry.nodeId)}
                   >
-                    {entry.durationMs != null
-                      ? `${(entry.durationMs / 1000).toFixed(2)}s`
-                      : t(`workflow.debug.${entry.status}`)}
-                  </Tag>
-                  <RightOutlined
-                    className={`${styles.chevron} ${selectedId === entry.nodeId ? styles.chevronOpen : ''}`}
-                  />
-                </div>
+                    <span className={styles.chainIcon}>
+                      {STATUS_ICON[entry.status] ?? STATUS_ICON.pending}
+                    </span>
+                    <span className={styles.chainLabel}>{entry.nodeName ?? entry.nodeId}</span>
+                    {tagText ? (
+                      <Tag
+                        color={STATUS_COLOR[entry.status]}
+                        style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10 }}
+                      >
+                        {tagText}
+                      </Tag>
+                    ) : (
+                      <Tag
+                        color={STATUS_COLOR[entry.status]}
+                        style={{ marginLeft: 'auto', flexShrink: 0 }}
+                      >
+                        {t(`workflow.debug.${entry.status}`)}
+                      </Tag>
+                    )}
+                    <RightOutlined
+                      className={`${styles.chevron} ${selectedId === entry.nodeId ? styles.chevronOpen : ''}`}
+                    />
+                  </div>
 
-                {/* Inline detail expand */}
-                {selectedId === entry.nodeId && (
-                  <div className={styles.chainDetail}>
-                    <div className={styles.detailRow}>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        Type
-                      </Text>
-                      <Text code style={{ fontSize: 11 }}>
-                        {entry.nodeType}
-                      </Text>
+                  {/* Inline detail expand */}
+                  {selectedId === entry.nodeId && (
+                    <div className={styles.chainDetail}>
+                      {/* Basic info row */}
+                      <div className={styles.detailMetaRow}>
+                        <span className={styles.metaTag}>
+                          <Text code style={{ fontSize: 10 }}>
+                            {entry.nodeType}
+                          </Text>
+                        </span>
+                        {durStr && (
+                          <span className={styles.metaTag}>
+                            <Text type="secondary" style={{ fontSize: 10 }}>
+                              ⏱ {durStr}
+                            </Text>
+                          </span>
+                        )}
+                        {formatTimestamp(entry.startedAt) && (
+                          <span className={styles.metaTag}>
+                            <Text type="secondary" style={{ fontSize: 10 }}>
+                              🕐 {formatTimestamp(entry.startedAt)}
+                            </Text>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Token usage */}
+                      {entry.promptTokens != null &&
+                        entry.completionTokens != null &&
+                        (entry.promptTokens > 0 || entry.completionTokens > 0) && (
+                          <div className={styles.tokenBar}>
+                            <span className={styles.tokenItem}>
+                              <Text type="secondary" style={{ fontSize: 10 }}>
+                                Prompt
+                              </Text>
+                              <span className={styles.tokenValue}>{entry.promptTokens}</span>
+                            </span>
+                            <span className={styles.tokenItem}>
+                              <Text type="secondary" style={{ fontSize: 10 }}>
+                                Completion
+                              </Text>
+                              <span className={styles.tokenValue}>{entry.completionTokens}</span>
+                            </span>
+                            <span className={styles.tokenItem}>
+                              <Text type="secondary" style={{ fontSize: 10 }}>
+                                Total
+                              </Text>
+                              <span className={styles.tokenValueTotal}>
+                                {entry.promptTokens + entry.completionTokens}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+
+                      {/* Description */}
+                      {entry.description && (
+                        <div className={styles.detailDesc}>
+                          <Text style={{ fontSize: 11 }}>{entry.description}</Text>
+                        </div>
+                      )}
+
+                      {/* Error */}
+                      {entry.errorMessage && (
+                        <div className={styles.detailError}>
+                          <Text type="danger" style={{ fontSize: 11 }}>
+                            {entry.errorMessage}
+                          </Text>
+                        </div>
+                      )}
+
+                      {/* Inputs */}
+                      {entry.inputs && Object.keys(entry.inputs).length > 0 && (
+                        <div className={styles.detailBlock}>
+                          <div className={styles.detailBlockTitle}>输入</div>
+                          <div className={styles.detailJson}>
+                            <pre>{tryStringifyJson(entry.inputs)}</pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Outputs */}
+                      {entry.outputs && Object.keys(entry.outputs).length > 0 && (
+                        <div className={styles.detailBlock}>
+                          <div className={styles.detailBlockTitle}>输出</div>
+                          <div className={styles.detailJson}>
+                            <pre>{tryStringifyJson(entry.outputs)}</pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Fallback output (for pending/running states) */}
+                      {!entry.outputs && entry.output && (
+                        <div className={styles.detailBlock}>
+                          <div className={styles.detailBlockTitle}>输出</div>
+                          <div className={styles.detailJson}>
+                            <pre>{entry.output}</pre>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {entry.errorMessage && (
-                      <div className={styles.detailRow}>
-                        <Text type="danger" style={{ fontSize: 11 }}>
-                          {entry.errorMessage}
-                        </Text>
-                      </div>
-                    )}
-                    {entry.output && (
-                      <div className={styles.detailOutput}>
-                        <pre>{entry.output}</pre>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  )}
 
-                {/* Connector arrow (not after last) */}
-                {idx < sortedTrace.length - 1 && (
-                  <div className={styles.connector}>
-                    <div className={styles.connectorLine} />
-                    <div className={styles.connectorArrow} />
-                  </div>
-                )}
-              </div>
-            ))}
+                  {/* Connector arrow (not after last) */}
+                  {idx < sortedTrace.length - 1 && (
+                    <div className={styles.connector}>
+                      <div className={styles.connectorLine} />
+                      <div className={styles.connectorArrow} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <div ref={traceEndRef} />
           </div>
         )}

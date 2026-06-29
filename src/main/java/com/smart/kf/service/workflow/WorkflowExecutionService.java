@@ -98,18 +98,26 @@ public class WorkflowExecutionService {
                     nodesJson, edgesJson, workflowId, username, input,
                     trace -> {
                         try {
-                            broadcaster.broadcast(executionId, objectMapper.writeValueAsString(Map.of(
-                                "type", "node_completed",
-                                "executionId", executionId,
-                                "node", Map.of(
-                                    "nodeId", trace.nodeId(),
-                                    "nodeName", trace.nodeName(),
-                                    "nodeType", trace.nodeType(),
-                                    "status", trace.status(),
-                                    "durationMs", trace.durationMs(),
-                                    "errorMessage", trace.errorMessage() != null ? trace.errorMessage() : ""
-                                )
-                            )));
+                            java.util.Map<String, Object> nodeInfo = new java.util.LinkedHashMap<>();
+                            nodeInfo.put("nodeId", trace.nodeId());
+                            nodeInfo.put("nodeName", trace.nodeName());
+                            nodeInfo.put("nodeType", trace.nodeType());
+                            nodeInfo.put("status", trace.status());
+                            nodeInfo.put("durationMs", trace.durationMs());
+                            nodeInfo.put("startedAt", trace.startedAt());
+                            nodeInfo.put("promptTokens", trace.promptTokens() != null ? trace.promptTokens() : 0);
+                            nodeInfo.put("completionTokens", trace.completionTokens() != null ? trace.completionTokens() : 0);
+                            nodeInfo.put("errorMessage", trace.errorMessage() != null ? trace.errorMessage() : "");
+                            nodeInfo.put("description", trace.description() != null ? trace.description() : "");
+                            nodeInfo.put("inputs", trace.inputs() != null ? trace.inputs() : Map.of());
+                            nodeInfo.put("outputs", trace.outputs() != null ? trace.outputs() : Map.of());
+
+                            java.util.Map<String, Object> frame = new java.util.LinkedHashMap<>();
+                            frame.put("type", "node_completed");
+                            frame.put("executionId", executionId);
+                            frame.put("node", nodeInfo);
+
+                            broadcaster.broadcast(executionId, objectMapper.writeValueAsString(frame));
                         } catch (Exception ignored) {}
                     }
                 );
@@ -119,6 +127,14 @@ public class WorkflowExecutionService {
             } catch (Exception e) {
                 logger.error("异步执行失败: {}", e.getMessage(), e);
                 broadcaster.broadcast(executionId, "{\"type\":\"execution_failed\",\"executionId\":\"" + executionId + "\",\"error\":\"" + e.getMessage() + "\"}");
+            } finally {
+                // 延迟清理缓冲，确保后订阅的客户端也能收到最终消息
+                new java.util.Timer().schedule(new java.util.TimerTask() {
+                    @Override
+                    public void run() {
+                        broadcaster.cleanup(executionId);
+                    }
+                }, 30000);
             }
         }).start();
 

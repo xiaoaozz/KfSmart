@@ -914,7 +914,24 @@
     "nodeConfig": {
       "title": "Config — {{label}}",
       "inputVariable": "Input Variable",
+      "inputVariables": "Input Variables",
+      "varName": "Name",
+      "varDefaultValue": "Default Value",
+      "addVariable": "Add Variable",
       "outputVariable": "Output Variable",
+      "outputMode": "Output Mode",
+      "outputModeTemplate": "Template Render",
+      "outputModeVariable": "Variable Mapping",
+      "outputTemplate": "Output Template (supports {{nodeId.key}})",
+      "outputs": "Output Variables",
+      "inputMapping": "Input Mapping",
+      "upstreamNode": "Upstream Node",
+      "mapTo": "Map To",
+      "noUpstream": "No upstream nodes",
+      "prompt": "User Message (supports variables)",
+      "query": "Query (supports variables)",
+      "inputs": "Input Mapping (JSON, supports variables)",
+      "conditionExpr": "Condition Expression (supports {{var}})",
       "model": "Model",
       "systemPrompt": "System Prompt",
       "promptPlaceholder": "You are a professional AI assistant…",
@@ -986,6 +1003,10 @@
       "variable": "assign {{key}}",
       "agent_call": "Agent #{{id}}",
       "delay": "wait {{seconds}}s"
+    },
+    "variablePicker": {
+      "title": "Select Variable",
+      "empty": "No variables available"
     },
     "debug": {
       "title": "Debug",
