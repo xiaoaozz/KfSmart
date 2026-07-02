@@ -8,7 +8,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
     volumes:
       - mysql-data:/var/lib/mysql
       - ~/data/docker/mysql/conf:/etc/mysql/conf.d
@@ -30,8 +30,8 @@ services:
       - minio-data:/data
       - ~/data/docker/minio/config:/root/.minio
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: 123456789
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-123456789}
     command: server /data --console-address ":19001" -address ":19000"
 
   redis:
@@ -49,7 +49,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass 123456 --appendonly yes
+    command: redis-server --bind 0.0.0.0 --port 6379 --requirepass ${REDIS_PASSWORD:-123456} --appendonly yes
 
   kafka:
     image: bitnamilegacy/kafka:latest
@@ -122,7 +122,7 @@ services:
       - es-data:/usr/share/elasticsearch/data
       - es-plugins:/usr/share/elasticsearch/plugins
     environment:
-      - ELASTIC_PASSWORD=123456
+      - ELASTIC_PASSWORD=${ES_PASSWORD:-123456}
       - node.name=kf-smart-es01
       - discovery.type=single-node
       - xpack.license.self_generated.type=basic

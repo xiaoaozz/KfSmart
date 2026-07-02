@@ -271,6 +271,21 @@ CREATE TABLE `login_records` (
   CONSTRAINT `fk_lr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='登录记录表';
 
+CREATE TABLE `admin_operation_logs` (
+  `id`          bigint       NOT NULL AUTO_INCREMENT,
+  `operation`   varchar(64)  NOT NULL                COMMENT '操作类型：CLEAR_ALL_DATA / MIGRATE_MINIO 等',
+  `username`    varchar(255) NOT NULL                COMMENT '触发操作的管理员用户名',
+  `user_id`     bigint                DEFAULT NULL   COMMENT '管理员用户 ID（token 解析失败可为空）',
+  `status`      varchar(20)  NOT NULL                COMMENT 'SUCCESS / DENIED / FAILED',
+  `detail`      text                                      COMMENT '详情：被拒原因/迁移统计/异常摘要',
+  `ip_address`  varchar(255)          DEFAULT NULL,
+  `created_at`  datetime(6)           DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_aol_operation`   (`operation`),
+  KEY `idx_aol_username`    (`username`),
+  KEY `idx_aol_created_at`  (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='管理员危险操作审计日志表';
+
 CREATE TABLE `user_notifications` (
   `id`                 bigint       NOT NULL AUTO_INCREMENT,
   `recipient_username` varchar(255) NOT NULL  COMMENT '历史审计保留，新代码使用 recipient_id',

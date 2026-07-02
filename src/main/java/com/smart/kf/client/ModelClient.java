@@ -2,12 +2,14 @@ package com.smart.kf.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smart.kf.client.protocol.AnthropicProtocolHandler;
+import com.smart.kf.client.protocol.ModelProtocolHandler;
+import com.smart.kf.client.protocol.OpenAiProtocolHandler;
 import com.smart.kf.config.AiProperties;
 import com.smart.kf.model.ApiKeyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -16,19 +18,22 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 通用 AI 模型对话客户端，兼容所有遵循 OpenAI Chat Completions 协议的模型服务。
+ * 通用 AI 模型对话客户端，兼容所有遵循 OpenAI Chat Completions 协议的模型服务，
+ * 并支持 Anthropic Messages API。
  * <p>
  * 支持两种配置来源（优先级从高到低）：
  * <ol>
  *   <li>通过 {@link ApiKeyConfig} 动态指定（数据库管理的 API Key 配置）</li>
  *   <li>回退到 YAML 文件中的默认配置（{@code ai.default.*}）</li>
  * </ol>
+ *
+ * <p>协议差异（OpenAI / Anthropic）下沉到 {@link ModelProtocolHandler} 策略实现，
+ * 本类只保留协议无关的共享逻辑：密钥/模型解析、消息组装、URI 解析、非流式错误体解析。
  */
 @Service
 public class ModelClient {
@@ -41,18 +46,54 @@ public class ModelClient {
     private final String defaultModel;
     /** 全局 AI 属性（Prompt 模板 + 生成参数） */
     private final AiProperties aiProperties;
+    /** 全局单例 ObjectMapper（替代每次 new ObjectMapper()） */
+    private final ObjectMapper objectMapper;
+    /** 协议策略：OpenAI / Anthropic */
+    private final OpenAiProtocolHandler openAiHandler;
+    private final AnthropicProtocolHandler anthropicHandler;
 
     public ModelClient(@Value("${ai.default.url}") String apiUrl,
                        @Value("${ai.default.key:}") String apiKey,
                        @Value("${ai.default.model}") String model,
-                       AiProperties aiProperties) {
+                       AiProperties aiProperties,
+                       ObjectMapper objectMapper,
+                       OpenAiProtocolHandler openAiHandler,
+                       AnthropicProtocolHandler anthropicHandler) {
         WebClient.Builder builder = WebClient.builder().baseUrl(apiUrl);
-        if (apiKey != null && !apiKey.trim().isEmpty()) {
-            builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
-        }
+        // 默认 YAML 配置按 OpenAI 协议鉴权
+        openAiHandler.applyAuthHeaders(builder, apiKey);
         this.defaultWebClient = builder.build();
         this.defaultModel = model;
         this.aiProperties = aiProperties;
+        this.objectMapper = objectMapper;
+        this.openAiHandler = openAiHandler;
+        this.anthropicHandler = anthropicHandler;
+    }
+
+    /** 解析后的客户端+模型+鉴权类型，统一 4 处重复的 client/model 解析逻辑。 */
+    private record ResolvedClient(WebClient client, String model, String authType) {
+    }
+
+    private ResolvedClient resolveClientAndModel(ApiKeyConfig apiKeyConfig) {
+        if (apiKeyConfig != null) {
+            logger.info("使用数据库 API Key 配置发起请求，id={}, name={}, provider={}, model={}, authType={}",
+                    apiKeyConfig.getId(), apiKeyConfig.getName(), apiKeyConfig.getProvider(),
+                    apiKeyConfig.getModelName(), apiKeyConfig.getAuthType());
+            String authType = apiKeyConfig.getAuthType() != null
+                    ? apiKeyConfig.getAuthType().toLowerCase()
+                    : "bearer";
+            return new ResolvedClient(
+                    buildWebClient(apiKeyConfig.getApiKey(), authType),
+                    apiKeyConfig.getModelName(),
+                    authType);
+        }
+        logger.info("使用 YAML 默认配置发起请求，model={}", defaultModel);
+        return new ResolvedClient(defaultWebClient, defaultModel, "bearer");
+    }
+
+    /** 按 authType 选择协议策略：anthropic 走 Anthropic，其余（bearer/openai 等）走 OpenAI。 */
+    private ModelProtocolHandler handlerFor(String authType) {
+        return "anthropic".equals(authType) ? anthropicHandler : openAiHandler;
     }
 
     /**
@@ -77,107 +118,16 @@ public class ModelClient {
                                      Consumer<String> onChunk,
                                      Consumer<Throwable> onError,
                                      Runnable onComplete) {
-        WebClient client;
-        String model;
-
-        if (apiKeyConfig != null) {
-            logger.info("使用数据库 API Key 配置发起请求，id={}, name={}, provider={}, model={}, authType={}",
-                    apiKeyConfig.getId(), apiKeyConfig.getName(), apiKeyConfig.getProvider(),
-                    apiKeyConfig.getModelName(), apiKeyConfig.getAuthType());
-            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
-            model = apiKeyConfig.getModelName();
-        } else {
-            logger.info("使用 YAML 默认配置发起请求，model={}", defaultModel);
-            client = defaultWebClient;
-            model = defaultModel;
-        }
+        ResolvedClient resolved = resolveClientAndModel(apiKeyConfig);
+        WebClient client = resolved.client();
+        String model = resolved.model();
+        String authType = resolved.authType();
 
         Map<String, Object> requestBody = buildRequest(userMessage, context, history, model, apiKeyConfig);
-
-        // Anthropic API 使用不同的端点和请求格式
-        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
-                ? apiKeyConfig.getAuthType().toLowerCase()
-                : "bearer";
-
-        // 解析请求 URI：兼容「仅填写 baseUrl」和「填写完整 endpoint URL」两种情况
         String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
         logger.info("实际请求 URI: {}", resolvedUri);
 
-        if ("anthropic".equals(authType)) {
-            return client.post()
-                    .uri(resolvedUri)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .onStatus(
-                            HttpStatusCode::isError,
-                            clientResponse -> clientResponse.bodyToMono(String.class)
-                                    .flatMap(errorBody -> {
-                                        logger.error("Anthropic 服务返回错误，HTTP状态码: {}，响应体: {}",
-                                                clientResponse.statusCode(), errorBody);
-                                        String msg = "模型服务暂时不可用";
-                                        try {
-                                            JsonNode errNode = new ObjectMapper().readTree(errorBody);
-                                            if (errNode.has("error") && errNode.get("error").has("message")) {
-                                                msg = errNode.get("error").get("message").asText(msg);
-                                            }
-                                        } catch (Exception e) {
-                                            logger.warn("无法解析 Anthropic 错误响应体: {}", errorBody);
-                                        }
-                                        return Mono.error(new RuntimeException(msg));
-                                    })
-                    )
-                    .bodyToFlux(String.class)
-                    .subscribe(
-                            chunk -> processAnthropicChunk(chunk, onChunk, onError),
-                            onError,
-                            onComplete
-                    );
-        }
-
-        return client.post()
-                .uri(resolvedUri)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(
-                        HttpStatusCode::isError,
-                        clientResponse -> clientResponse.bodyToMono(String.class)
-                                .flatMap(errorBody -> {
-                                    logger.error("模型服务返回错误，HTTP状态码: {}，响应体: {}",
-                                            clientResponse.statusCode(), errorBody);
-                                    String msg = "模型服务暂时不可用";
-                                    try {
-                                        JsonNode errNode = new ObjectMapper().readTree(errorBody);
-                                        if (errNode.has("msg")) {
-                                            msg = errNode.get("msg").asText(msg);
-                                        } else if (errNode.has("message")) {
-                                            msg = errNode.get("message").asText(msg);
-                                        } else if (errNode.has("error")) {
-                                            JsonNode errorField = errNode.get("error");
-                                            if (errorField.isObject()) {
-                                                // Nested error object e.g. {"error":{"code":"1113","message":"..."}}
-                                                if (errorField.has("message")) {
-                                                    msg = errorField.get("message").asText(msg);
-                                                } else if (errorField.has("msg")) {
-                                                    msg = errorField.get("msg").asText(msg);
-                                                }
-                                            } else {
-                                                msg = errorField.asText(msg);
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        logger.warn("无法解析模型服务错误响应体: {}", errorBody);
-                                    }
-                                    return Mono.error(new RuntimeException(msg));
-                                })
-                )
-                .bodyToFlux(String.class)
-                .subscribe(
-                        chunk -> processChunk(chunk, onChunk, onError),
-                        onError,
-                        onComplete
-                );
+        return handlerFor(authType).stream(client, resolvedUri, requestBody, onChunk, onError, onComplete, objectMapper);
     }
 
     /**
@@ -189,20 +139,10 @@ public class ModelClient {
                        List<Map<String, String>> history,
                        ApiKeyConfig apiKeyConfig,
                        String systemPrompt) {
-        WebClient client;
-        String model;
-
-        if (apiKeyConfig != null) {
-            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
-            model = apiKeyConfig.getModelName();
-        } else {
-            client = defaultWebClient;
-            model = defaultModel;
-        }
-
-        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
-                ? apiKeyConfig.getAuthType().toLowerCase()
-                : "bearer";
+        ResolvedClient resolved = resolveClientAndModel(apiKeyConfig);
+        WebClient client = resolved.client();
+        String model = resolved.model();
+        String authType = resolved.authType();
         Map<String, Object> requestBody = buildRequest(userMessage, context, history, model, apiKeyConfig, systemPrompt);
         requestBody.put("stream", false);
         String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
@@ -220,7 +160,7 @@ public class ModelClient {
                 .bodyToMono(String.class)
                 .block();
 
-        return "anthropic".equals(authType) ? parseAnthropicText(response) : parseOpenAiText(response);
+        return handlerFor(authType).parseText(response, objectMapper);
     }
 
     /**
@@ -230,38 +170,7 @@ public class ModelClient {
                        String context,
                        List<Map<String, String>> history,
                        ApiKeyConfig apiKeyConfig) {
-        WebClient client;
-        String model;
-
-        if (apiKeyConfig != null) {
-            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
-            model = apiKeyConfig.getModelName();
-        } else {
-            client = defaultWebClient;
-            model = defaultModel;
-        }
-
-        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
-                ? apiKeyConfig.getAuthType().toLowerCase()
-                : "bearer";
-        Map<String, Object> requestBody = buildRequest(userMessage, context, history, model, apiKeyConfig);
-        requestBody.put("stream", false);
-        String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
-
-        String response = client.post()
-                .uri(resolvedUri)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(requestBody)
-                .retrieve()
-                .onStatus(
-                        HttpStatusCode::isError,
-                        clientResponse -> clientResponse.bodyToMono(String.class)
-                                .flatMap(errorBody -> Mono.error(new RuntimeException(parseErrorMessage(errorBody))))
-                )
-                .bodyToMono(String.class)
-                .block();
-
-        return "anthropic".equals(authType) ? parseAnthropicText(response) : parseOpenAiText(response);
+        return chat(userMessage, context, history, apiKeyConfig, null);
     }
 
     /**
@@ -274,33 +183,14 @@ public class ModelClient {
             ApiKeyConfig apiKeyConfig,
             String systemPrompt,
             List<Map<String, Object>> tools) {
-        WebClient client;
-        String model;
+        ResolvedClient resolved = resolveClientAndModel(apiKeyConfig);
+        WebClient client = resolved.client();
+        String model = resolved.model();
+        String authType = resolved.authType();
 
-        if (apiKeyConfig != null) {
-            client = buildWebClient(apiKeyConfig.getApiKey(), apiKeyConfig.getAuthType());
-            model = apiKeyConfig.getModelName();
-        } else {
-            client = defaultWebClient;
-            model = defaultModel;
-        }
-
-        String authType = apiKeyConfig != null && apiKeyConfig.getAuthType() != null
-                ? apiKeyConfig.getAuthType().toLowerCase()
-                : "bearer";
-
-        Map<String, Object> requestBody = buildRequest(userMessage, null, history, model, apiKeyConfig, systemPrompt);
+        List<Map<String, String>> messages = buildMessages(userMessage, null, history, systemPrompt);
+        Map<String, Object> requestBody = handlerFor(authType).buildRequestBody(messages, model, apiKeyConfig, aiProperties, tools);
         requestBody.put("stream", false);
-
-        if (tools != null && !tools.isEmpty()) {
-            if ("anthropic".equals(authType)) {
-                requestBody.put("tools", convertToAnthropicTools(tools));
-                requestBody.put("tool_choice", Map.of("type", "auto"));
-            } else {
-                requestBody.put("tools", tools);
-                requestBody.put("tool_choice", "auto");
-            }
-        }
 
         String resolvedUri = resolveRequestUri(apiKeyConfig, authType);
 
@@ -317,102 +207,7 @@ public class ModelClient {
                 .bodyToMono(String.class)
                 .block();
 
-        return "anthropic".equals(authType)
-                ? parseAnthropicFunctionCall(response)
-                : parseOpenAiFunctionCall(response);
-    }
-
-    // ─── Function Call 解析 ───
-
-    private List<Map<String, Object>> convertToAnthropicTools(List<Map<String, Object>> openAiTools) {
-        List<Map<String, Object>> anthropicTools = new ArrayList<>();
-        for (Map<String, Object> tool : openAiTools) {
-            Object functionObj = tool.get("function");
-            if (functionObj instanceof Map<?, ?> function) {
-                Map<String, Object> at = new HashMap<>();
-                at.put("name", function.get("name"));
-                at.put("description", function.get("description"));
-                at.put("input_schema", function.get("parameters"));
-                anthropicTools.add(at);
-            }
-        }
-        return anthropicTools;
-    }
-
-    @SuppressWarnings("unchecked")
-    private FunctionCallResult parseOpenAiFunctionCall(String response) {
-        try {
-            JsonNode node = new ObjectMapper().readTree(response);
-            JsonNode choice = node.path("choices").path(0);
-            JsonNode message = choice.path("message");
-            String content = message.path("content").asText("");
-            String finishReason = choice.path("finish_reason").asText("");
-
-            List<ToolCall> toolCalls = new ArrayList<>();
-            JsonNode toolCallsNode = message.path("tool_calls");
-            if (toolCallsNode.isArray()) {
-                for (JsonNode tc : toolCallsNode) {
-                    String tcId = tc.path("id").asText("");
-                    JsonNode function = tc.path("function");
-                    String name = function.path("name").asText("");
-                    String argsStr = function.path("arguments").asText("{}");
-                    Map<String, Object> args;
-                    try {
-                        args = new ObjectMapper().readValue(argsStr, Map.class);
-                    } catch (Exception e) {
-                        args = new HashMap<>();
-                    }
-                    toolCalls.add(new ToolCall(tcId, name, args));
-                }
-            }
-
-            JsonNode usage = node.path("usage");
-            int promptTokens = usage.path("prompt_tokens").asInt(0);
-            int completionTokens = usage.path("completion_tokens").asInt(0);
-            double modelCost = calculateModelCost(promptTokens, completionTokens);
-
-            return new FunctionCallResult(content, toolCalls, finishReason, promptTokens, completionTokens, modelCost);
-        } catch (Exception e) {
-            logger.error("解析 OpenAI Function Call 响应失败: {}", e.getMessage(), e);
-            throw new RuntimeException("解析模型响应失败");
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private FunctionCallResult parseAnthropicFunctionCall(String response) {
-        try {
-            JsonNode node = new ObjectMapper().readTree(response);
-            StringBuilder content = new StringBuilder();
-            List<ToolCall> toolCalls = new ArrayList<>();
-            String stopReason = node.path("stop_reason").asText("");
-
-            for (JsonNode block : node.path("content")) {
-                String type = block.path("type").asText("");
-                if ("text".equals(type)) {
-                    content.append(block.path("text").asText(""));
-                } else if ("tool_use".equals(type)) {
-                    String tcId = block.path("id").asText("");
-                    String name = block.path("name").asText("");
-                    Map<String, Object> args;
-                    try {
-                        args = new ObjectMapper().convertValue(block.path("input"), Map.class);
-                    } catch (Exception e) {
-                        args = new HashMap<>();
-                    }
-                    toolCalls.add(new ToolCall(tcId, name, args));
-                }
-            }
-
-            JsonNode usage = node.path("usage");
-            int inputTokens = usage.path("input_tokens").asInt(0);
-            int outputTokens = usage.path("output_tokens").asInt(0);
-            double modelCost = calculateModelCost(inputTokens, outputTokens);
-
-            return new FunctionCallResult(content.toString(), toolCalls, stopReason, inputTokens, outputTokens, modelCost);
-        } catch (Exception e) {
-            logger.error("解析 Anthropic Function Call 响应失败: {}", e.getMessage(), e);
-            throw new RuntimeException("解析模型响应失败");
-        }
+        return handlerFor(authType).parseFunctionCall(response, objectMapper);
     }
 
     // ─── Function Call 相关 record ───
@@ -436,29 +231,12 @@ public class ModelClient {
 
     /**
      * 根据 API Key 和认证方式构建 {@link WebClient}（不设 baseUrl，使用完整 URI 发请求）。
-     *
-     * <ul>
-     *   <li>{@code bearer / openai} — {@code Authorization: Bearer {key}}</li>
-     *   <li>{@code anthropic}       — {@code x-api-key: {key}} + {@code anthropic-version} 头</li>
-     * </ul>
+     * 鉴权头由对应协议策略 {@link ModelProtocolHandler#applyAuthHeaders} 写入。
      */
     private WebClient buildWebClient(String apiKey, String authType) {
         WebClient.Builder builder = WebClient.builder();
-        if (apiKey != null && !apiKey.trim().isEmpty()) {
-            String type = authType != null ? authType.toLowerCase() : "bearer";
-            if ("anthropic".equals(type)) {
-                builder.defaultHeader("x-api-key", apiKey);
-                builder.defaultHeader("anthropic-version", "2023-06-01");
-            } else {
-                // bearer / openai / 其他均使用 Bearer Token
-                builder.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
-            }
-        }
+        handlerFor(authType).applyAuthHeaders(builder, apiKey);
         return builder.build();
-    }
-
-    private double calculateModelCost(int promptTokens, int completionTokens) {
-        return (promptTokens * 0.001 + completionTokens * 0.002) / 1000.0;
     }
 
     /**
@@ -469,7 +247,7 @@ public class ModelClient {
      *   <li>填写了完整 endpoint（如 {@code https://open.bigmodel.cn/api/paas/v4/chat/completions}）
      *       → 直接使用，不追加路径</li>
      *   <li>填写了 baseUrl（如 {@code https://api.deepseek.com}）
-     *       → 追加标准端点路径（{@code /chat/completions} 或 {@code /messages}）</li>
+     *       → 追加协议标准端点路径（由 {@link ModelProtocolHandler#endpointSuffix} 提供）</li>
      * </ul>
      */
     private String resolveRequestUri(ApiKeyConfig apiKeyConfig, String authType) {
@@ -487,7 +265,7 @@ public class ModelClient {
             return url;
         }
         // baseUrl 场景：拼接标准端点路径
-        String suffix = "anthropic".equals(authType) ? "/messages" : "/chat/completions";
+        String suffix = handlerFor(authType).endpointSuffix();
         return url.endsWith("/") ? url + suffix.substring(1) : url + suffix;
     }
 
@@ -515,82 +293,8 @@ public class ModelClient {
                 ? apiKeyConfig.getAuthType().toLowerCase()
                 : "bearer";
 
-        if ("anthropic".equals(authType)) {
-            return buildAnthropicRequest(userMessage, context, history, model, apiKeyConfig, systemPrompt);
-        }
-
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", model);
-        request.put("messages", buildMessages(userMessage, context, history, systemPrompt));
-        request.put("stream", true);
-
-        // 优先使用数据库配置的生成参数；否则使用 YAML 配置
-        if (apiKeyConfig != null) {
-            if (apiKeyConfig.getTemperature() != null) {
-                request.put("temperature", apiKeyConfig.getTemperature());
-            }
-            if (apiKeyConfig.getTopP() != null) {
-                request.put("top_p", apiKeyConfig.getTopP());
-            }
-            if (apiKeyConfig.getMaxTokens() != null) {
-                request.put("max_tokens", apiKeyConfig.getMaxTokens());
-            }
-        } else {
-            AiProperties.Generation gen = aiProperties.getGeneration();
-            if (gen.getTemperature() != null) {
-                request.put("temperature", gen.getTemperature());
-            }
-            if (gen.getTopP() != null) {
-                request.put("top_p", gen.getTopP());
-            }
-            if (gen.getMaxTokens() != null) {
-                request.put("max_tokens", gen.getMaxTokens());
-            }
-        }
-        return request;
-    }
-
-    /**
-     * 构建 Anthropic Messages API 格式的请求体。
-     * Anthropic 的 system 消息通过顶层 "system" 字段传递，而非 messages 数组。
-     */
-    private Map<String, Object> buildAnthropicRequest(String userMessage,
-                                                       String context,
-                                                       List<Map<String, String>> history,
-                                                       String model,
-                                                       ApiKeyConfig apiKeyConfig,
-                                                       String systemPrompt) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("model", model);
-        request.put("stream", true);
-
-        // 生成参数
-        if (apiKeyConfig != null) {
-            if (apiKeyConfig.getTemperature() != null) {
-                request.put("temperature", apiKeyConfig.getTemperature());
-            }
-            if (apiKeyConfig.getTopP() != null) {
-                request.put("top_p", apiKeyConfig.getTopP());
-            }
-            // Anthropic max_tokens 是必填字段
-            int maxTokens = apiKeyConfig.getMaxTokens() != null ? apiKeyConfig.getMaxTokens() : 2000;
-            request.put("max_tokens", maxTokens);
-        } else {
-            request.put("max_tokens", 2000);
-        }
-
-        // 将 system 消息单独提取出来（Anthropic 要求顶层 system 字段）
-        List<Map<String, String>> allMessages = buildMessages(userMessage, context, history, systemPrompt);
-        List<Map<String, String>> userMessages = new ArrayList<>();
-        for (Map<String, String> msg : allMessages) {
-            if ("system".equals(msg.get("role"))) {
-                request.put("system", msg.get("content"));
-            } else {
-                userMessages.add(msg);
-            }
-        }
-        request.put("messages", userMessages);
-        return request;
+        List<Map<String, String>> messages = buildMessages(userMessage, context, history, systemPrompt);
+        return handlerFor(authType).buildRequestBody(messages, model, apiKeyConfig, aiProperties, null);
     }
 
     private List<Map<String, String>> buildMessages(String userMessage,
@@ -643,93 +347,10 @@ public class ModelClient {
         return messages;
     }
 
-    private void processChunk(String chunk, Consumer<String> onChunk, Consumer<Throwable> onError) {
-        try {
-            if ("[DONE]".equals(chunk)) {
-                logger.debug("对话结束");
-                return;
-            }
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(chunk);
-
-            // 检查是否为错误响应（非流式格式，如智谱AI返回的JSON错误）
-            if (node.has("code") && node.has("msg")) {
-                int code = node.get("code").asInt(0);
-                String msg = node.get("msg").asText("模型服务错误");
-                logger.error("模型服务返回业务错误: code={}, msg={}", code, msg);
-                onError.accept(new RuntimeException(msg));
-                return;
-            }
-
-            String content = node.path("choices")
-                    .path(0)
-                    .path("delta")
-                    .path("content")
-                    .asText("");
-            if (!content.isEmpty()) {
-                onChunk.accept(content);
-            }
-        } catch (Exception e) {
-            logger.error("处理数据块时出错: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * 处理 Anthropic SSE 流式响应的数据块。
-     * 事件格式：data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}
-     */
-    private void processAnthropicChunk(String chunk, Consumer<String> onChunk, Consumer<Throwable> onError) {
-        try {
-            if (chunk == null || chunk.isBlank()) return;
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode node = mapper.readTree(chunk);
-            String type = node.path("type").asText("");
-            if ("content_block_delta".equals(type)) {
-                String text = node.path("delta").path("text").asText("");
-                if (!text.isEmpty()) {
-                    onChunk.accept(text);
-                }
-            } else if ("error".equals(type)) {
-                String msg = node.path("error").path("message").asText("Anthropic 服务错误");
-                logger.error("Anthropic 返回错误事件: {}", msg);
-                onError.accept(new RuntimeException(msg));
-            }
-        } catch (Exception e) {
-            logger.error("处理 Anthropic 数据块时出错: {}", e.getMessage(), e);
-        }
-    }
-
-    private String parseOpenAiText(String response) {
-        try {
-            JsonNode node = new ObjectMapper().readTree(response);
-            return node.path("choices").path(0).path("message").path("content").asText("");
-        } catch (Exception e) {
-            logger.error("解析非流式模型响应失败: {}", e.getMessage(), e);
-            throw new RuntimeException("解析模型响应失败");
-        }
-    }
-
-    private String parseAnthropicText(String response) {
-        try {
-            JsonNode node = new ObjectMapper().readTree(response);
-            StringBuilder builder = new StringBuilder();
-            for (JsonNode item : node.path("content")) {
-                String text = item.path("text").asText("");
-                if (!text.isEmpty()) {
-                    builder.append(text);
-                }
-            }
-            return builder.toString();
-        } catch (Exception e) {
-            logger.error("解析 Anthropic 非流式响应失败: {}", e.getMessage(), e);
-            throw new RuntimeException("解析模型响应失败");
-        }
-    }
-
     private String parseErrorMessage(String errorBody) {
         String msg = "模型服务暂时不可用";
         try {
-            JsonNode errNode = new ObjectMapper().readTree(errorBody);
+            JsonNode errNode = objectMapper.readTree(errorBody);
             if (errNode.has("msg")) {
                 msg = errNode.get("msg").asText(msg);
             } else if (errNode.has("message")) {

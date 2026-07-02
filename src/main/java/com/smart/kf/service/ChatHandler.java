@@ -1,37 +1,27 @@
 package com.smart.kf.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.kf.client.ModelClient;
 import com.smart.kf.entity.EsDocument;
 import com.smart.kf.entity.SearchResult;
-import com.smart.kf.exception.CustomException;
 import com.smart.kf.model.ApiKeyConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import reactor.core.Disposable;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 聊天处理服务
@@ -43,17 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ChatHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatHandler.class);
-    private static final Duration CONVERSATION_TTL = Duration.ofDays(7);
     private static final int CHUNK_CONTEXT_EXPAND_COUNT = 1;
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String CHAT_SESSION_SCOPE = "chat";
-
-    private enum StreamTerminalState {
-        ACTIVE,
-        COMPLETED,
-        STOPPED,
-        FAILED
-    }
 
     private final RedisTemplate<String, String> redisTemplate;
     private final HybridSearchService searchService;
@@ -61,35 +41,26 @@ public class ChatHandler {
     private final ElasticsearchService elasticsearchService;
     private final ApiKeyConfigService apiKeyConfigService;
     private final ConversationService conversationService;
+    private final ChatSessionStateStore stateStore;
+    private final ConversationHistoryService historyService;
     private final ObjectMapper objectMapper;
-
-    // 用于存储每个会话的完整响应
-    private final Map<String, StringBuilder> responseBuilders = new ConcurrentHashMap<>();
-    // 用于跟踪每个会话的响应完成状态
-    private final Map<String, CompletableFuture<String>> responseFutures = new ConcurrentHashMap<>();
-    // 用于记录每个会话当前流式响应的终态
-    private final Map<String, StreamTerminalState> streamTerminalStates = new ConcurrentHashMap<>();
-    // 用于存储每个会话的流式订阅，便于主动取消上游请求
-    private final Map<String, Disposable> streamSubscriptions = new ConcurrentHashMap<>();
-    // 用于存储每个会话的引用映射：sessionId -> {referenceNumber -> fileMd5}
-    private final Map<String, Map<Integer, String>> sessionReferenceMappings = new ConcurrentHashMap<>();
-    // 用于给每个会话的 sendMessage 加锁，Spring WebSocket session 不支持并发写
-    private final Map<String, Object> sessionSendLocks = new ConcurrentHashMap<>();
-    // 用于标记每个会话是否已经发送过错误消息，防止 completion 覆盖
-    private final Map<String, AtomicBoolean> sessionErrorSent = new ConcurrentHashMap<>();
 
     public ChatHandler(RedisTemplate<String, String> redisTemplate,
                       HybridSearchService searchService,
                       ModelClient modelClient,
                       ElasticsearchService elasticsearchService,
                       ApiKeyConfigService apiKeyConfigService,
-                      ConversationService conversationService) {
+                      ConversationService conversationService,
+                      ChatSessionStateStore stateStore,
+                      ConversationHistoryService historyService) {
         this.redisTemplate = redisTemplate;
         this.searchService = searchService;
         this.modelClient = modelClient;
         this.elasticsearchService = elasticsearchService;
         this.apiKeyConfigService = apiKeyConfigService;
         this.conversationService = conversationService;
+        this.stateStore = stateStore;
+        this.historyService = historyService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -109,20 +80,17 @@ public class ChatHandler {
         logger.info("开始处理消息，用户ID: {}, WebSocket会话ID: {}, 目标会话ID: {}, apiKeyConfigId: {}",
                 userId, sessionId, requestedConversationId, apiKeyConfigId);
         try {
-            streamTerminalStates.put(sessionId, StreamTerminalState.ACTIVE);
-            sessionErrorSent.put(sessionId, new AtomicBoolean(false));
+            stateStore.initSession(sessionId);
 
             // 1. 获取或创建业务会话 ID
-            String conversationId = resolveConversationId(userId, requestedConversationId);
+            String conversationId = historyService.resolveConversationId(userId, requestedConversationId);
             logger.info("业务会话ID: {}, 用户ID: {}", conversationId, userId);
 
             // 为当前WebSocket会话创建响应构建器
-            responseBuilders.put(sessionId, new StringBuilder());
-            CompletableFuture<String> responseFuture = new CompletableFuture<>();
-            responseFutures.put(sessionId, responseFuture);
+            stateStore.registerFuture(sessionId);
 
             // 2. 获取对话历史
-            List<Map<String, String>> history = getConversationHistory(conversationId);
+            List<Map<String, String>> history = historyService.getConversationHistory(conversationId);
             logger.debug("获取到会话 {} 的 {} 条历史对话", conversationId, history.size());
 
             // 3. 执行带权限过滤的混合搜索：多召回后按 fileMd5 去重，保留得分最高的 chunk，最终只取 top 3
@@ -144,12 +112,6 @@ public class ChatHandler {
             // 3.5 通过 WebSocket 将检索结果推送到前端（在 AI 流式调用之前同步发送）
             sendSearchResults(session, searchResults);
 
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-
             // 4. 构建上下文
             String context = buildContext(searchResults, sessionId);
 
@@ -165,36 +127,30 @@ public class ChatHandler {
             }
             Disposable streamSubscription = modelClient.streamResponse(userMessage, context, history, apiKeyConfig,
                 chunk -> {
-                    if (isStreamInactive(sessionId)) {
+                    if (stateStore.isInactive(sessionId)) {
                         logger.debug("忽略非活跃会话的响应块，会话ID: {}", sessionId);
                         return;
                     }
 
-                    StringBuilder responseBuilder = responseBuilders.get(sessionId);
-                    if (responseBuilder != null) {
-                        responseBuilder.append(chunk);
-                    }
+                    stateStore.appendChunk(sessionId, chunk);
                     sendResponseChunk(session, chunk);
                 },
                 error -> {
                     logger.error("流式响应出错，会话ID: {}", sessionId, error);
-                    handleStreamError(session, responseFuture, error, conversationId, userId, userMessage, requestStartNanos);
+                    handleStreamError(session, error, conversationId, userId, userMessage, requestStartNanos);
                 },
-                () -> finalizeStreamResponse(session, responseFuture, conversationId, userId, userMessage, requestStartNanos));
-            streamSubscriptions.put(sessionId, streamSubscription);
+                () -> finalizeStreamResponse(session, conversationId, userId, userMessage, requestStartNanos));
+            stateStore.recordSubscription(sessionId, streamSubscription);
 
         } catch (Exception e) {
             logger.error("处理消息错误: {}", e.getMessage(), e);
             handleError(session, e);
-            streamTerminalStates.remove(sessionId);
-            sessionErrorSent.remove(sessionId);
+            stateStore.clearState(sessionId);
+            stateStore.clearErrorSent(sessionId);
             cancelStreamSubscription(sessionId);
-            responseBuilders.remove(sessionId);
+            stateStore.consumeResponse(sessionId);
             recordResponseTime(requestStartNanos);
-            CompletableFuture<String> future = responseFutures.remove(sessionId);
-            if (future != null && !future.isDone()) {
-                future.completeExceptionally(e);
-            }
+            stateStore.completeFutureExceptionally(sessionId, e);
         }
     }
 
@@ -219,682 +175,53 @@ public class ChatHandler {
     }
 
     public void ensureLegacyConversationIndex(String userId, List<String> legacyUserIds) {
-        boolean hasCurrentData = !getUserConversationIds(userId, CHAT_SESSION_SCOPE).isEmpty()
-                || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId, CHAT_SESSION_SCOPE)));
-        if (hasCurrentData) {
-            return;
-        }
-
-        for (String legacyUserId : legacyUserIds) {
-            if (!hasText(legacyUserId)) {
-                continue;
-            }
-
-            List<String> legacyConversationIds = getConversationIdsFromKey(userConversationIdsKey(legacyUserId));
-            if (!legacyConversationIds.isEmpty()) {
-                for (int i = legacyConversationIds.size() - 1; i >= 0; i--) {
-                    String conversationId = legacyConversationIds.get(i);
-                    Map<String, Object> meta = getConversationMeta(conversationId);
-                    if (isChatSession(meta)) {
-                        attachConversationToUser(userId, conversationId);
-                    }
-                }
-            }
-
-            String legacyCurrentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(legacyUserId));
-            if (hasText(legacyCurrentConversationId) && isChatSession(getConversationMeta(legacyCurrentConversationId))) {
-                attachConversationToUser(userId, legacyCurrentConversationId);
-            }
-
-            if (!getUserConversationIds(userId, CHAT_SESSION_SCOPE).isEmpty()
-                    || hasText(redisTemplate.opsForValue().get(userCurrentConversationKey(userId, CHAT_SESSION_SCOPE)))) {
-                logger.info("已为用户 {} 迁移旧会话索引，来源用户键: {}", userId, legacyUserId);
-                return;
-            }
-        }
+        historyService.ensureLegacyConversationIndex(userId, legacyUserIds);
     }
 
     public String getCurrentConversationId(String userId) {
-        return getCurrentConversationId(userId, CHAT_SESSION_SCOPE);
-    }
-
-    private String getCurrentConversationId(String userId, Map<String, Object> metadata) {
-        return getCurrentConversationId(userId, sessionScope(metadata));
-    }
-
-    private String getCurrentConversationId(String userId, String scope) {
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
-        if (hasText(currentConversationId)) {
-            if (matchesSessionScope(getConversationMeta(currentConversationId), scope)) {
-                attachConversationToUser(userId, currentConversationId);
-                return currentConversationId;
-            }
-            redisTemplate.delete(userCurrentConversationKey(userId, scope));
-        }
-
-        List<String> conversationIds = getUserConversationIds(userId, scope);
-        for (String conversationId : conversationIds) {
-            if (matchesSessionScope(getConversationMeta(conversationId), scope)) {
-                redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), conversationId, CONVERSATION_TTL);
-                return conversationId;
-            }
-        }
-
-        return null;
+        return historyService.getCurrentConversationId(userId);
     }
 
     public boolean isConversationOwnedByUser(String userId, String conversationId) {
-        if (!hasText(conversationId)) {
-            return false;
-        }
-
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-        if (userId.equals(toStringValue(sessionMeta.get("userId"), ""))) {
-            return true;
-        }
-
-        String scope = sessionScope(sessionMeta);
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
-        if (conversationId.equals(currentConversationId)) {
-            return true;
-        }
-
-        return getUserConversationIds(userId, scope).contains(conversationId)
-                || getUserConversationIds(userId, CHAT_SESSION_SCOPE).contains(conversationId);
+        return historyService.isConversationOwnedByUser(userId, conversationId);
     }
 
     public List<Map<String, Object>> getConversationMessages(String userId, String conversationId) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            return new ArrayList<>();
-        }
-
-        attachConversationToUser(userId, conversationId);
-        List<Map<String, String>> history = getConversationHistory(conversationId);
-        List<Map<String, Object>> messages = new ArrayList<>();
-        for (Map<String, String> message : history) {
-            Map<String, Object> formattedMessage = new HashMap<>();
-            formattedMessage.put("role", message.get("role"));
-            formattedMessage.put("content", message.get("content"));
-            formattedMessage.put("timestamp", message.get("timestamp"));
-            // 返回 status 和 errorMessage 字段，供前端正确渲染错误状态
-            if (message.containsKey("status")) {
-                formattedMessage.put("status", message.get("status"));
-            }
-            if (message.containsKey("errorMessage")) {
-                formattedMessage.put("errorMessage", message.get("errorMessage"));
-            }
-            messages.add(formattedMessage);
-        }
-        return messages;
+        return historyService.getConversationMessages(userId, conversationId);
     }
 
     public List<Map<String, Object>> getConversationSessions(String userId, String sessionType, String targetType, String targetId) {
-        String scope = sessionScope(sessionType, targetType, targetId);
-        List<String> conversationIds = getUserConversationIds(userId, scope);
-        List<String> legacyConversationIds = CHAT_SESSION_SCOPE.equals(scope)
-                ? conversationIds
-                : getUserConversationIds(userId, CHAT_SESSION_SCOPE);
-        for (String legacyConversationId : legacyConversationIds) {
-            if (conversationIds.contains(legacyConversationId)) {
-                continue;
-            }
-            Map<String, Object> legacyMeta = getConversationMeta(legacyConversationId);
-            if (matchesSessionFilters(legacyMeta, sessionType, targetType, targetId)) {
-                conversationIds.add(legacyConversationId);
-                attachConversationToUser(userId, legacyConversationId);
-            }
-        }
-
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
-        if (hasText(currentConversationId) && !conversationIds.contains(currentConversationId)) {
-            Map<String, Object> currentMeta = getConversationMeta(currentConversationId);
-            if (matchesSessionFilters(currentMeta, sessionType, targetType, targetId)) {
-                conversationIds.add(0, currentConversationId);
-                saveUserConversationIds(userId, scope, conversationIds);
-            } else {
-                redisTemplate.delete(userCurrentConversationKey(userId, scope));
-            }
-        }
-
-        List<Map<String, Object>> sessions = new ArrayList<>();
-        for (String conversationId : conversationIds) {
-            Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-            if (sessionMeta.isEmpty()) {
-                sessionMeta = buildConversationMetaFromHistory(userId, conversationId, getConversationHistory(conversationId));
-                saveConversationMeta(conversationId, sessionMeta);
-            }
-            if (matchesSessionFilters(sessionMeta, sessionType, targetType, targetId)) {
-                sessions.add(normalizeSessionMeta(conversationId, sessionMeta));
-            }
-        }
-
-        sessions.sort((a, b) -> compareSessionMeta(a, b, currentConversationId));
-        return sessions;
+        return historyService.getConversationSessions(userId, sessionType, targetType, targetId);
     }
 
     public Map<String, Object> createConversationSession(String userId, Map<String, Object> metadata) {
-        String currentConversationId = getCurrentConversationId(userId, metadata);
-        if (hasText(currentConversationId)
-                && isConversationEmpty(currentConversationId)
-                && currentConversationMatches(currentConversationId, metadata)) {
-            throw new CustomException("当前新会话暂无消息，请先发送消息后再创建新会话", HttpStatus.BAD_REQUEST);
-        }
-
-        String conversationId = createConversationInternal(userId, metadata);
-        return normalizeSessionMeta(conversationId, getConversationMeta(conversationId));
+        return historyService.createConversationSession(userId, metadata);
     }
 
     public Map<String, Object> getConversationSessionMeta(String userId, String conversationId) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            return new LinkedHashMap<>();
-        }
-        return normalizeSessionMeta(conversationId, getConversationMeta(conversationId));
+        return historyService.getConversationSessionMeta(userId, conversationId);
     }
 
     public void appendConversationTurn(String userId, String conversationId, String userMessage, String response) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            throw new CustomException("会话不存在或无权访问", HttpStatus.NOT_FOUND);
-        }
-        updateConversationHistory(conversationId, userId, userMessage, response);
+        historyService.appendConversationTurn(userId, conversationId, userMessage, response);
     }
 
     public void appendConversationError(String userId, String conversationId, String userMessage, String errorMessage) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            throw new CustomException("会话不存在或无权访问", HttpStatus.NOT_FOUND);
-        }
-        saveErrorMessage(conversationId, userId, userMessage, errorMessage);
+        historyService.appendConversationError(userId, conversationId, userMessage, errorMessage);
     }
 
     public void truncateConversationHistory(String userId, String conversationId, int keepCount) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            throw new CustomException("会话不存在或无权操作", HttpStatus.NOT_FOUND);
-        }
-        List<Map<String, String>> history = getConversationHistory(conversationId);
-        int safeKeep = Math.max(0, Math.min(keepCount, history.size()));
-        if (safeKeep == history.size()) return;
-        List<Map<String, String>> truncated = new ArrayList<>(history.subList(0, safeKeep));
-        try {
-            String key = conversationHistoryKey(conversationId);
-            String json = objectMapper.writeValueAsString(truncated);
-            redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
-            logger.info("截断会话历史: conversationId={}, keepCount={}, 原有={}", conversationId, safeKeep, history.size());
-        } catch (JsonProcessingException e) {
-            logger.error("截断会话历史序列化失败: {}", e.getMessage(), e);
-            throw new RuntimeException("截断失败", e);
-        }
+        historyService.truncateConversationHistory(userId, conversationId, keepCount);
     }
 
     public Map<String, Object> deleteConversationSession(String userId, String conversationId) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            throw new CustomException("会话不存在或无权删除", HttpStatus.NOT_FOUND);
-        }
-
-        List<String> conversationIds;
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-        String scope = sessionScope(sessionMeta);
-        conversationIds = getUserConversationIds(userId, scope);
-        conversationIds.removeIf(conversationId::equals);
-        saveUserConversationIds(userId, scope, conversationIds);
-
-        List<String> legacyConversationIds = getUserConversationIds(userId, CHAT_SESSION_SCOPE);
-        if (!CHAT_SESSION_SCOPE.equals(scope) && legacyConversationIds.removeIf(conversationId::equals)) {
-            saveUserConversationIds(userId, CHAT_SESSION_SCOPE, legacyConversationIds);
-        }
-
-        redisTemplate.delete(conversationHistoryKey(conversationId));
-        redisTemplate.delete(conversationMetaKey(conversationId));
-
-        String currentConversationId = redisTemplate.opsForValue().get(userCurrentConversationKey(userId, scope));
-        String nextConversationId = null;
-        if (conversationId.equals(currentConversationId)) {
-            if (!conversationIds.isEmpty()) {
-                nextConversationId = conversationIds.get(0);
-                redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), nextConversationId, CONVERSATION_TTL);
-            } else {
-                redisTemplate.delete(userCurrentConversationKey(userId, scope));
-            }
-        } else if (hasText(currentConversationId)) {
-            nextConversationId = currentConversationId;
-        }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deletedConversationId", conversationId);
-        result.put("currentConversationId", nextConversationId == null ? "" : nextConversationId);
-        result.put("remainingCount", conversationIds.size());
-        return result;
+        return historyService.deleteConversationSession(userId, conversationId);
     }
 
     public Map<String, Object> updateConversationPinned(String userId, String conversationId, boolean pinned) {
-        if (!hasText(conversationId) || !isConversationOwnedByUser(userId, conversationId)) {
-            throw new CustomException("会话不存在或无权操作", HttpStatus.NOT_FOUND);
-        }
-
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-        if (sessionMeta.isEmpty()) {
-            sessionMeta = buildConversationMetaFromHistory(userId, conversationId, getConversationHistory(conversationId));
-        }
-
-        String pinnedAt = pinned ? currentTimestamp() : "";
-        sessionMeta.put("isPinned", pinned);
-        sessionMeta.put("pinnedAt", pinnedAt);
-        saveConversationMeta(conversationId, sessionMeta);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("conversationId", conversationId);
-        result.put("isPinned", pinned);
-        result.put("pinnedAt", pinnedAt);
-        return result;
+        return historyService.updateConversationPinned(userId, conversationId, pinned);
     }
 
-    private String resolveConversationId(String userId, String requestedConversationId) {
-        if (hasText(requestedConversationId)) {
-            if (isConversationOwnedByUser(userId, requestedConversationId)) {
-                attachConversationToUser(userId, requestedConversationId);
-                return requestedConversationId;
-            }
-            logger.warn("用户 {} 尝试访问不属于自己的会话 {}，将回退到当前会话", userId, requestedConversationId);
-        }
-
-        String currentConversationId = getCurrentConversationId(userId);
-        if (hasText(currentConversationId)) {
-            return currentConversationId;
-        }
-
-        return createConversationInternal(userId, null);
-    }
-
-    private String createConversationInternal(String userId, Map<String, Object> metadata) {
-        String conversationId = UUID.randomUUID().toString();
-        String now = currentTimestamp();
-
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("id", conversationId);
-        meta.put("userId", userId);
-        meta.put("title", "新会话");
-        meta.put("lastMessage", "");
-        meta.put("lastRole", "");
-        meta.put("time", now);
-        meta.put("messageCount", 0);
-        meta.put("createdAt", now);
-        meta.put("updatedAt", now);
-        meta.put("isPinned", false);
-        meta.put("pinnedAt", "");
-        applyExtraSessionMeta(meta, metadata);
-
-        saveConversationMeta(conversationId, meta);
-        attachConversationToUser(userId, conversationId);
-        logger.info("为用户 {} 创建新的业务会话ID: {}", userId, conversationId);
-        return conversationId;
-    }
-
-    private void attachConversationToUser(String userId, String conversationId) {
-        if (!hasText(userId) || !hasText(conversationId)) {
-            return;
-        }
-
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-        String scope = sessionScope(sessionMeta);
-        List<String> conversationIds = getUserConversationIds(userId, scope);
-        conversationIds.removeIf(conversationId::equals);
-        conversationIds.add(0, conversationId);
-        saveUserConversationIds(userId, scope, conversationIds);
-        redisTemplate.opsForValue().set(userCurrentConversationKey(userId, scope), conversationId, CONVERSATION_TTL);
-
-        if (sessionMeta.isEmpty()) {
-            saveConversationMeta(conversationId, buildConversationMetaFromHistory(userId, conversationId, getConversationHistory(conversationId)));
-        } else {
-            redisTemplate.expire(conversationMetaKey(conversationId), CONVERSATION_TTL);
-        }
-        redisTemplate.expire(conversationHistoryKey(conversationId), CONVERSATION_TTL);
-    }
-
-    private List<String> getUserConversationIds(String userId, String scope) {
-        return getConversationIdsFromKey(userConversationIdsKey(userId, scope));
-    }
-
-    private List<String> getConversationIdsFromKey(String key) {
-        String json = redisTemplate.opsForValue().get(key);
-        if (!hasText(json)) {
-            return new ArrayList<>();
-        }
-
-        try {
-            return objectMapper.readValue(json, new TypeReference<>() {
-            });
-        } catch (JsonProcessingException e) {
-            logger.error("解析会话索引失败: {}, key={}", e.getMessage(), key, e);
-            return new ArrayList<>();
-        }
-    }
-
-    private void saveUserConversationIds(String userId, String scope, List<String> conversationIds) {
-        try {
-            String json = objectMapper.writeValueAsString(conversationIds);
-            redisTemplate.opsForValue().set(userConversationIdsKey(userId, scope), json, CONVERSATION_TTL);
-        } catch (JsonProcessingException e) {
-            logger.error("序列化会话索引失败: {}, userId={}", e.getMessage(), userId, e);
-        }
-    }
-
-    private Map<String, Object> getConversationMeta(String conversationId) {
-        String json = redisTemplate.opsForValue().get(conversationMetaKey(conversationId));
-        if (!hasText(json)) {
-            return new LinkedHashMap<>();
-        }
-
-        try {
-            return objectMapper.readValue(json, new TypeReference<>() {
-            });
-        } catch (JsonProcessingException e) {
-            logger.error("解析会话元数据失败: {}, conversationId={}", e.getMessage(), conversationId, e);
-            return new LinkedHashMap<>();
-        }
-    }
-
-    private void saveConversationMeta(String conversationId, Map<String, Object> sessionMeta) {
-        try {
-            String json = objectMapper.writeValueAsString(sessionMeta);
-            redisTemplate.opsForValue().set(conversationMetaKey(conversationId), json, CONVERSATION_TTL);
-        } catch (JsonProcessingException e) {
-            logger.error("序列化会话元数据失败: {}, conversationId={}", e.getMessage(), conversationId, e);
-        }
-    }
-
-    private Map<String, Object> buildConversationMetaFromHistory(String userId, String conversationId, List<Map<String, String>> history) {
-        String now = currentTimestamp();
-        String title = "新会话";
-        String lastMessage = "";
-        String lastRole = "";
-        String createdAt = now;
-        String updatedAt = now;
-
-        if (!history.isEmpty()) {
-            String firstTimestamp = history.get(0).get("timestamp");
-            createdAt = hasText(firstTimestamp) ? firstTimestamp : now;
-
-            for (Map<String, String> message : history) {
-                if ("user".equals(message.get("role")) && hasText(message.get("content"))) {
-                    title = truncate(message.get("content"), 30);
-                    break;
-                }
-            }
-
-            Map<String, String> lastHistoryMessage = history.get(history.size() - 1);
-            lastMessage = truncate(lastHistoryMessage.getOrDefault("content", ""), 50);
-            lastRole = lastHistoryMessage.getOrDefault("role", "");
-            String lastTimestamp = lastHistoryMessage.get("timestamp");
-            updatedAt = hasText(lastTimestamp) ? lastTimestamp : now;
-        }
-
-        Map<String, Object> meta = new LinkedHashMap<>();
-        meta.put("id", conversationId);
-        meta.put("userId", userId);
-        meta.put("title", title);
-        meta.put("lastMessage", lastMessage);
-        meta.put("lastRole", lastRole);
-        meta.put("time", updatedAt);
-        meta.put("messageCount", history.size());
-        meta.put("createdAt", createdAt);
-        meta.put("updatedAt", updatedAt);
-        meta.put("isPinned", false);
-        meta.put("pinnedAt", "");
-        return meta;
-    }
-
-    private Map<String, Object> normalizeSessionMeta(String conversationId, Map<String, Object> meta) {
-        Map<String, Object> normalized = new LinkedHashMap<>();
-        normalized.put("id", conversationId);
-        normalized.put("title", toStringValue(meta.get("title"), "新会话"));
-        normalized.put("lastMessage", toStringValue(meta.get("lastMessage"), ""));
-        normalized.put("lastRole", toStringValue(meta.get("lastRole"), ""));
-        normalized.put("time", toStringValue(meta.get("time"), toStringValue(meta.get("updatedAt"), "")));
-        normalized.put("messageCount", toIntValue(meta.get("messageCount")));
-        normalized.put("createdAt", toStringValue(meta.get("createdAt"), ""));
-        normalized.put("updatedAt", toStringValue(meta.get("updatedAt"), toStringValue(meta.get("time"), "")));
-        normalized.put("isPinned", toBooleanValue(meta.get("isPinned")));
-        normalized.put("pinnedAt", toStringValue(meta.get("pinnedAt"), ""));
-        normalized.put("sessionType", toStringValue(meta.get("sessionType"), ""));
-        normalized.put("targetType", toStringValue(meta.get("targetType"), ""));
-        normalized.put("targetId", toStringValue(meta.get("targetId"), ""));
-        normalized.put("targetName", toStringValue(meta.get("targetName"), ""));
-        normalized.put("targetDescription", toStringValue(meta.get("targetDescription"), ""));
-        return normalized;
-    }
-
-    private boolean matchesSessionFilters(Map<String, Object> meta, String sessionType, String targetType, String targetId) {
-        if (!hasText(sessionType) && !hasText(targetType) && !hasText(targetId)) {
-            return isChatSession(meta);
-        }
-        return matchesMetaValue(meta.get("sessionType"), sessionType)
-                && matchesMetaValue(meta.get("targetType"), targetType)
-                && matchesMetaValue(meta.get("targetId"), targetId);
-    }
-
-    private boolean matchesMetaValue(Object actual, String expected) {
-        if (!hasText(expected)) {
-            return true;
-        }
-        return expected.equals(toStringValue(actual, ""));
-    }
-
-    private boolean currentConversationMatches(String conversationId, Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return true;
-        }
-        Map<String, Object> currentMeta = getConversationMeta(conversationId);
-        return matchesMetaValue(currentMeta.get("sessionType"), toStringValue(metadata.get("sessionType"), ""))
-                && matchesMetaValue(currentMeta.get("targetType"), toStringValue(metadata.get("targetType"), ""))
-                && matchesMetaValue(currentMeta.get("targetId"), toStringValue(metadata.get("targetId"), ""));
-    }
-
-    private boolean isChatSession(Map<String, Object> meta) {
-        return meta == null || !hasText(toStringValue(meta.get("sessionType"), ""));
-    }
-
-    private boolean matchesSessionScope(Map<String, Object> meta, String scope) {
-        if (CHAT_SESSION_SCOPE.equals(scope)) {
-            return isChatSession(meta);
-        }
-        return scope.equals(sessionScope(meta));
-    }
-
-    private String sessionScope(Map<String, Object> meta) {
-        if (meta == null || meta.isEmpty()) {
-            return CHAT_SESSION_SCOPE;
-        }
-        return sessionScope(
-                toStringValue(meta.get("sessionType"), ""),
-                toStringValue(meta.get("targetType"), ""),
-                toStringValue(meta.get("targetId"), "")
-        );
-    }
-
-    private String sessionScope(String sessionType, String targetType, String targetId) {
-        if (!hasText(sessionType)) {
-            return CHAT_SESSION_SCOPE;
-        }
-
-        StringBuilder scope = new StringBuilder(sessionType.trim());
-        if (hasText(targetType)) {
-            scope.append(':').append(targetType.trim());
-        }
-        if (hasText(targetId)) {
-            scope.append(':').append(targetId.trim());
-        }
-        return scope.toString();
-    }
-
-    private void applyExtraSessionMeta(Map<String, Object> targetMeta, Map<String, Object> extraMeta) {
-        if (extraMeta == null || extraMeta.isEmpty()) {
-            return;
-        }
-
-        copyIfPresent(targetMeta, extraMeta, "sessionType");
-        copyIfPresent(targetMeta, extraMeta, "targetType");
-        copyIfPresent(targetMeta, extraMeta, "targetId");
-        copyIfPresent(targetMeta, extraMeta, "targetName");
-        copyIfPresent(targetMeta, extraMeta, "targetDescription");
-    }
-
-    private void copyIfPresent(Map<String, Object> targetMeta, Map<String, Object> sourceMeta, String key) {
-        String value = toStringValue(sourceMeta.get(key), "");
-        if (hasText(value)) {
-            targetMeta.put(key, value);
-        }
-    }
-
-    private Map<String, Object> mergeSessionMeta(Map<String, Object> rebuiltMeta, Map<String, Object> existingMeta) {
-        Map<String, Object> merged = new LinkedHashMap<>(rebuiltMeta);
-        if (existingMeta == null || existingMeta.isEmpty()) {
-            return merged;
-        }
-
-        merged.put("isPinned", toBooleanValue(existingMeta.get("isPinned")));
-        merged.put("pinnedAt", toStringValue(existingMeta.get("pinnedAt"), ""));
-        applyExtraSessionMeta(merged, existingMeta);
-        return merged;
-    }
-
-    private int compareSessionMeta(Map<String, Object> a, Map<String, Object> b, String currentConversationId) {
-        String aId = String.valueOf(a.getOrDefault("id", ""));
-        String bId = String.valueOf(b.getOrDefault("id", ""));
-        boolean aCurrent = hasText(currentConversationId) && currentConversationId.equals(aId);
-        boolean bCurrent = hasText(currentConversationId) && currentConversationId.equals(bId);
-        if (aCurrent != bCurrent) {
-            return aCurrent ? -1 : 1;
-        }
-
-        boolean aPinned = toBooleanValue(a.get("isPinned"));
-        boolean bPinned = toBooleanValue(b.get("isPinned"));
-        if (aPinned != bPinned) {
-            return aPinned ? -1 : 1;
-        }
-
-        if (aPinned) {
-            int pinnedCompare = toStringValue(b.get("pinnedAt"), "").compareTo(toStringValue(a.get("pinnedAt"), ""));
-            if (pinnedCompare != 0) {
-                return pinnedCompare;
-            }
-        }
-
-        String bUpdatedAt = toStringValue(b.get("updatedAt"), toStringValue(b.get("time"), ""));
-        String aUpdatedAt = toStringValue(a.get("updatedAt"), toStringValue(a.get("time"), ""));
-        int updatedCompare = bUpdatedAt.compareTo(aUpdatedAt);
-        if (updatedCompare != 0) {
-            return updatedCompare;
-        }
-
-        String bCreatedAt = toStringValue(b.get("createdAt"), "");
-        String aCreatedAt = toStringValue(a.get("createdAt"), "");
-        return bCreatedAt.compareTo(aCreatedAt);
-    }
-
-    private boolean isConversationEmpty(String conversationId) {
-        Map<String, Object> sessionMeta = getConversationMeta(conversationId);
-        if (!sessionMeta.isEmpty() && toIntValue(sessionMeta.get("messageCount")) > 0) {
-            return false;
-        }
-
-        return getConversationHistory(conversationId).isEmpty();
-    }
-
-    private List<Map<String, String>> getConversationHistory(String conversationId) {
-        String key = conversationHistoryKey(conversationId);
-        String json = redisTemplate.opsForValue().get(key);
-        try {
-            if (!hasText(json)) {
-                logger.debug("会话 {} 没有历史记录", conversationId);
-                return new ArrayList<>();
-            }
-
-            List<Map<String, String>> history = objectMapper.readValue(json, new TypeReference<>() {
-            });
-            logger.debug("读取到会话 {} 的 {} 条历史记录", conversationId, history.size());
-            return history;
-        } catch (JsonProcessingException e) {
-            logger.error("解析对话历史出错: {}, 会话ID: {}", e.getMessage(), conversationId, e);
-            return new ArrayList<>();
-        }
-    }
-
-    /**
-     * 发生错误时保存消息历史，assistant 消息携带 status=error 和 errorMessage 字段
-     */
-    private void saveErrorMessage(String conversationId, String userId, String userMessage, String errorMessage) {
-        String key = conversationHistoryKey(conversationId);
-        List<Map<String, String>> history = getConversationHistory(conversationId);
-
-        String currentTimestamp = currentTimestamp();
-
-        Map<String, String> userMsgMap = new HashMap<>();
-        userMsgMap.put("role", "user");
-        userMsgMap.put("content", userMessage);
-        userMsgMap.put("timestamp", currentTimestamp);
-        history.add(userMsgMap);
-
-        Map<String, String> assistantMsgMap = new HashMap<>();
-        assistantMsgMap.put("role", "assistant");
-        assistantMsgMap.put("content", "");
-        assistantMsgMap.put("status", "error");
-        assistantMsgMap.put("errorMessage", errorMessage);
-        assistantMsgMap.put("timestamp", currentTimestamp);
-        history.add(assistantMsgMap);
-
-        if (history.size() > 20) {
-            history = new ArrayList<>(history.subList(history.size() - 20, history.size()));
-        }
-
-        try {
-            String json = objectMapper.writeValueAsString(history);
-            redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
-            Map<String, Object> existingMeta = getConversationMeta(conversationId);
-            saveConversationMeta(conversationId, mergeSessionMeta(
-                    buildConversationMetaFromHistory(userId, conversationId, history),
-                    existingMeta
-            ));
-            attachConversationToUser(userId, conversationId);
-            logger.info("已保存错误消息到会话历史，会话ID: {}", conversationId);
-        } catch (JsonProcessingException e) {
-            logger.error("序列化错误消息历史出错: {}, 会话ID: {}", e.getMessage(), conversationId, e);
-        }
-    }
-
-    private void updateConversationHistory(String conversationId, String userId, String userMessage, String response) {
-        String key = conversationHistoryKey(conversationId);
-        List<Map<String, String>> history = getConversationHistory(conversationId);
-
-        String currentTimestamp = currentTimestamp();
-
-        Map<String, String> userMsgMap = new HashMap<>();
-        userMsgMap.put("role", "user");
-        userMsgMap.put("content", userMessage);
-        userMsgMap.put("timestamp", currentTimestamp);
-        history.add(userMsgMap);
-
-        Map<String, String> assistantMsgMap = new HashMap<>();
-        assistantMsgMap.put("role", "assistant");
-        assistantMsgMap.put("content", response);
-        assistantMsgMap.put("timestamp", currentTimestamp);
-        history.add(assistantMsgMap);
-
-        if (history.size() > 20) {
-            history = new ArrayList<>(history.subList(history.size() - 20, history.size()));
-        }
-
-        try {
-            String json = objectMapper.writeValueAsString(history);
-            redisTemplate.opsForValue().set(key, json, CONVERSATION_TTL);
-            Map<String, Object> existingMeta = getConversationMeta(conversationId);
-            saveConversationMeta(conversationId, mergeSessionMeta(
-                    buildConversationMetaFromHistory(userId, conversationId, history),
-                    existingMeta
-            ));
-            attachConversationToUser(userId, conversationId);
-            logger.debug("更新会话历史，会话ID: {}, 总消息数: {}", conversationId, history.size());
-        } catch (JsonProcessingException e) {
-            logger.error("序列化对话历史出错: {}, 会话ID: {}", e.getMessage(), conversationId, e);
-        }
-    }
 
     private String buildContext(List<SearchResult> searchResults, String sessionId) {
         if (searchResults == null || searchResults.isEmpty()) {
@@ -924,7 +251,7 @@ public class ChatHandler {
             }
         }
 
-        sessionReferenceMappings.put(sessionId, referenceMapping);
+        stateStore.recordReference(sessionId, referenceMapping);
         logger.info("保存会话 {} 的引用映射，共 {} 条: {}", sessionId, referenceMapping.size(), referenceMapping);
 
         return context.toString();
@@ -962,37 +289,8 @@ public class ChatHandler {
         }
     }
 
-    private boolean isStreamInactive(String sessionId) {
-        return streamTerminalStates.getOrDefault(sessionId, StreamTerminalState.ACTIVE) != StreamTerminalState.ACTIVE;
-    }
-
-    private String consumeResponseContent(String sessionId) {
-        StringBuilder responseBuilder = responseBuilders.remove(sessionId);
-        return responseBuilder == null ? "" : responseBuilder.toString();
-    }
-
-    private void completeResponseFuture(String sessionId, CompletableFuture<String> responseFuture, String content) {
-        responseFutures.remove(sessionId);
-        if (responseFuture != null && !responseFuture.isDone()) {
-            responseFuture.complete(content);
-        }
-    }
-
-    private void completeResponseFutureExceptionally(String sessionId,
-                                                     CompletableFuture<String> responseFuture,
-                                                     Throwable error) {
-        responseFutures.remove(sessionId);
-        if (responseFuture != null && !responseFuture.isDone()) {
-            responseFuture.completeExceptionally(error);
-        }
-    }
-
-    private Object getSessionLock(String sessionId) {
-        return sessionSendLocks.computeIfAbsent(sessionId, k -> new Object());
-    }
-
     private void safeSend(WebSocketSession session, String json) throws Exception {
-        synchronized (getSessionLock(session.getId())) {
+        synchronized (stateStore.getLock(session.getId())) {
             if (session.isOpen()) {
                 session.sendMessage(new TextMessage(json));
             }
@@ -1030,7 +328,7 @@ public class ChatHandler {
 
     private void sendResponseChunk(WebSocketSession session, String chunk) {
         try {
-            if (isStreamInactive(session.getId())) {
+            if (stateStore.isInactive(session.getId())) {
                 logger.debug("检测到非活跃终态，跳过发送响应块");
                 return;
             }
@@ -1066,8 +364,7 @@ public class ChatHandler {
     private void handleError(WebSocketSession session, Throwable error) {
         logger.error("AI服务错误: {}", error.getMessage(), error);
         String sessionId = session.getId();
-        AtomicBoolean errorSent = sessionErrorSent.get(sessionId);
-        if (errorSent != null && errorSent.compareAndSet(false, true)) {
+        if (stateStore.markErrorSent(sessionId)) {
             try {
                 String message = error.getMessage();
                 if (message == null || message.isEmpty()) {
@@ -1087,34 +384,31 @@ public class ChatHandler {
     }
 
     private void cancelStreamSubscription(String sessionId) {
-        Disposable subscription = streamSubscriptions.remove(sessionId);
-        if (subscription != null && !subscription.isDisposed()) {
-            subscription.dispose();
+        if (stateStore.cancelSubscription(sessionId)) {
             logger.info("已取消会话 {} 的上游流式订阅", sessionId);
         }
     }
 
     private void handleStreamError(WebSocketSession session,
-                                   CompletableFuture<String> responseFuture,
                                    Throwable error,
                                    String conversationId,
                                    String userId,
                                    String userMessage,
                                    long requestStartNanos) {
         String sessionId = session.getId();
-        StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
-        if (terminalState == StreamTerminalState.STOPPED) {
+        ChatSessionStateStore.StreamTerminalState terminalState = stateStore.getState(sessionId);
+        if (terminalState == ChatSessionStateStore.StreamTerminalState.STOPPED) {
             logger.info("会话 {} 的流式响应已被用户中止，忽略后续异常回调: {}", sessionId, error.getMessage());
             return;
         }
 
-        streamTerminalStates.put(sessionId, StreamTerminalState.FAILED);
+        stateStore.markState(sessionId, ChatSessionStateStore.StreamTerminalState.FAILED);
         handleError(session, error);
         // 持久化错误消息，以便刷新后仍可展示
         String failedMessage = (error.getMessage() != null && !error.getMessage().isEmpty())
                 ? error.getMessage() : "响应处理失败";
         if (conversationId != null && userId != null && userMessage != null) {
-            saveErrorMessage(conversationId, userId, userMessage, failedMessage);
+            historyService.saveErrorMessage(conversationId, userId, userMessage, failedMessage);
         }
         // 延迟发送 completion failed，确保 error 消息先到达前端
         CompletableFuture.delayedExecutor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -1127,40 +421,39 @@ public class ChatHandler {
                         logger.warn("延迟发送 completion failed 通知失败: {}", e.getMessage());
                     }
                 });
-        completeResponseFutureExceptionally(sessionId, responseFuture, error);
+        stateStore.completeFutureExceptionally(sessionId, error);
         cancelStreamSubscription(sessionId);
-        responseBuilders.remove(sessionId);
-        streamTerminalStates.remove(sessionId);
-        sessionErrorSent.remove(sessionId);
+        stateStore.consumeResponse(sessionId);
+        stateStore.clearState(sessionId);
+        stateStore.clearErrorSent(sessionId);
         recordResponseTime(requestStartNanos);
         logger.warn("流式响应异常结束，会话ID: {}", sessionId, error);
     }
 
     private void finalizeStreamResponse(WebSocketSession session,
-                                        CompletableFuture<String> responseFuture,
                                         String conversationId,
                                         String userId,
                                         String userMessage,
                                         long requestStartNanos) {
         String sessionId = session.getId();
-        StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
-        if (terminalState == StreamTerminalState.STOPPED) {
+        ChatSessionStateStore.StreamTerminalState terminalState = stateStore.getState(sessionId);
+        if (terminalState == ChatSessionStateStore.StreamTerminalState.STOPPED) {
             logger.info("会话 {} 的流式响应已停止，忽略完成回调", sessionId);
             return;
         }
-        if (terminalState == StreamTerminalState.FAILED) {
+        if (terminalState == ChatSessionStateStore.StreamTerminalState.FAILED) {
             logger.info("会话 {} 的流式响应已失败，忽略完成回调", sessionId);
             return;
         }
 
-        streamTerminalStates.put(sessionId, StreamTerminalState.COMPLETED);
-        String completeResponse = consumeResponseContent(sessionId);
+        stateStore.markState(sessionId, ChatSessionStateStore.StreamTerminalState.COMPLETED);
+        String completeResponse = stateStore.consumeResponse(sessionId);
 
         logger.info("DeepSeek响应已完成，长度: {}，会话ID: {}", completeResponse.length(), sessionId);
         cancelStreamSubscription(sessionId);
-        completeResponseFuture(sessionId, responseFuture, completeResponse);
+        stateStore.completeFuture(sessionId, completeResponse);
         sendCompletionNotification(session, "finished", "响应已完成");
-        updateConversationHistory(conversationId, userId, userMessage, completeResponse);
+        historyService.updateConversationHistory(conversationId, userId, userMessage, completeResponse);
 
         // 将对话记录持久化到 MySQL，供个人使用统计查询
         try {
@@ -1170,11 +463,11 @@ public class ChatHandler {
             logger.warn("对话写入数据库失败（不影响主流程），用户ID: {}，原因: {}", userId, e.getMessage());
         }
 
-        String redisKey = userCurrentConversationKey(userId);
+        String redisKey = historyService.userCurrentConversationKey(userId);
         logger.info("对话存储信息 - Redis键: {}, 值: {}", redisKey, conversationId);
 
-        streamTerminalStates.remove(sessionId);
-        sessionErrorSent.remove(sessionId);
+        stateStore.clearState(sessionId);
+        stateStore.clearErrorSent(sessionId);
         recordResponseTime(requestStartNanos);
         logger.info("消息处理完成，用户ID: {}，会话ID: {}", userId, sessionId);
     }
@@ -1210,17 +503,16 @@ public class ChatHandler {
         String sessionId = session.getId();
         logger.info("收到停止请求，用户ID: {}, 会话ID: {}", userId, sessionId);
 
-        StreamTerminalState terminalState = streamTerminalStates.get(sessionId);
-        if (terminalState != null && terminalState != StreamTerminalState.ACTIVE) {
+        ChatSessionStateStore.StreamTerminalState terminalState = stateStore.getState(sessionId);
+        if (terminalState != null && terminalState != ChatSessionStateStore.StreamTerminalState.ACTIVE) {
             logger.info("会话 {} 当前终态为 {}，跳过重复停止", sessionId, terminalState);
             return;
         }
 
-        streamTerminalStates.put(sessionId, StreamTerminalState.STOPPED);
+        stateStore.markState(sessionId, ChatSessionStateStore.StreamTerminalState.STOPPED);
         cancelStreamSubscription(sessionId);
-        String partialResponse = consumeResponseContent(sessionId);
-        CompletableFuture<String> responseFuture = responseFutures.get(sessionId);
-        completeResponseFuture(sessionId, responseFuture, partialResponse);
+        String partialResponse = stateStore.consumeResponse(sessionId);
+        stateStore.completeFuture(sessionId, partialResponse);
 
         try {
             long currentTime = System.currentTimeMillis();
@@ -1239,112 +531,26 @@ public class ChatHandler {
         } catch (Exception e) {
             logger.error("发送停止确认失败: {}", e.getMessage(), e);
         } finally {
-            streamTerminalStates.remove(sessionId);
+            stateStore.clearState(sessionId);
         }
     }
 
     public void clearSessionState(String sessionId) {
-        Map<Integer, String> removedReferences = sessionReferenceMappings.remove(sessionId);
-        String partialResponse = consumeResponseContent(sessionId);
-        CompletableFuture<String> removedFuture = responseFutures.get(sessionId);
-        StreamTerminalState removedTerminalState = streamTerminalStates.remove(sessionId);
-        Disposable removedSubscription = streamSubscriptions.remove(sessionId);
-        Object removedLock = sessionSendLocks.remove(sessionId);
-
-        if (removedSubscription != null && !removedSubscription.isDisposed()) {
-            removedSubscription.dispose();
-        }
-
-        if (removedFuture != null && !removedFuture.isDone()) {
-            completeResponseFutureExceptionally(
-                    sessionId,
-                    removedFuture,
-                    new CancellationException("WebSocket session closed: " + sessionId)
-            );
-        }
+        ChatSessionStateStore.ClearResult result = stateStore.clear(sessionId);
 
         logger.info(
                 "清理会话状态完成，sessionId={}, referencesRemoved={}, responseLength={}, futureRemoved={}, terminalState={}, subscriptionRemoved={}, lockRemoved={}",
                 sessionId,
-                removedReferences != null ? removedReferences.size() : 0,
-                partialResponse.length(),
-                removedFuture != null,
-                removedTerminalState,
-                removedSubscription != null,
-                removedLock != null
+                result.referencesRemoved(),
+                result.responseLength(),
+                result.futureRemoved(),
+                result.terminalState(),
+                result.subscriptionRemoved(),
+                result.lockRemoved()
         );
-    }
-
-    private String conversationHistoryKey(String conversationId) {
-        return "conversation:" + conversationId;
-    }
-
-    private String conversationMetaKey(String conversationId) {
-        return "conversation:" + conversationId + ":meta";
-    }
-
-    private String userConversationIdsKey(String userId) {
-        return userConversationIdsKey(userId, CHAT_SESSION_SCOPE);
-    }
-
-    private String userConversationIdsKey(String userId, String scope) {
-        if (CHAT_SESSION_SCOPE.equals(scope)) {
-            return "user:" + userId + ":conversation_ids";
-        }
-        return "user:" + userId + ":conversation_ids:" + scope;
-    }
-
-    private String userCurrentConversationKey(String userId) {
-        return userCurrentConversationKey(userId, CHAT_SESSION_SCOPE);
-    }
-
-    private String userCurrentConversationKey(String userId, String scope) {
-        if (CHAT_SESSION_SCOPE.equals(scope)) {
-            return "user:" + userId + ":current_conversation";
-        }
-        return "user:" + userId + ":current_conversation:" + scope;
-    }
-
-    private String currentTimestamp() {
-        return LocalDateTime.now().format(TIMESTAMP_FORMATTER);
     }
 
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (!hasText(value)) {
-            return "";
-        }
-        return value.length() > maxLength ? value.substring(0, maxLength) + "..." : value;
-    }
-
-    private String toStringValue(Object value, String defaultValue) {
-        return value == null ? defaultValue : String.valueOf(value);
-    }
-
-    private int toIntValue(Object value) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value instanceof String text) {
-            try {
-                return Integer.parseInt(text);
-            } catch (NumberFormatException e) {
-                logger.warn("会话消息数格式非法: {}", text);
-            }
-        }
-        return 0;
-    }
-
-    private boolean toBooleanValue(Object value) {
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        if (value instanceof String text) {
-            return Boolean.parseBoolean(text);
-        }
-        return false;
     }
 }

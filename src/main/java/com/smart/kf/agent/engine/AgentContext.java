@@ -1,5 +1,6 @@
 package com.smart.kf.agent.engine;
 
+import com.smart.kf.client.TokenCost;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -59,7 +60,7 @@ public class AgentContext {
         public void add(int prompt, int completion) {
             this.promptTokens += prompt;
             this.completionTokens += completion;
-            this.modelCost = this.modelCost.add(BigDecimal.valueOf((prompt * 0.001 + completion * 0.002) / 1000.0));
+            this.modelCost = this.modelCost.add(BigDecimal.valueOf(TokenCost.estimate(prompt, completion)));
         }
 
         public void add(int prompt, int completion, double modelCost) {

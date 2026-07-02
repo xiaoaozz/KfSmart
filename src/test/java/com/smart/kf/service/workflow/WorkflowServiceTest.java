@@ -1,6 +1,7 @@
 package com.smart.kf.service.workflow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.smart.kf.model.workflow.Workflow;
 import com.smart.kf.repository.workflow.WorkflowRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +28,7 @@ class WorkflowServiceTest {
     @Mock private WorkflowExecutionService executionService;
     @Mock private WorkflowVersionService versionService;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @InjectMocks
     private WorkflowService workflowService;
@@ -140,18 +141,18 @@ class WorkflowServiceTest {
     void getWorkflow_byNumericId_returnsWorkflow() {
         when(workflowRepository.findById(1L)).thenReturn(Optional.of(wf1));
 
-        Workflow result = workflowService.getWorkflow("1");
+        Map<String, Object> result = workflowService.getWorkflow("1");
 
-        assertEquals("wf_001", result.getWorkflowId());
+        assertEquals("wf_001", result.get("workflowId"));
     }
 
     @Test
     void getWorkflow_byStringId_returnsWorkflow() {
         when(workflowRepository.findByWorkflowId("wf_001")).thenReturn(Optional.of(wf1));
 
-        Workflow result = workflowService.getWorkflow("wf_001");
+        Map<String, Object> result = workflowService.getWorkflow("wf_001");
 
-        assertEquals("wf_001", result.getWorkflowId());
+        assertEquals("wf_001", result.get("workflowId"));
     }
 
     @Test

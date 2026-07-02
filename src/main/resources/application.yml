@@ -7,22 +7,22 @@ spring:
     resources:
       add-mappings: true  # 保持默认静态资源映射（Spring Boot自动配置）
   datasource:
-    url: jdbc:mysql://localhost:3306/knowflow?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/knowflow?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}  # 仅本地开发兜底弱口令，生产须通过环境变量覆盖
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: validate  # 生产禁止 update，避免 schema 漂移与数据丢失；本地首启请用 docs/databases/schema.sql 建表，或改 dev profile
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQL8Dialect
   data:
     redis:
-      host: localhost
-      port: 6379
-      password: 123456
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}  # 仅本地开发兜底弱口令，生产须覆盖
   servlet:
     multipart:
       enabled: true
@@ -46,7 +46,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "*" # 允许反序列化的包
+        spring.json.trusted.packages: "com.smart.kf.model,java.util,java.lang,java.math,java.time,java.io,java.net"  # 精确白名单，禁止 "*"
         client.dns.lookup: use_all_dns_ips
     topic:
       file-processing: file-processing-topic1 # 新增的 Topic 配置
@@ -71,18 +71,18 @@ spring:
 
 
 minio:
-  endpoint: http://localhost:19000
-  accessKey: admin
-  secretKey: 123456789
-  bucketName: uploads
-  publicUrl: http://localhost:19000
+  endpoint: ${MINIO_ENDPOINT:http://localhost:19000}
+  accessKey: ${MINIO_ACCESS_KEY:admin}      # 仅本地开发兜底，生产须覆盖
+  secretKey: ${MINIO_SECRET_KEY:123456789}  # 仅本地开发兜底，生产须覆盖
+  bucketName: ${MINIO_BUCKET:uploads}
+  publicUrl: ${MINIO_PUBLIC_URL:http://localhost:19000}
 jwt:
-  secret-key: "PXrQbuCwXwOZzkML/Vm2S5rSwt1iybvmKtGDzVEu+Hc="
+  secret-key: ${JWT_SECRET_KEY:dev-only-jwt-secret-please-override-in-production-xxxxxxxxxxxxxxxx}  # 生产必须通过环境变量覆盖并轮换已泄漏密钥
 
 # 管理员账号初始化配置
 admin:
-  username: admin
-  password: admin123
+  username: ${ADMIN_USERNAME:admin}
+  password: ${ADMIN_PASSWORD:admin123}  # 仅初始化兜底弱口令，生产必须覆盖并建议首次登录后修改
   primary-org: default
   org-tags: default,admin
 
@@ -93,39 +93,39 @@ file:
     max-memory-threshold: 0.8  # 80% 内存阈值
 
 elasticsearch:
-  host: localhost       # Elasticsearch主机地址
-  port: 9200            # Elasticsearch端口号
-  scheme: http          # 协议（http/https）
-  username: elastic     # Elasticsearch用户名
-  password: 123456      # Elasticsearch密码（docker-compose中配置）
+  host: ${ES_HOST:localhost}       # Elasticsearch主机地址
+  port: ${ES_PORT:9200}            # Elasticsearch端口号
+  scheme: ${ES_SCHEME:http}        # 协议（http/https）
+  username: ${ES_USERNAME:elastic} # Elasticsearch用户名
+  password: ${ES_PASSWORD:123456}  # 仅本地开发兜底，生产须覆盖
 
 
 logging:
   level:
-    org.springframework.web: DEBUG
-    org.springframework.boot.autoconfigure.web.servlet: DEBUG
-    org.springframework.security: DEBUG
-    com.smart.kf.service: DEBUG
-    io.minio: DEBUG
+    org.springframework.web: INFO
+    org.springframework.boot.autoconfigure.web.servlet: INFO
+    org.springframework.security: INFO
+    com.smart.kf.service: INFO
+    io.minio: INFO
 
 log4j:
   logger:
     org:
       apache:
-        tika=DEBUG:
+        tika=INFO:
 
 embedding:
   api:
-    url: https://dashscope.aliyuncs.com/compatible-mode/v1
-    key:    # 填入通义千问API key
+    url: ${EMBEDDING_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+    key: ${EMBEDDING_API_KEY:}    # 通义千问 API key，通过环境变量注入
     model: text-embedding-v4
     batch-size: 10  # 单次请求最大行数（DashScope限制为10）
     dimension: 2048  # 指定向量维度
 ai:
   default:
-    url: https://api.deepseek.com/v1  # 兼容 OpenAI 协议的任意模型服务地址，本地 Ollama 填 http://localhost:11434/v1
-    model: deepseek-chat              # 默认模型，实际使用时优先以数据库配置为准
-    key:                              # 兜底 API Key，留空表示纯走数据库配置
+    url: ${AI_DEFAULT_URL:https://api.deepseek.com/v1}  # 兼容 OpenAI 协议的任意模型服务地址，本地 Ollama 填 http://localhost:11434/v1
+    model: ${AI_DEFAULT_MODEL:deepseek-chat}            # 默认模型，实际使用时优先以数据库配置为准
+    key: ${AI_DEFAULT_KEY:}                             # 兜底 API Key，留空表示纯走数据库配置
   prompt:
     rules: |
       你是KfSmart AI Platform 知识助手，须遵守：

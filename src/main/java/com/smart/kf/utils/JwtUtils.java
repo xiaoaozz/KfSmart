@@ -15,6 +15,8 @@ import com.smart.kf.repository.UserRepository;
 import com.smart.kf.service.TokenCacheService;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 import java.util.Set;
 
@@ -23,12 +25,12 @@ public class JwtUtils {
     private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
 
     @Value("${jwt.secret-key}")
-    private String secretKeyBase64; // 这里存的是 Base64 编码后的密钥
+    private String secretKeyBase64; // 支持 Base64 编码或纯文本（生产须为高熵随机串）
 
-    private static final long EXPIRATION_TIME = 3600000; // 1 hour (调整为1小时)
-    private static final long REFRESH_TOKEN_EXPIRATION_TIME = 604800000; // 7 days (refresh token有效期)
-    private static final long REFRESH_THRESHOLD = 300000; // 5分钟：当剩余时间少于5分钟时开始刷新
-    private static final long REFRESH_WINDOW = 600000; // 10分钟：token过期后的宽限期
+    private static final long EXPIRATION_TIME = Duration.ofHours(1).toMillis(); // 1 小时
+    private static final long REFRESH_TOKEN_EXPIRATION_TIME = Duration.ofDays(7).toMillis(); // 7 天
+    private static final long REFRESH_THRESHOLD = Duration.ofMinutes(5).toMillis(); // 剩余 <5 分钟开始刷新
+    private static final long REFRESH_WINDOW = Duration.ofMinutes(10).toMillis(); // 过期后 10 分钟宽限期
     
     @Autowired
     private UserRepository userRepository;
@@ -37,11 +39,28 @@ public class JwtUtils {
     private TokenCacheService tokenCacheService;
 
     /**
-     * 解析 Base64 密钥，并返回 SecretKey
+     * 解析密钥：优先按 Base64 解码，失败则按纯文本 UTF-8 字节使用。
+     * 兼容历史 Base64 配置与纯文本开发默认值，生产应使用高熵随机串。
      */
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Base64.getDecoder().decode(secretKeyBase64);
+        byte[] keyBytes;
+        try {
+            keyBytes = Base64.getDecoder().decode(secretKeyBase64);
+        } catch (IllegalArgumentException notBase64) {
+            keyBytes = secretKeyBase64.getBytes(StandardCharsets.UTF_8);
+        }
         return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    /**
+     * 生成 token 的脱敏指纹（哈希前 8 位），用于日志定位，不泄漏原始 token。
+     */
+    private static String maskToken(String token) {
+        if (token == null || token.isEmpty()) {
+            return "<empty>";
+        }
+        int hash = token.hashCode();
+        return String.format("%08x", hash);
     }
 
     /**
@@ -138,7 +157,7 @@ public class JwtUtils {
             Claims claims = extractClaimsIgnoreExpiration(token);
             return claims != null ? claims.getSubject() : null;
         } catch (Exception e) {
-            logger.error("Error extracting username from token: {}", token, e);
+            logger.error("Error extracting username from token (fingerprint={}): {}", maskToken(token), e.getMessage());
             return null;
         }
     }
@@ -151,7 +170,7 @@ public class JwtUtils {
             Claims claims = extractClaimsIgnoreExpiration(token);
             return claims != null ? claims.get("userId", String.class) : null;
         } catch (Exception e) {
-            logger.error("Error extracting userId from token: {}", token, e);
+            logger.error("Error extracting userId from token (fingerprint={}): {}", maskToken(token), e.getMessage());
             return null;
         }
     }
@@ -164,7 +183,7 @@ public class JwtUtils {
             Claims claims = extractClaimsIgnoreExpiration(token);
             return claims != null ? claims.get("role", String.class) : null;
         } catch (Exception e) {
-            logger.error("Error extracting role from token: {}", token, e);
+            logger.error("Error extracting role from token (fingerprint={}): {}", maskToken(token), e.getMessage());
             return null;
         }
     }
@@ -177,7 +196,7 @@ public class JwtUtils {
             Claims claims = extractClaimsIgnoreExpiration(token);
             return claims != null ? claims.get("orgTags", String.class) : null;
         } catch (Exception e) {
-            logger.error("Error extracting organization tags from token: {}", token, e);
+            logger.error("Error extracting organization tags from token (fingerprint={}): {}", maskToken(token), e.getMessage());
             return null;
         }
     }
@@ -190,7 +209,7 @@ public class JwtUtils {
             Claims claims = extractClaimsIgnoreExpiration(token);
             return claims != null ? claims.get("primaryOrg", String.class) : null;
         } catch (Exception e) {
-            logger.error("Error extracting primary organization from token: {}", token, e);
+            logger.error("Error extracting primary organization from token (fingerprint={}): {}", maskToken(token), e.getMessage());
             return null;
         }
     }

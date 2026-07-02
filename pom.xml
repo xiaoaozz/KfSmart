@@ -178,6 +178,14 @@
             <version>portable-1.8.6</version>
         </dependency>
 
+        <!--
+            GraalVM Polyglot JS 沙箱（用于「代码执行」节点）暂未引入：
+            org.graalvm.polyglot:polyglot 的模块化 jar（module-info.class）与本项目
+            Lombok 注解处理在单模块 Maven 构建下冲突（导致 @Getter(onMethod_=...) 等
+            无法处理）。沙箱化改造已记入 remediation-progress.md，后续需以独立 Maven
+            module 隔离代码执行引擎或采用容器/WASM 沙箱后再引入。当前 Code 节点默认禁用。
+        -->
+
     </dependencies>
 
     <build>

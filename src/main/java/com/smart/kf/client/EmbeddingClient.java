@@ -51,10 +51,11 @@ public class EmbeddingClient {
         logger.info("EmbeddingClient 初始化 - 模型: {}, 批次大小: {}, 维度: {}, API地址: {}",
                 modelId, batchSize, dimension, apiUrl);
 
-        // 验证API key格式
-        if (apiKey == null || apiKey.trim().isEmpty() || apiKey.startsWith("sk-") == false) {
-            logger.warn("⚠️ API密钥格式可能无效，当前值前缀: {}",
-                    apiKey == null ? "null" : apiKey.substring(0, Math.min(10, apiKey.length())));
+        // 验证API key格式（仅打印是否为空，不泄漏任何密钥片段）
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            logger.warn("⚠️ Embedding API 密钥未配置（为空），向量生成将不可用");
+        } else if (!apiKey.startsWith("sk-")) {
+            logger.warn("⚠️ Embedding API 密钥格式可能无效（非 sk- 前缀）");
         }
     }
 

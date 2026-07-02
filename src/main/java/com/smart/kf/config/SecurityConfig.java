@@ -45,7 +45,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorize -> authorize
                     // ===== 公开路径（无需认证）=====
                     .requestMatchers("/error").permitAll()
-                    .requestMatchers("/", "/test.html", "/static/test.html", "/static/**",
+                    .requestMatchers("/", "/static/**",
                                      "/avatars/**", "/*.js", "/*.css", "/*.ico").permitAll()
                     .requestMatchers("/chat/**", "/ws/**").permitAll()
                     .requestMatchers(
@@ -54,7 +54,6 @@ public class SecurityConfig {
                         "/api/v1/users/send-email-code",
                         "/api/v1/users/public-key"
                     ).permitAll()
-                    .requestMatchers("/api/v1/test/**").permitAll()
                     .requestMatchers("/api/v1/chat/websocket-token").permitAll()
 
                     // ===== 管理员专属路径（URL级粗粒度保护，细粒度由 @PreAuthorize 控制）=====

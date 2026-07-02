@@ -13,6 +13,7 @@ import com.smart.kf.model.FileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import co.elastic.clients.elasticsearch._types.query_dsl.Operator;
@@ -47,6 +48,15 @@ public class HybridSearchService {
 
     @Autowired
     private FileUploadRepository fileUploadRepository;
+
+    @Value("${search.recall.multiplier:30}")
+    private int recallMultiplier;
+
+    @Value("${search.rescore.knn-weight:0.2}")
+    private double rescoreKnnWeight;
+
+    @Value("${search.rescore.bm25-weight:1.0}")
+    private double rescoreBm25Weight;
 
     /**
      * 使用文本匹配和向量相似度进行混合搜索，支持权限过滤
@@ -83,7 +93,7 @@ public class HybridSearchService {
             SearchResponse<EsDocument> response = esClient.search(s -> {
                         s.index("knowledge_base");
                         // KNN 召回
-                        int recallK = topK * 30; // KNN 召回窗口
+                        int recallK = topK * recallMultiplier; // KNN 召回窗口（倍数可配置）
                         s.knn(kn -> kn
                                 .field("vector")
                                 .queryVector(queryVector)
@@ -118,8 +128,8 @@ public class HybridSearchService {
                         s.rescore(r -> r
                                 .windowSize(recallK)
                                 .query(rq -> rq
-                                        .queryWeight(0.2d)               // 保留部分 KNN 分
-                                        .rescoreQueryWeight(1.0d)        // BM25 主导
+                                        .queryWeight(rescoreKnnWeight)        // 保留部分 KNN 分（可配置）
+                                        .rescoreQueryWeight(rescoreBm25Weight) // BM25 主导（可配置）
                                         .query(rqq -> rqq.match(m -> m
                                                 .field("textContent")
                                                 .query(query)
@@ -135,21 +145,27 @@ public class HybridSearchService {
                 response.hits().total() != null ? response.hits().total().value() : 0, response.hits().maxScore());
 
             List<SearchResult> results = response.hits().hits().stream()
+                    .filter(hit -> hit.source() != null)
                     .map(hit -> {
-                        assert hit.source() != null;
-                        logger.debug("搜索结果 - 文件: {}, 块: {}, 分数: {}, 内容: {}", 
-                            hit.source().getFileMd5(), hit.source().getChunkId(), hit.score(), 
-                            hit.source().getTextContent().substring(0, Math.min(50, hit.source().getTextContent().length())));
+                        EsDocument src = hit.source();
+                        String text = src.getTextContent();
+                        if (text == null) {
+                            return null;
+                        }
+                        logger.debug("搜索结果 - 文件: {}, 块: {}, 分数: {}, 内容: {}",
+                            src.getFileMd5(), src.getChunkId(), hit.score(),
+                            text.substring(0, Math.min(50, text.length())));
                         return new SearchResult(
-                                hit.source().getFileMd5(),
-                                hit.source().getChunkId(),
-                                hit.source().getTextContent(),
+                                src.getFileMd5(),
+                                src.getChunkId(),
+                                text,
                                 hit.score(),
-                                hit.source().getUserId(),
-                                hit.source().getOrgTag(),
-                                hit.source().isPublic()
+                                src.getUserId(),
+                                src.getOrgTag(),
+                                src.isPublic()
                         );
                     })
+                    .filter(java.util.Objects::nonNull)
                     .toList();
 
             logger.debug("返回搜索结果数量: {}", results.size());
@@ -240,21 +256,27 @@ public class HybridSearchService {
                 response.hits().total() != null ? response.hits().total().value() : 0, response.hits().maxScore());
 
             List<SearchResult> results = response.hits().hits().stream()
+                    .filter(hit -> hit.source() != null)
                     .map(hit -> {
-                        assert hit.source() != null;
-                        logger.debug("纯文本搜索结果 - 文件: {}, 块: {}, 分数: {}, 内容: {}", 
-                            hit.source().getFileMd5(), hit.source().getChunkId(), hit.score(), 
-                            hit.source().getTextContent().substring(0, Math.min(50, hit.source().getTextContent().length())));
+                        EsDocument src = hit.source();
+                        String text = src.getTextContent();
+                        if (text == null) {
+                            return null;
+                        }
+                        logger.debug("纯文本搜索结果 - 文件: {}, 块: {}, 分数: {}, 内容: {}",
+                            src.getFileMd5(), src.getChunkId(), hit.score(),
+                            text.substring(0, Math.min(50, text.length())));
                         return new SearchResult(
-                                hit.source().getFileMd5(),
-                                hit.source().getChunkId(),
-                                hit.source().getTextContent(),
+                                src.getFileMd5(),
+                                src.getChunkId(),
+                                text,
                                 hit.score(),
-                                hit.source().getUserId(),
-                                hit.source().getOrgTag(),
-                                hit.source().isPublic()
+                                src.getUserId(),
+                                src.getOrgTag(),
+                                src.isPublic()
                         );
                     })
+                    .filter(java.util.Objects::nonNull)
                     .toList();
 
             logger.debug("返回纯文本搜索结果数量: {}", results.size());
@@ -314,15 +336,20 @@ public class HybridSearchService {
                     }, EsDocument.class);
 
             return response.hits().hits().stream()
+                    .filter(hit -> hit.source() != null)
                     .map(hit -> {
-                        assert hit.source() != null;
+                        EsDocument src = hit.source();
+                        if (src.getTextContent() == null) {
+                            return null;
+                        }
                         return new SearchResult(
-                                hit.source().getFileMd5(),
-                                hit.source().getChunkId(),
-                                hit.source().getTextContent(),
+                                src.getFileMd5(),
+                                src.getChunkId(),
+                                src.getTextContent(),
                                 hit.score()
                         );
                     })
+                    .filter(java.util.Objects::nonNull)
                     .toList();
         } catch (Exception e) {
             logger.error("搜索失败", e);
@@ -354,15 +381,20 @@ public class HybridSearchService {
         );
 
         return response.hits().hits().stream()
+                .filter(hit -> hit.source() != null)
                 .map(hit -> {
-                    assert hit.source() != null;
+                    EsDocument src = hit.source();
+                    if (src.getTextContent() == null) {
+                        return null;
+                    }
                     return new SearchResult(
-                            hit.source().getFileMd5(),
-                            hit.source().getChunkId(),
-                            hit.source().getTextContent(),
+                            src.getFileMd5(),
+                            src.getChunkId(),
+                            src.getTextContent(),
                             hit.score()
                     );
                 })
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 

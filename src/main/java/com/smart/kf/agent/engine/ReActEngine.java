@@ -2,6 +2,7 @@ package com.smart.kf.agent.engine;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smart.kf.client.ModelClient;
+import com.smart.kf.client.TokenCost;
 import com.smart.kf.model.ApiKeyConfig;
 import com.smart.kf.model.agent.Agent;
 import com.smart.kf.service.ApiKeyConfigService;
@@ -67,7 +68,7 @@ public class ReActEngine {
 
                 int promptTokens = llmResult.promptTokens() > 0 ? llmResult.promptTokens() : estimateTokens(systemPrompt + userMessage);
                 int completionTokens = llmResult.completionTokens() > 0 ? llmResult.completionTokens() : estimateTokens(llmResult.content());
-                double modelCost = llmResult.modelCost() > 0 ? llmResult.modelCost() : (promptTokens * 0.001 + completionTokens * 0.002) / 1000.0;
+                double modelCost = llmResult.modelCost() > 0 ? llmResult.modelCost() : TokenCost.estimate(promptTokens, completionTokens);
                 ctx.getTokenUsage().add(promptTokens, completionTokens, modelCost);
 
                 if (llmResult.hasToolCalls()) {
@@ -121,7 +122,8 @@ public class ReActEngine {
                 }
             } catch (Exception e) {
                 logger.error("ReAct 迭代失败: iteration={}, error={}", i + 1, e.getMessage(), e);
-                ctx.setFinalAnswer("执行过程中出错: " + e.getMessage());
+                // 不向终端泄漏内部异常细节，仅返回友好提示
+                ctx.setFinalAnswer("执行过程中出错，请稍后重试或联系管理员。");
                 break;
             }
         }
